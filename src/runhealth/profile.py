@@ -3,7 +3,7 @@
 The core of ``runhealth`` knows only about batch logs. Everything specific to
 a code -- how it announces progress, what its timer table looks like, which
 line means success -- lives in a profile, so adding support for another model
-means writing YAML, not Python. See ``docs/profiles.md`` for the schema.
+means writing YAML, not Python. See ``docs/profile-reference.md`` for the schema.
 
 Profiles compose. A run of ICON on a Cray machine is described by ``slurm``
 plus ``icon`` plus ``cray-mpich``, each contributing its own rules, and all

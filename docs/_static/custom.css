@@ -1,0 +1,9 @@
+/* Keep the wide reference tables readable instead of letting them overflow. */
+article table.docutils {
+    display: table;
+    width: 100%;
+}
+article table.docutils td,
+article table.docutils th {
+    white-space: normal;
+}
