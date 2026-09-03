@@ -9,3 +9,6 @@ dist/
 report/
 reports/
 runhealth-report/
+
+##### Sphinx documentation #####
+docs/_build/
