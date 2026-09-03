@@ -747,8 +747,10 @@ def _node_blame(stat) -> str:
     if not stat.nodes:
         return ""
     counts = sorted(stat.nodes.values(), reverse=True)
-    typical = statistics.median(counts)
     worst = max(stat.nodes.items(), key=lambda kv: kv[1])
+    if len(stat.nodes) == 1:
+        return f", all of it on {worst[0]}"
+    typical = statistics.median(counts)
     if typical and worst[1] > 2 * typical:
         return f", concentrated on {worst[0]}"
     return f", spread evenly over {len(stat.nodes)} nodes"

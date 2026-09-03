@@ -107,7 +107,9 @@ markers:
     contains: read_restart_files
     label: after restart read
   coupling_init:
-    re: 'Constructing the .* coupling frame'
+    # ICON writes both "the atmosphere coupling frame" and "the coupling
+    # frame atmosphere-ocean", so match the phrase either way round.
+    re: 'Constructing the .*coupling frame'
     contains: coupling frame
     label: coupling setup
   first_step:
