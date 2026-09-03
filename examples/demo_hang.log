@@ -1,0 +1,117 @@
+#! /usr/bin/bash
+#SBATCH --account=demo01
+#SBATCH --job-name=demo_r2b6
+#SBATCH --partition=normal
+#SBATCH --nodes=4
+#SBATCH --gpus-per-node=4
+#SBATCH --time=02:00:00
+#SBATCH --output=LOG.%x.%j.o
+#
+#=============================================================================
+# ICON run script:
+# first created by make_target_runscript for a demonstration machine
+#=============================================================================
+export ICON_THREADS=1
+export FI_LOG_LEVEL=warn
+export MPICH_OFI_CXI_COUNTER_REPORT=3
+#
+# Output is piped through a wall-clock stamping filter, which is what makes
+# silence measurable. See the runhealth README.
+#
+  echo "Script run successfully: atmo=${finish_atmo} ocean=${finish_ocean}"
+  echo "Script FAILED: srun exit status ${srun_status}"
+end_of_job_script
+2026-03-17T21:04:12.050: SLURM_JOB_ID=774113
+2026-03-17T21:04:12.100: SLURM_JOB_NAME=demo_r2b6
+2026-03-17T21:04:12.150: SLURM_JOB_NUM_NODES=4
+2026-03-17T21:04:12.200: SLURM_NTASKS=32
+2026-03-17T21:04:12.250: SLURM_JOB_NODELIST=nid[005000-005003]
+2026-03-17T21:04:12.300: SLURM_GPUS_ON_NODE=4
+2026-03-17T21:04:12.350: SLURM_CPUS_ON_NODE=288
+2026-03-17T21:04:12.400: SLURMD_NODENAME=nid005000
+2026-03-17T21:04:12.430:     0: Atmo compute process 0 on nid005000
+2026-03-17T21:04:12.460:     1: Atmo compute process 1 on nid005000
+2026-03-17T21:04:12.490:     2: Atmo compute process 2 on nid005000
+2026-03-17T21:04:12.520:     3: Atmo compute process 3 on nid005000
+2026-03-17T21:04:12.550:     4: Atmo compute process 4 on nid005000
+2026-03-17T21:04:12.580:     5: Atmo compute process 5 on nid005000
+2026-03-17T21:04:12.610:     6: Atmo compute process 6 on nid005000
+2026-03-17T21:04:12.640:     7: Atmo compute process 7 on nid005000
+2026-03-17T21:04:12.670:     8: Atmo compute process 0 on nid005001
+2026-03-17T21:04:12.700:     9: Atmo compute process 1 on nid005001
+2026-03-17T21:04:12.730:    10: Atmo compute process 2 on nid005001
+2026-03-17T21:04:12.760:    11: Atmo compute process 3 on nid005001
+2026-03-17T21:04:12.790:    12: Atmo compute process 4 on nid005001
+2026-03-17T21:04:12.820:    13: Atmo compute process 5 on nid005001
+2026-03-17T21:04:12.850:    14: Atmo compute process 6 on nid005001
+2026-03-17T21:04:12.880:    15: Atmo compute process 7 on nid005001
+2026-03-17T21:04:12.910:    16: Atmo compute process 0 on nid005002
+2026-03-17T21:04:12.940:    17: Atmo compute process 1 on nid005002
+2026-03-17T21:04:12.970:    18: Atmo compute process 2 on nid005002
+2026-03-17T21:04:13.000:    19: Atmo compute process 3 on nid005002
+2026-03-17T21:04:13.030:    20: Atmo compute process 4 on nid005002
+2026-03-17T21:04:13.060:    21: Atmo compute process 5 on nid005002
+2026-03-17T21:04:13.090:    22: Atmo compute process 6 on nid005002
+2026-03-17T21:04:13.120:    23: Atmo compute process 7 on nid005002
+2026-03-17T21:04:13.150:    24: Atmo compute process 0 on nid005003
+2026-03-17T21:04:13.180:    25: Atmo compute process 1 on nid005003
+2026-03-17T21:04:13.210:    26: Atmo compute process 2 on nid005003
+2026-03-17T21:04:13.240:    27: Atmo compute process 3 on nid005003
+2026-03-17T21:04:13.270:    28: Atmo compute process 4 on nid005003
+2026-03-17T21:04:13.300:    29: Atmo compute process 5 on nid005003
+2026-03-17T21:04:13.330:    30: Atmo compute process 6 on nid005003
+2026-03-17T21:04:13.360:    31: Atmo compute process 7 on nid005003
+2026-03-17T21:04:13.560:     0:  version: 2026.04
+2026-03-17T21:04:13.760:     0:  revision: demo-2026.04-7-g0a1b2c3
+2026-03-17T21:04:13.960:     0:  local branch: main
+2026-03-17T21:04:14.160:     0:  compilers:
+2026-03-17T21:04:14.360:     0:    Fortran: NVHPC 26.1.0
+2026-03-17T21:04:14.460:     0:    MPI: MPI VERSION    : CRAY MPICH version 9.1.0.794 ...
+2026-03-17T21:04:15.860:     0:  master_control: start model initialization.
+2026-03-17T21:04:16.460:     0:  atmo runs on 32 mpi processes.
+2026-03-17T21:04:16.760:     0:  set_nproma_nblocks: Using namelist nproma=       32
+2026-03-17T21:04:22.760:     0:  mo_read_netcdf_distributed_base::distrib_nf_open_base: input_0.nc
+2026-03-17T21:04:28.760:     0:  mo_read_netcdf_distributed_base::distrib_nf_open_base: input_1.nc
+2026-03-17T21:04:34.760:     0:  mo_read_netcdf_distributed_base::distrib_nf_open_base: input_2.nc
+2026-03-17T21:04:40.760:     0:  mo_read_netcdf_distributed_base::distrib_nf_open_base: input_3.nc
+2026-03-17T21:04:46.760:     0:  mo_read_netcdf_distributed_base::distrib_nf_open_base: input_4.nc
+2026-03-17T21:04:52.760:     0:  mo_read_netcdf_distributed_base::distrib_nf_open_base: input_5.nc
+2026-03-17T21:04:52.780:     0:     WARNING PE:    0 mo_load_restart:readData: variable not found: tracer_0
+2026-03-17T21:04:52.800:     1:     WARNING PE:    1 mo_load_restart:readData: variable not found: tracer_1
+2026-03-17T21:04:52.820:     2:     WARNING PE:    2 mo_load_restart:readData: variable not found: tracer_2
+2026-03-17T21:04:52.840:     3:     WARNING PE:    3 mo_load_restart:readData: variable not found: tracer_3
+2026-03-17T21:04:52.860:     4:     WARNING PE:    4 mo_load_restart:readData: variable not found: tracer_0
+2026-03-17T21:04:52.880:     5:     WARNING PE:    5 mo_load_restart:readData: variable not found: tracer_1
+2026-03-17T21:04:52.900:     6:     WARNING PE:    6 mo_load_restart:readData: variable not found: tracer_2
+2026-03-17T21:04:52.920:     7:     WARNING PE:    7 mo_load_restart:readData: variable not found: tracer_3
+2026-03-17T21:04:52.940:     8:     WARNING PE:    8 mo_load_restart:readData: variable not found: tracer_0
+2026-03-17T21:04:52.960:     9:     WARNING PE:    9 mo_load_restart:readData: variable not found: tracer_1
+2026-03-17T21:04:52.980:    10:     WARNING PE:   10 mo_load_restart:readData: variable not found: tracer_2
+2026-03-17T21:04:53.000:    11:     WARNING PE:   11 mo_load_restart:readData: variable not found: tracer_3
+2026-03-17T21:04:53.020:    12:     WARNING PE:   12 mo_load_restart:readData: variable not found: tracer_0
+2026-03-17T21:04:53.040:    13:     WARNING PE:   13 mo_load_restart:readData: variable not found: tracer_1
+2026-03-17T21:04:53.060:    14:     WARNING PE:   14 mo_load_restart:readData: variable not found: tracer_2
+2026-03-17T21:04:53.080:    15:     WARNING PE:   15 mo_load_restart:readData: variable not found: tracer_3
+2026-03-17T21:04:53.100:    16:     WARNING PE:   16 mo_load_restart:readData: variable not found: tracer_0
+2026-03-17T21:04:53.120:    17:     WARNING PE:   17 mo_load_restart:readData: variable not found: tracer_1
+2026-03-17T21:04:53.140:    18:     WARNING PE:   18 mo_load_restart:readData: variable not found: tracer_2
+2026-03-17T21:04:53.160:    19:     WARNING PE:   19 mo_load_restart:readData: variable not found: tracer_3
+2026-03-17T21:04:53.180:    20:     WARNING PE:   20 mo_load_restart:readData: variable not found: tracer_0
+2026-03-17T21:04:53.200:    21:     WARNING PE:   21 mo_load_restart:readData: variable not found: tracer_1
+2026-03-17T21:04:53.220:    22:     WARNING PE:   22 mo_load_restart:readData: variable not found: tracer_2
+2026-03-17T21:04:53.240:    23:     WARNING PE:   23 mo_load_restart:readData: variable not found: tracer_3
+2026-03-17T21:04:53.260:    24:     WARNING PE:   24 mo_load_restart:readData: variable not found: tracer_0
+2026-03-17T21:04:53.280:    25:     WARNING PE:   25 mo_load_restart:readData: variable not found: tracer_1
+2026-03-17T21:04:53.300:    26:     WARNING PE:   26 mo_load_restart:readData: variable not found: tracer_2
+2026-03-17T21:04:53.320:    27:     WARNING PE:   27 mo_load_restart:readData: variable not found: tracer_3
+2026-03-17T21:04:53.340:    28:     WARNING PE:   28 mo_load_restart:readData: variable not found: tracer_0
+2026-03-17T21:04:53.360:    29:     WARNING PE:   29 mo_load_restart:readData: variable not found: tracer_1
+2026-03-17T21:04:53.380:    30:     WARNING PE:   30 mo_load_restart:readData: variable not found: tracer_2
+2026-03-17T21:04:53.400:    31:     WARNING PE:   31 mo_load_restart:readData: variable not found: tracer_3
+2026-03-17T21:04:56.400:     0:  Running ICON atmo in coupled mode with YAC version: v3.17.0
+2026-03-17T21:05:00.400:     0:  mo_atmo_coupling_frame: Constructing the atmosphere coupling frame.
+2026-03-17T21:05:18.400:     0:  mo_atmo_coupling_frame: Constructing the coupling frame atmosphere-ocean.
+2026-03-17T22:48:18.400: srun: Job step aborted: Waiting up to 32 seconds for job step to finish.
+[2026-03-17T22:48:18.061] error: *** JOB 774113 ON nid005000 CANCELLED AT 2026-03-17T22:48:18 DUE TO TIME LIMIT ***
+2026-03-17T22:48:18.800:     0: [2026-03-17T22:48:18.058] error: *** STEP 774113.0 ON nid005000 CANCELLED AT 2026-03-17T22:48:18 DUE TO TIME LIMIT ***
+2026-03-17T22:48:21.800: ++ rm -f ICON_run_9931.pipe
