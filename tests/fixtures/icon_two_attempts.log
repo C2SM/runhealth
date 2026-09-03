@@ -1,0 +1,74 @@
+#! /usr/bin/bash
+#SBATCH --account=abc01
+#SBATCH --job-name=demo
+#SBATCH --nodes=2
+#SBATCH --gpus-per-node=4
+#SBATCH --time=01:00:00
+#
+#=============================================================================
+# ICON run script:
+# first created by make_target_runscript for a test machine
+#=============================================================================
+export ICON_THREADS=1
+export MPICH_OFI_CXI_COUNTER_REPORT=3
+  echo "Script run successfully: atmo=${finish_atmo} ocean=${finish_ocean}"
+  echo "Script FAILED: srun exit status ${srun_status}"
+end_of_job_script
+2026-01-07T08:00:00.100: + set -x
+2026-01-07T08:00:00.200: SLURM_JOB_ID=4242
+2026-01-07T08:00:00.300: SLURM_JOB_NAME=demo
+2026-01-07T08:00:00.400: SLURM_JOB_NUM_NODES=2
+2026-01-07T08:00:00.500: SLURM_JOB_NODELIST=nid[000001-000002]
+2026-01-07T08:00:00.600: SLURM_GPUS_ON_NODE=4
+2026-01-07T08:00:00.700: SLURMD_NODENAME=nid000001
+2026-01-07T08:00:01.200:     0:  version: 2026.04
+2026-01-07T08:00:01.700:     0:  revision: icon-2026.04-1-gabcdef0
+2026-01-07T08:00:02.200:     0:  local branch: main
+2026-01-07T08:00:02.700:     0:  master_control: start model initialization.
+2026-01-07T08:00:03.200:     0:  atmo runs on 8 mpi processes.
+2026-01-07T08:00:03.700:     8:  ocean runs on 8 mpi processes.
+2026-01-07T08:00:04.200:     0:  Running ICON atmo in coupled mode with YAC version: v3.17.0
+2026-01-07T08:00:04.700:     0:  mo_atmo_coupling_frame: Constructing the coupling frame atmosphere-ocean.
+2026-01-07T08:00:14.700:     0:  Time step:        1 model time 2020-01-01 00:00:20.000
+2026-01-07T08:00:24.700:     0:  Time step:       25 model time 2020-01-01 00:08:20.000
+2026-01-07T08:00:34.700:     0:  Time step:       50 model time 2020-01-01 00:16:40.000
+2026-01-07T08:00:34.900: + srun_status=1
+2026-01-07T08:00:35.000: Script FAILED: srun exit status 1, finish_atmo.status missing, finish_ocean.status missing
+#! /usr/bin/bash
+#SBATCH --account=abc01
+#SBATCH --job-name=demo
+#SBATCH --nodes=2
+#SBATCH --gpus-per-node=4
+#SBATCH --time=01:00:00
+#
+#=============================================================================
+# ICON run script:
+# first created by make_target_runscript for a test machine
+#=============================================================================
+export ICON_THREADS=1
+export MPICH_OFI_CXI_COUNTER_REPORT=3
+  echo "Script run successfully: atmo=${finish_atmo} ocean=${finish_ocean}"
+  echo "Script FAILED: srun exit status ${srun_status}"
+end_of_job_script
+2026-01-07T14:00:00.100: + set -x
+2026-01-07T14:00:00.200: SLURM_JOB_ID=4242
+2026-01-07T14:00:00.300: SLURM_JOB_NAME=demo
+2026-01-07T14:00:00.400: SLURM_JOB_NUM_NODES=2
+2026-01-07T14:00:00.500: SLURM_JOB_NODELIST=nid[000001-000002]
+2026-01-07T14:00:00.600: SLURM_GPUS_ON_NODE=4
+2026-01-07T14:00:00.700: SLURMD_NODENAME=nid000001
+2026-01-07T14:00:01.200:     0:  version: 2026.04
+2026-01-07T14:00:01.700:     0:  revision: icon-2026.04-1-gabcdef0
+2026-01-07T14:00:02.200:     0:  local branch: main
+2026-01-07T14:00:02.700:     0:  master_control: start model initialization.
+2026-01-07T14:00:03.200:     0:  atmo runs on 8 mpi processes.
+2026-01-07T14:00:03.700:     8:  ocean runs on 8 mpi processes.
+2026-01-07T14:00:04.200:     0:  Running ICON atmo in coupled mode with YAC version: v3.17.0
+2026-01-07T14:00:04.700:     0:  mo_atmo_coupling_frame: Constructing the coupling frame atmosphere-ocean.
+2026-01-07T14:00:14.700:     0:  Time step:        1 model time 2020-01-01 00:00:20.000
+2026-01-07T14:00:24.700:     0:  Time step:       25 model time 2020-01-01 00:08:20.000
+2026-01-07T14:00:34.700:     0:  Time step:       50 model time 2020-01-01 00:16:40.000
+2026-01-07T14:00:44.700:     0:  Time step:       75 model time 2020-01-01 00:25:00.000
+2026-01-07T14:00:54.700:     0:  Time step:      100 model time 2020-01-01 00:33:20.000
+2026-01-07T14:00:54.900: + srun_status=0
+2026-01-07T14:00:55.000: Script run successfully: atmo=OK ocean=OK

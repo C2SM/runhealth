@@ -1,0 +1,103 @@
+# Generic SLURM batch job. Always applied, so even a log from a code
+# runhealth knows nothing about still yields job metadata, silence
+# detection and a collapsed list of error signatures.
+name: slurm
+description: SLURM batch job metadata, step failures and cancellations.
+priority: 0
+always: true
+
+settings:
+  progress_label: events
+  throughput_label: events/s
+
+thresholds:
+  stall_seconds: 300          # silence beyond this is a failed run
+  setup_stall_seconds: 1200   # ... but setup legitimately takes longer
+  gap_warn_factor: 5          # ... or this many times the typical progress interval
+  walltime_warn: 0.9          # fraction of the requested wall time
+  outlier_factor: 3           # progress interval counted as an outlier
+  imbalance_warn: 1.25        # slowest rank / fastest rank on a timer
+  imbalance_fail: 2.0
+  drift_warn: 0.2             # slowdown between first and last quarter
+  timer_share_floor: 0.05     # ignore timers below this share of the total
+  group_warn: 1000            # a message family this large is worth a look
+  group_share_warn: 0.2       # ... and this much of the whole log
+  node_share_warn: 0.25       # one node contributing this much of a family
+
+keyvalues:
+  sbatch:
+    re: '^\s*#SBATCH\s+--([A-Za-z0-9_-]+)=?\s*(.*)$'
+    contains: '#SBATCH'
+    preamble: true
+  slurm_env:
+    re: '^(SLURM[A-Z_0-9]*)=(.*)$'
+    contains: SLURM
+
+fields:
+  job_id:
+    re: '^SLURM_JOB_?ID=(\d+)'
+    contains: SLURM_JOB
+  job_name:
+    re: '^SLURM_JOB_NAME=(.+)'
+    contains: SLURM_JOB_NAME
+  nodelist:
+    re: '^SLURM_JOB_NODELIST=(.+)'
+    contains: SLURM_JOB_NODELIST
+  node_count:
+    re: '^SLURM_JOB_NUM_NODES=(\d+)'
+    contains: SLURM_JOB_NUM_NODES
+    cast: int
+  ntasks:
+    re: '^SLURM_NTASKS=(\d+)'
+    contains: SLURM_NTASKS
+    cast: int
+  gpus_per_node:
+    re: '^SLURM_GPUS_ON_NODE=(\d+)'
+    contains: SLURM_GPUS_ON_NODE
+    cast: int
+  cpus_on_node:
+    re: '^SLURM_CPUS_ON_NODE=(\d+)'
+    contains: SLURM_CPUS_ON_NODE
+    cast: int
+  batch_host:
+    re: '^SLURMD_NODENAME=(\S+)'
+    contains: SLURMD_NODENAME
+  srun_status:
+    re: '^\+ srun_status=(\d+)'
+    contains: srun_status
+    cast: int
+    keep: last
+
+markers:
+  step_cancelled:
+    re: 'CANCELLED AT \S+ DUE'
+    contains: CANCELLED AT
+  step_aborted:
+    re: 'srun: Job step aborted'
+    contains: 'Job step aborted'
+
+groups:
+  srun_task_failure:
+    re: 'srun: error: (\S+): tasks? ([\d,\-]+): (.+)'
+    contains: 'srun: error:'
+    key: 3
+    node: 1
+    label: srun task failures
+    claim: true
+  slurmstepd:
+    re: 'slurmstepd: error: (.+)'
+    contains: slurmstepd
+    key: 1
+    label: slurmstepd errors
+    claim: true
+
+outcome:
+  - re: 'CANCELLED AT \S+ DUE TO TIME LIMIT'
+    contains: DUE TO TIME LIMIT
+    level: fail
+  - re: 'CANCELLED AT \S+ DUE to SIGNAL \S+'
+    contains: DUE to SIGNAL
+    level: fail
+  - re: '^srun: (Force Terminated StepId=\S+)'
+    contains: Force Terminated
+    level: fail

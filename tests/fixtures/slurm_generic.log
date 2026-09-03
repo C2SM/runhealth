@@ -1,0 +1,11 @@
+#!/bin/bash
+#SBATCH --job-name=mystery
+#SBATCH --nodes=4
+#SBATCH --time=00:30:00
+2026-01-08T12:00:00.100: SLURM_JOB_ID=5150
+2026-01-08T12:00:00.200: SLURM_JOB_NUM_NODES=4
+2026-01-08T12:00:01.200:     0: solver: starting
+2026-01-08T12:00:03.200:     0: solver: iteration 1 residual 1.0e-2
+2026-01-08T12:00:05.200:     0: solver: iteration 2 residual 1.0e-4
+2026-01-08T12:10:05.200: srun: error: nid000007: tasks 12-15: Terminated
+2026-01-08T12:10:05.400: srun: Force Terminated StepId=5150.0

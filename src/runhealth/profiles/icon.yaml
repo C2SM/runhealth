@@ -1,0 +1,148 @@
+# ICON (icon-model.org). Written against what any ICON run prints with
+# msg_level >= 1 and timers_level > 0, not against one experiment.
+name: icon
+description: "ICON atmosphere/ocean model: progress, timer report, coupling"
+priority: 10
+
+detect:
+  - 'master_control: start model initialization'
+  - 'Timer report, ranks'
+  - 'mo_[a-z_]+:[a-z_]+:'
+  # A run that dies during MPI startup prints none of the above, but the
+  # runscript header it echoes first is just as conclusive.
+  - '# ICON run script'
+  - 'make_target_runscript'
+  - 'export ICON_THREADS'
+
+# The generated runscript echoes a copy of itself and closes it with this
+# line, so a second copy means a second attempt appended to the same file.
+attempt_boundary:
+  - '^end_of_job_script'
+
+settings:
+  progress_label: time steps
+  throughput_label: SYPD
+  model_time_field: model_time
+  progress_series: timestep
+  timer_table: timers
+  timer_root: total
+  timer_columns:
+    total: total avg (s)
+    min: total min (s)
+    max: total max (s)
+    min_rank: total min rank
+    max_rank: total max rank
+    calls: "# calls"
+    pes: "# PEs"
+  io_timers: [wrt_output, wait_for_async_io, write_restart, restart]
+  coupling_timers: [coupling, cpl_init, cpl_init_def_comp, cpl_init_enddef]
+
+fields:
+  model_version:
+    re: '^\s*version: (\S+)'
+    contains: 'version:'
+  model_revision:
+    re: '^\s*revision: (\S+)'
+    contains: 'revision:'
+  model_branch:
+    re: '^\s*local branch: (\S+)'
+    contains: 'local branch:'
+  yac_version:
+    re: 'coupled mode with YAC version: (\S+)'
+    contains: 'YAC version:'
+  mpi_library:
+    re: 'MPI VERSION\s*:\s*(.+?)\.\.\.'
+    contains: 'MPI VERSION'
+  fortran_compiler:
+    re: '^\s*Fortran: (.+)$'
+    contains: 'Fortran:'
+  atmo_ranks:
+    re: 'atmo runs on\s+(\d+) mpi processes'
+    contains: ' mpi processes'
+    cast: int
+  ocean_ranks:
+    re: 'ocean runs on\s+(\d+) mpi processes'
+    contains: ' mpi processes'
+    cast: int
+  nproma:
+    re: 'set_nproma_nblocks: Using namelist nproma=\s*(\d+)'
+    contains: 'Using namelist nproma'
+    cast: int
+  experiment_start:
+    re: '^\s*Start date\s*: (\S+)'
+    contains: 'Start date'
+  finish_status:
+    re: '^Script run successfully: (.+)'
+    contains: 'Script run successfully'
+    keep: last
+
+series:
+  timestep:
+    re: 'Time step:\s+(\d+) model time (\d\S* \S+)'
+    contains: 'Time step:'
+    fields: [step, model_time]
+    cast: {step: int}
+    role: progress
+  output_write:
+    re: 'Write output at: ?(\d\S* \S+)'
+    contains: 'Write output at'
+    fields: [model_time]
+    role: io
+  restart_write:
+    re: 'restart: finished:\s*([\d.]+)GB of data in ([\d.]+)s \(([\d.]+)GB/s\)'
+    contains: 'restart: finished'
+    fields: [gigabytes, seconds, gb_per_s]
+    cast: {gigabytes: float, seconds: float, gb_per_s: float}
+    role: io
+
+# Markers cut the wall clock into phases. The label names the stretch that
+# *starts* at the marker, which is what the timeline reads out.
+markers:
+  model_init:
+    re: 'master_control: start model initialization'
+    contains: start model initialization
+    label: model init
+  restart_read:
+    re: 'normal exit from read_restart_files'
+    contains: read_restart_files
+    label: after restart read
+  coupling_init:
+    re: 'Constructing the .* coupling frame'
+    contains: coupling frame
+    label: coupling setup
+  first_step:
+    re: 'Time step:\s+1 model time'
+    contains: 'Time step:'
+    label: time loop
+  timer_report:
+    re: 'Timer report, ranks'
+    contains: 'Timer report'
+    label: timer report
+  cleanup:
+    re: 'clean-up finished'
+    contains: clean-up finished
+    label: cleanup
+
+groups:
+  icon_warning:
+    re: 'WARNING PE:\s+(\d+)\s+(\S+)'
+    contains: 'WARNING PE:'
+    key: 2
+    label: ICON warnings
+    claim: true
+
+tables:
+  timers:
+    start: 'Timer report, ranks (\d+)-(\d+)'
+    contains: 'Timer report, ranks'
+    kind: ruled
+    nesting: '^(\s*)L '
+    durations: [t_min, t_avg, t_max]
+
+outcome:
+  - re: '^Script FAILED: (.+)'
+    contains: 'Script FAILED'
+    level: fail
+  - re: '^Script run successfully: (.+)'
+    contains: 'Script run successfully'
+    level: ok

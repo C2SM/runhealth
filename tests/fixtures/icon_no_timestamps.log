@@ -1,0 +1,28 @@
+ version: 2026.04
+ revision: icon-2026.04-1-gabcdef0
+ local branch: main
+ master_control: start model initialization.
+ atmo runs on 8 mpi processes.
+ ocean runs on 8 mpi processes.
+ Running ICON atmo in coupled mode with YAC version: v3.17.0
+ mo_atmo_coupling_frame: Constructing the coupling frame atmosphere-ocean.
+ Time step:        1 model time 2020-01-01 00:00:20.000
+ Time step:       25 model time 2020-01-01 00:08:20.000
+ Time step:       50 model time 2020-01-01 00:16:40.000
+ Time step:       75 model time 2020-01-01 00:25:00.000
+
+Timer report, ranks 0-7
+
+  ------------------   --------   ---------   ---------   ---------   ---------   ---------   --------------   ---------------   --------------   ---------------   --------------   ------    
+  name                 # calls    t_min       min rank    t_avg       t_max       max rank    total min (s)    total min rank    total max (s)    total max rank    total avg (s)    # PEs    
+  ------------------   --------   ---------   ---------   ---------   ---------   ---------   --------------   ---------------   --------------   ---------------   --------------   ------    
+
+  total                8          10.0000s    [3]         10.2000s    10.5000s    [5]         10.000           [3]               10.500           [5]               10.200           8    
+   L integrate_nh      100        8.00000s    [3]         8.20000s    8.50000s    [5]         8.000            [3]               8.500            [5]               8.200            8    
+      L transport      100        2.00000s    [1]         2.10000s    2.30000s    [5]         2.000            [1]               2.300            [5]               2.100            8    
+   L exch_data.wait    100        0.50000s    [1]         1.50000s    4.00000s    [7]         0.500            [1]               4.000            [7]               1.500            8    
+   L wrt_output        4          0.10000s    [0]         0.20000s    0.40000s    [2]         0.100            [0]               0.400            [2]               0.200            8    
+  model_init           8          1.00000s    [0]         1.10000s    1.20000s    [4]         1.000            [0]               1.200            [4]               1.100            8    
+  --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------    
+
+Script run successfully: atmo=OK ocean=OK

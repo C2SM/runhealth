@@ -1,0 +1,66 @@
+# Cray MPICH on a Slingshot fabric. Independent of the model, so it is its
+# own overlay: enable MPICH_OFI_CXI_COUNTER_REPORT and FI_LOG_LEVEL=warn in
+# the job script and these rules give a picture of the network.
+name: cray-mpich
+description: "Cray MPICH / Slingshot: CXI counters, libfabric warnings"
+priority: 20
+
+detect:
+  - 'MPICH Slingshot'
+  - 'libfabric:\d+:'
+  - 'CRAY MPICH version'
+  - 'MPICH ERROR'
+  - 'MPICH_OFI_'
+
+settings:
+  counter_table: cxi_counters
+  ratio_table: cxi_ratios
+  counter_columns:
+    samples: Samples
+    min: Min
+    mean: Mean
+    max: Max
+  counter_watch:
+    - rh:nacks
+    - rh:nack_sequence_error
+    - rh:nack_no_target_trs
+    - hni_rx_paused_0
+    - hni_rx_paused_1
+    - hni_tx_paused_0
+    - hni_tx_paused_1
+  congestion_groups: [libfabric]
+  # Only flow-control callbacks mean congestion. The address-vector and
+  # PtlTE notices are startup chatter and say nothing about run health.
+  congestion_keys: [cxip_fc_notify_cb]
+
+fields:
+  network_timeouts:
+    re: 'MPICH Slingshot Network Summary: (\d+) network timeouts'
+    contains: Slingshot Network Summary
+    cast: int
+
+groups:
+  libfabric:
+    re: 'libfabric:\d+:\d+::(\w+):(\w+):(\w+)\(\):\d+<(\w+)>\s*(\S+?):'
+    contains: 'libfabric:'
+    key: 3
+    node: 5
+    label: libfabric messages
+    claim: true
+  mpich_error:
+    re: 'MPICH ERROR \[Rank [^\]]*\] (.+)'
+    contains: 'MPICH ERROR'
+    key: 1
+    label: MPICH errors
+    claim: true
+
+tables:
+  cxi_counters:
+    start: '^MPICH Slingshot CXI Counter Summary:'
+    contains: CXI Counter Summary
+    kind: trailing-numbers
+  cxi_ratios:
+    start: "^Computed Ratios"
+    include_start: true
+    contains: Computed Ratios
+    kind: trailing-numbers
