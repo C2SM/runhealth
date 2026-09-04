@@ -35,7 +35,7 @@ pip install -e .
 runhealth --help
 ```
 
-Requirements: Python 3.11 or newer, `matplotlib` and `pyyaml`.
+Requirements: Python 3.11 or newer and `pyyaml`. The figures are drawn as SVG by `runhealth` itself, so there is no plotting library to install.
 :::
 
 PDF output needs one more package, and only if you want `runhealth` to write the

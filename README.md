@@ -11,7 +11,7 @@ runhealth /path/to/logs -o report/ --open
 ```
 
 <p align="center">
-  <img src="docs/images/timeline.png" alt="A run timeline: one blue phase filling the whole allocation, with a red silence bar above it" width="820">
+  <img src="docs/images/timeline.svg" alt="A run timeline: one blue phase filling the whole allocation, with a red silence bar above it" width="820">
 </p>
 
 <p align="center"><em>One picture, one diagnosis: the job spent its entire
@@ -46,7 +46,7 @@ The full documentation lives at **<https://c2sm.github.io/runhealth/>**:
 
 - [Install](https://c2sm.github.io/runhealth/install.html)
 - [Usage](https://c2sm.github.io/runhealth/usage.html): recipes, following a
-  running job, output formats, performance
+  running job, output formats, sharing a report, performance
 - [Reading the report](https://c2sm.github.io/runhealth/report.html): what each
   check means, how to read the figures
 - [Profiles](https://c2sm.github.io/runhealth/profiles.html) and the

@@ -6,7 +6,6 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "BSD-3-Clause" }
 dependencies = [
-    "matplotlib>=3.8",
     "pyyaml>=6.0",
 ]
 

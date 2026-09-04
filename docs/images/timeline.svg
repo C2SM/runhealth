@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 188" width="900" height="188" class="rh-svg" role="img" aria-label="Timeline of 5 phase(s) over 1h 44m 10s, with 1 stretch(es) of silence marked above" preserveAspectRatio="xMidYMid meet" data-plot="64,20,816,122" data-zoom="1" data-xdomain="0,6249.75" data-xfmt="duration" data-time="1" font-size="9px" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"><style>:root { --bg: #fcfcfb; --panel: #ffffff; --panel-2: #f5f4f0; --ink: #16150f; --muted: #75736b; --line: #e2e1d9; --line-2: #cecdc3; --ok: #2f8f5b; --info: #3d7fd6; --warn: #c98216; --fail: #c8452f; --grid: #e8e7e0; --axis: #c1bfb4; --tick: #6a6862; --whisker: #3f3e38; --shadow: 0 1px 2px rgba(20,18,10,.05), 0 4px 14px rgba(20,18,10,.04); --s0: #3d7fd6; --s1: #c98216; --s2: #2f8f5b; --s3: #8b5cc7; --s4: #c8452f; --s5: #0f8c95; --s6: #a6742a; --p0: #3d75b6; --p1: #35669f; --p2: #2d5789; --p3: #264a74; --p4: #1f3d60; --p5: #18314d; --p6: #4b6b8c; }
+.rh-svg { width: 100%; height: auto; display: block; overflow: visible;
+  font: 9px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.rh-svg .grid { stroke: var(--grid); stroke-width: 1; }
+.rh-svg .ax-line { stroke: var(--axis); stroke-width: 1; }
+.rh-svg .tick { fill: var(--tick); font-size: 8.5px; }
+.rh-svg .ax-label { fill: var(--muted); font-size: 9px; }
+.rh-svg .panel-title { fill: var(--ink); font-size: 10px; font-weight: 650; }
+.rh-svg .row-label { fill: var(--muted); font-size: 8.5px; }
+.rh-svg .val { fill: var(--tick); font-size: 8.5px; }
+.rh-svg .in-bar { fill: #fff; font-size: 8.5px; font-weight: 650; }
+.rh-svg .in-bar.dim { font-weight: 400; opacity: .85; }
+.rh-svg .ref { stroke: var(--muted); stroke-width: 1; }
+.rh-svg .dash { stroke-dasharray: 4 3; }
+.rh-svg .ref-label { fill: var(--muted); font-size: 8.5px; }
+.rh-svg .whisker { stroke: var(--whisker); stroke-width: 1.1; opacity: .75; }
+.rh-svg .io-tick { stroke: var(--muted); stroke-width: 1.2; opacity: .7; }
+.rh-svg .legend-text { fill: var(--muted); font-size: 9px; }
+
+/* Paint modes. A class sets --c; these three decide what is done with it. */
+.rh-svg .fill { fill: var(--c); stroke: none; }
+.rh-svg .stroke { fill: none; stroke: var(--c); stroke-width: 1.6;
+  stroke-linejoin: round; stroke-linecap: round; }
+.rh-svg .area { fill: var(--c); stroke: none; opacity: .13; }
+.rh-svg .range { fill: none; stroke: var(--c); stroke-width: 5;
+  stroke-linecap: round; opacity: .6; }
+.rh-svg .s0 { --c: var(--s0); } .rh-svg .s1 { --c: var(--s1); }
+.rh-svg .s2 { --c: var(--s2); } .rh-svg .s3 { --c: var(--s3); }
+.rh-svg .s4 { --c: var(--s4); } .rh-svg .s5 { --c: var(--s5); }
+.rh-svg .s6 { --c: var(--s6); }
+.rh-svg .p0 { --c: var(--p0); } .rh-svg .p1 { --c: var(--p1); }
+.rh-svg .p2 { --c: var(--p2); } .rh-svg .p3 { --c: var(--p3); }
+.rh-svg .p4 { --c: var(--p4); } .rh-svg .p5 { --c: var(--p5); }
+.rh-svg .p6 { --c: var(--p6); }
+.rh-svg .lv-ok { --c: var(--ok); } .rh-svg .lv-info { --c: var(--info); }
+.rh-svg .lv-warn { --c: var(--warn); } .rh-svg .lv-fail { --c: var(--fail); }
+.rh-svg .ink { --c: var(--ink); }
+</style><title>Timeline of 5 phase(s) over 1h 44m 10s, with 1 stretch(es) of silence marked above</title><defs><clipPath id="clip-demo_hang-phase_timeline"><rect x="64" y="16" width="816" height="130"/></clipPath></defs><g class="rh-frame"><text x="56" y="31.5" class="row-label" text-anchor="end" fill="#75736b" font-size="8.5px">silence</text>
+<text x="56" y="74" class="row-label" text-anchor="end" fill="#75736b" font-size="8.5px">phase</text>
+<line x1="64" y1="142" x2="880" y2="142" class="ax-line" stroke="#c1bfb4" fill="none"/>
+<g class="rh-xticks"><line x1="64" y1="20" x2="64" y2="142" class="grid" stroke="#e8e7e0" fill="none"/><line x1="64" y1="142" x2="64" y2="146" class="ax-line" stroke="#c1bfb4" fill="none"/><text x="64" y="157" class="tick" text-anchor="middle" fill="#6a6862" font-size="8.5px">0</text><line x1="181.51" y1="20" x2="181.51" y2="142" class="grid" stroke="#e8e7e0" fill="none"/><line x1="181.51" y1="142" x2="181.51" y2="146" class="ax-line" stroke="#c1bfb4" fill="none"/><text x="181.51" y="157" class="tick" text-anchor="middle" fill="#6a6862" font-size="8.5px">15</text><line x1="299.02" y1="20" x2="299.02" y2="142" class="grid" stroke="#e8e7e0" fill="none"/><line x1="299.02" y1="142" x2="299.02" y2="146" class="ax-line" stroke="#c1bfb4" fill="none"/><text x="299.02" y="157" class="tick" text-anchor="middle" fill="#6a6862" font-size="8.5px">30</text><line x1="416.53" y1="20" x2="416.53" y2="142" class="grid" stroke="#e8e7e0" fill="none"/><line x1="416.53" y1="142" x2="416.53" y2="146" class="ax-line" stroke="#c1bfb4" fill="none"/><text x="416.53" y="157" class="tick" text-anchor="middle" fill="#6a6862" font-size="8.5px">45</text><line x1="534.03" y1="20" x2="534.03" y2="142" class="grid" stroke="#e8e7e0" fill="none"/><line x1="534.03" y1="142" x2="534.03" y2="146" class="ax-line" stroke="#c1bfb4" fill="none"/><text x="534.03" y="157" class="tick" text-anchor="middle" fill="#6a6862" font-size="8.5px">60</text><line x1="651.54" y1="20" x2="651.54" y2="142" class="grid" stroke="#e8e7e0" fill="none"/><line x1="651.54" y1="142" x2="651.54" y2="146" class="ax-line" stroke="#c1bfb4" fill="none"/><text x="651.54" y="157" class="tick" text-anchor="middle" fill="#6a6862" font-size="8.5px">75</text><line x1="769.05" y1="20" x2="769.05" y2="142" class="grid" stroke="#e8e7e0" fill="none"/><line x1="769.05" y1="142" x2="769.05" y2="146" class="ax-line" stroke="#c1bfb4" fill="none"/><text x="769.05" y="157" class="tick" text-anchor="middle" fill="#6a6862" font-size="8.5px">90</text></g>
+<text x="472" y="173" class="ax-label" text-anchor="middle" fill="#75736b" font-size="9px">wall clock since the first stamped line (min)</text></g><g class="rh-geometry" clip-path="url(#clip-demo_hang-phase_timeline)"><rect x="64" y="52" width="1" height="38" class="p0 fill mark" rx="2" data-tip="job setup&#10;3.81s  (0% of the wall clock)&#10;starts 2026-03-17 21:04:12" tabindex="0" role="img" aria-label="job setup. 3.81s  (0% of the wall clock). starts 2026-03-17 21:04:12" fill="#3d75b6"/>
+<rect x="64.5" y="52" width="5.82" height="38" class="p1 fill mark" rx="2" data-tip="model init&#10;45s  (1% of the wall clock)&#10;starts 2026-03-17 21:04:15" tabindex="0" role="img" aria-label="model init. 45s  (1% of the wall clock). starts 2026-03-17 21:04:15" fill="#35669f"/>
+<rect x="70.31" y="52" width="809.2" height="38" class="p2 fill mark" rx="2" data-tip="coupling setup&#10;1h 43m 18s  (99% of the wall clock)&#10;starts 2026-03-17 21:05:00" tabindex="0" role="img" aria-label="coupling setup. 1h 43m 18s  (99% of the wall clock). starts 2026-03-17 21:05:00" fill="#2d5789"/>
+<rect x="879.51" y="52" width="1" height="38" class="p3 fill mark" rx="2" data-tip="step cancelled&#10;0.34s  (0% of the wall clock)&#10;starts 2026-03-17 22:48:18" tabindex="0" role="img" aria-label="step cancelled. 0.34s  (0% of the wall clock). starts 2026-03-17 22:48:18" fill="#264a74"/>
+<rect x="879.56" y="52" width="1" height="38" class="p4 fill mark" rx="2" data-tip="step aborted&#10;3.40s  (0% of the wall clock)&#10;starts 2026-03-17 22:48:18" tabindex="0" role="img" aria-label="step aborted. 3.40s  (0% of the wall clock). starts 2026-03-17 22:48:18" fill="#1f3d60"/>
+<rect x="72.66" y="22" width="806.89" height="13" class="lv-fail fill mark" rx="1.5" data-tip="1h 43m 00s with no output&#10;2026-03-17 21:05:18 to 2026-03-17 22:48:18&#10;last line:  mo_atmo_coupling_frame: Constructing the coupling frame atmosphere-ocean.&#10;line 113 of the log" tabindex="0" role="img" aria-label="1h 43m 00s with no output. 2026-03-17 21:05:18 to 2026-03-17 22:48:18. last line:  mo_atmo_coupling_frame: Constructing the coupling frame atmosphere-ocean.. line 113 of the log" data-line="113" fill="#c8452f"/></g><g class="rh-labels" clip-path="url(#clip-demo_hang-phase_timeline)"><text x="474.91" y="68" class="in-bar" text-anchor="middle" fill="#ffffff" font-size="8.5px" font-weight="650">coupling setup</text>
+<text x="474.91" y="80" class="in-bar dim" text-anchor="middle" fill="#ffffff" font-size="8.5px" font-weight="650">1h 43m 18s</text>
+<text x="476.11" y="32" class="in-bar" text-anchor="middle" fill="#ffffff" font-size="8.5px" font-weight="650">1h 43m 00s</text></g></svg>

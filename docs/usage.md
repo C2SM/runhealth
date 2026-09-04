@@ -41,18 +41,73 @@ following a growing 100 MB log costs no more than the new lines.
 ## Output formats
 
 `--format html`
-: The default. `index.html` plus a page per run, with light and dark themes and
-  a real print stylesheet. The browser's **Print to PDF** produces a clean
-  document with sensible page breaks.
+: The default. `index.html` plus a page per run, with light and dark themes,
+  [interactive figures](report.md#reading-them-in-a-browser) and a real print
+  stylesheet. The browser's **Print to PDF** produces a clean document with
+  sensible page breaks. The figures are written into the pages, so a single
+  `.html` file is a complete report you can attach to a mail.
 
 `--format md`
-: `report.md` with the same figures, in GitHub-flavoured Markdown.
+: `report.md` in GitHub-flavoured Markdown. Markdown cannot hold an inline
+  figure, so these are written to `images/*.svg` beside it.
 
 `--format pdf`
 : Uses [WeasyPrint](https://weasyprint.org/) if it is installed
   (`uv sync --extra pdf`). Without it, `runhealth` writes the HTML and tells you
   to print it, rather than failing. WeasyPrint is not a hard dependency because
   it is large and the browser route is just as good.
+
+## Sharing a report
+
+A report is a directory of plain files with nothing to serve it, so there are
+two ways to put it in front of someone else.
+
+**Copy it to a web server.** `--publish` runs `rsync` on the output directory;
+the destination is anything `rsync` accepts, so a path on a shared filesystem
+works as well as a host:
+
+```bash
+runhealth /path/to/logs -o report/ \
+    --publish www-data@intranet:/var/www/runs \
+    --publish-url https://intranet.example/runs
+```
+
+```text
+runhealth: wrote report/index.html
+runhealth: published to https://intranet.example/runs/index.html
+```
+
+Files are synced with modes a web server can read (`755`/`644`), because a
+report written under a restrictive umask on a shared filesystem otherwise
+arrives unreadable. Nothing is ever deleted at the far end: a report directory
+is often a subdirectory of a document root holding other things too.
+
+Set the destination once and the flag needs no argument afterwards:
+
+```bash
+export RUNHEALTH_PUBLISH=www-data@intranet:/var/www/runs
+export RUNHEALTH_PUBLISH_URL=https://intranet.example/runs
+runhealth /path/to/logs -o report/ --publish
+```
+
+Combined with `--watch`, every refresh is published, which turns a running job
+into a page colleagues can keep reloading.
+
+**Or serve it yourself.** `--serve` starts a small read-only server bound to
+`127.0.0.1` only, which is the case for a login node with no web server on it:
+
+```bash
+runhealth /path/to/logs -o report/ --serve 8080 --watch 60
+```
+
+Then, from your own machine, forward the port and open it:
+
+```bash
+ssh -L 8080:localhost:8080 login.cluster.example
+```
+
+Binding to localhost is deliberate. A directory of job logs is not something to
+expose to everyone else logged into a shared node.
 
 ## Performance
 

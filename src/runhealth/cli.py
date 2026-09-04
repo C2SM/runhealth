@@ -10,8 +10,10 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import threading
 import time
 import webbrowser
 from concurrent.futures import ProcessPoolExecutor
@@ -29,6 +31,9 @@ LOG_GLOBS = [DEFAULT_GLOB, "slurm-*.out", "*.log", "*.out", "*.o[0-9]*"]
 SINCE_RE = re.compile(r"^(\d+(?:\.\d+)?)([smhdw])$")
 SINCE_UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
 MAX_EMBED_LOG = 8 << 20  # copy the raw log next to the report below this size
+# Reports are written with the user's umask, which on a shared filesystem is
+# often too tight for a web server to read, so the sync sets the modes it needs.
+RSYNC_FLAGS = ["-rlptz", "--chmod=D755,F644"]
 
 
 def log(msg: str) -> None:
@@ -181,7 +186,11 @@ def build(args, files: list[Path], outdir: Path, states: dict[str, str]) -> list
         v = RunView(log=rl, assessment=a)
         v.page = f"{slug(Path(rl.path).stem)}.html"
         if not args.no_plots:
-            v.figures = plots.render_run(rl, a, outdir, slug(Path(rl.path).stem), args.dpi)
+            # Markdown needs a figure it can point at; HTML inlines the same
+            # markup and writes no image files at all.
+            v.figures = plots.render_run(
+                rl, a, outdir, slug(Path(rl.path).stem), standalone=args.format == "md"
+            )
         if args.embed_logs:
             v.log_href = report.copy_log(rl, outdir, MAX_EMBED_LOG)
         views.append(v)
@@ -193,7 +202,9 @@ def write_report(args, views: list[RunView], outdir: Path, sources: list[str]) -
     overview = None
     if not args.no_plots:
         overview = plots.render_index(
-            [(v.log, v.assessment) for v in views], outdir / "images" / "overview.png", args.dpi
+            [(v.log, v.assessment, v.page) for v in views],
+            outdir,
+            standalone=args.format == "md",
         )
     title = args.title or "Run health"
     if args.format == "md":
@@ -223,6 +234,55 @@ def summarise(views: list[RunView]) -> None:
         )
 
 
+# -- publishing -----------------------------------------------------------
+
+
+def publish(outdir: Path, dest: str, url: str) -> bool:
+    """Copy the report to a web server with rsync.
+
+    ``dest`` is anything rsync understands, so a plain directory on a shared
+    filesystem works as well as ``user@host:/var/www/runs``. Nothing is
+    deleted at the far end: a report directory is frequently a subdirectory
+    of a document root that holds other things too.
+    """
+    if shutil.which("rsync") is None:
+        log("runhealth: rsync is not on PATH, cannot publish")
+        return False
+    command = ["rsync", *RSYNC_FLAGS, f"{outdir}/", dest]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=1800)
+    except (OSError, subprocess.SubprocessError) as exc:
+        log(f"runhealth: publishing failed: {exc}")
+        return False
+    if result.returncode != 0:
+        log(f"runhealth: rsync exited {result.returncode}: {result.stderr.strip()[:400]}")
+        return False
+    where = url.rstrip("/") + "/index.html" if url else dest
+    log(f"runhealth: published to {where}")
+    return True
+
+
+def make_server(outdir: Path, port: int):
+    """A read-only server bound to the loopback interface.
+
+    Binding to localhost only is deliberate. Reports are generated on shared
+    login nodes, and a directory of job logs is not something to expose to
+    everyone else on the machine; reach it with ``ssh -L``.
+    """
+    from functools import partial  # noqa: PLC0415
+    from http.server import (  # noqa: PLC0415
+        SimpleHTTPRequestHandler,
+        ThreadingHTTPServer,
+    )
+
+    class Quiet(SimpleHTTPRequestHandler):
+        def log_message(self, *args) -> None:
+            pass
+
+    handler = partial(Quiet, directory=str(outdir))
+    return ThreadingHTTPServer(("127.0.0.1", port), handler)
+
+
 # -- entry point ----------------------------------------------------------
 
 
@@ -244,14 +304,41 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--list", action="store_true", help="show matching logs and exit")
     p.add_argument("--watch", type=float, default=0, help="re-render every N seconds")
     p.add_argument("--stall-seconds", type=float, default=0, help="override the stall threshold")
-    p.add_argument("--dpi", type=int, default=120, help="figure resolution")
     p.add_argument("--jobs", type=int, default=0, help="parallel parsers (0 = auto)")
     p.add_argument("--no-plots", action="store_true", help="skip the figures")
     p.add_argument("--no-cache", action="store_true", help="ignore and do not write the cache")
     p.add_argument("--no-squeue", action="store_true", help="do not ask SLURM for job states")
-    p.add_argument("--embed-logs", action="store_true", help="copy small logs into the report")
+    p.add_argument(
+        "--embed-logs",
+        action="store_true",
+        help="embed logs under 8 MB as a linkable page the figures can jump into",
+    )
     p.add_argument("--title", default="", help="report title")
     p.add_argument("--open", action="store_true", help="open the report when it is written")
+    p.add_argument(
+        "--publish",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="DEST",
+        help="rsync the report to DEST, e.g. user@host:/var/www/runs "
+        "(default: $RUNHEALTH_PUBLISH)",
+    )
+    p.add_argument(
+        "--publish-url",
+        default=os.environ.get("RUNHEALTH_PUBLISH_URL", ""),
+        metavar="URL",
+        help="address the published report is reachable at, printed when it is synced",
+    )
+    p.add_argument(
+        "--serve",
+        nargs="?",
+        const=8000,
+        type=int,
+        default=None,
+        metavar="PORT",
+        help="serve the report on 127.0.0.1:PORT until interrupted (default 8000)",
+    )
     p.add_argument("--version", action="version", version=f"runhealth {__version__}")
     return p
 
@@ -268,6 +355,12 @@ def _select(args) -> list[Path]:
     return files[: args.last] if args.last else files
 
 
+def _publish_dest(args) -> str:
+    if args.publish is None:
+        return ""
+    return args.publish or os.environ.get("RUNHEALTH_PUBLISH", "")
+
+
 def _once(args, outdir: Path) -> Path | None:
     files = _select(args)
     if not files:
@@ -278,6 +371,9 @@ def _once(args, outdir: Path) -> Path | None:
     path = write_report(args, views, outdir, [str(Path(p).resolve()) for p in args.paths])
     summarise(views)
     log(f"runhealth: wrote {path}")
+    dest = _publish_dest(args)
+    if dest:
+        publish(outdir, dest, args.publish_url)
     return path
 
 
@@ -294,20 +390,42 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{f}  ({f.stat().st_size / 1e6:.1f} MB)")
         return 0
 
+    if args.publish is not None and not _publish_dest(args):
+        log("runhealth: --publish needs a destination, or $RUNHEALTH_PUBLISH set")
+        return 2
+
     outdir = Path(args.outdir)
     path = _once(args, outdir)
     if path is None:
         return 1
-    if args.open:
-        webbrowser.open(path.resolve().as_uri())
-    if args.watch:
-        log(f"runhealth: watching, refreshing every {args.watch:g}s (Ctrl-C to stop)")
+
+    server = None
+    if args.serve is not None:
         try:
+            server = make_server(outdir, args.serve)
+        except OSError as exc:
+            log(f"runhealth: cannot serve on port {args.serve}: {exc}")
+            return 1
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        log(f"runhealth: serving http://127.0.0.1:{args.serve}/ (Ctrl-C to stop)")
+
+    if args.open:
+        target = f"http://127.0.0.1:{args.serve}/{path.name}" if server else path.resolve().as_uri()
+        webbrowser.open(target)
+
+    try:
+        if args.watch:
+            log(f"runhealth: watching, refreshing every {args.watch:g}s (Ctrl-C to stop)")
             while True:
                 time.sleep(args.watch)
                 _once(args, outdir)
-        except KeyboardInterrupt:
-            log("runhealth: stopped")
+        elif server:
+            threading.Event().wait()
+    except KeyboardInterrupt:
+        log("runhealth: stopped")
+    finally:
+        if server:
+            server.shutdown()
     return 0
 
 

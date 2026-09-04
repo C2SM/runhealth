@@ -10,7 +10,7 @@ Those answers are all in the log already. `runhealth` reads them out.
 runhealth /path/to/logs -o report/ --open
 ```
 
-```{figure} images/timeline.png
+```{figure} images/timeline.svg
 :alt: A run timeline: one blue phase filling the whole allocation, with a red silence bar above it
 :width: 820px
 :align: center
@@ -66,7 +66,6 @@ retry storm.
 report/
   index.html                  every run, one row each, sortable and filterable
   LOG.myjob.12345.html        one page per run: checks, figures, tables
-  images/*.png                the figures
   .cache/                     parsed state, so the next pass is instant
 ```
 

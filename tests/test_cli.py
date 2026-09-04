@@ -40,7 +40,9 @@ def test_end_to_end_html(tmp_path):
     text = index.read_text()
     assert "icon_hang.html" in text and "icon_success.html" in text
     assert (out / "icon_hang.html").is_file()
-    assert list((out / "images").glob("*.png"))
+    # Figures are inlined, so the page stands alone with no image directory.
+    assert not (out / "images").exists()
+    assert "<svg" in (out / "icon_hang.html").read_text()
 
 
 def test_cache_is_reused(tmp_path):
@@ -61,6 +63,8 @@ def test_markdown_end_to_end(tmp_path):
     text = (out / "report.md").read_text()
     assert "Silence" in text
     assert "![" in text  # figures are referenced
+    # Markdown cannot inline a figure, so those get written as files.
+    assert list((out / "images").glob("*.svg"))
 
 
 def test_no_matching_logs_returns_failure(tmp_path):
@@ -106,3 +110,51 @@ def test_stall_override_reaches_the_assessment(tmp_path):
     )
     text = (out / "icon_success.html").read_text()
     assert "of silence" in text
+
+
+def test_publish_without_a_destination_is_refused(tmp_path, monkeypatch):
+    monkeypatch.delenv("RUNHEALTH_PUBLISH", raising=False)
+    rc = cli.main(
+        [str(FIXTURES / "icon_hang.log"), "-o", str(tmp_path / "r"), "--no-squeue", "--publish"]
+    )
+    assert rc == 2
+    assert not (tmp_path / "r").exists()  # refused before any work
+
+
+def test_publish_copies_the_report(tmp_path):
+    out, web = tmp_path / "report", tmp_path / "web"
+    web.mkdir()
+    rc = cli.main(
+        [
+            str(FIXTURES / "icon_hang.log"),
+            "-o",
+            str(out),
+            "--no-squeue",
+            "--publish",
+            str(web),
+            "--publish-url",
+            "https://example.invalid/runs",
+        ]
+    )
+    assert rc == 0
+    assert (web / "index.html").is_file()
+    assert (web / "icon_hang.html").is_file()
+
+
+def test_publish_reads_its_destination_from_the_environment(tmp_path, monkeypatch):
+    out, web = tmp_path / "report", tmp_path / "web"
+    web.mkdir()
+    monkeypatch.setenv("RUNHEALTH_PUBLISH", str(web))
+    rc = cli.main([str(FIXTURES / "icon_hang.log"), "-o", str(out), "--no-squeue", "--publish"])
+    assert rc == 0
+    assert (web / "index.html").is_file()
+
+
+def test_serve_binds_to_the_loopback_interface_only(tmp_path):
+    out = tmp_path / "report"
+    out.mkdir()
+    server = cli.make_server(out, 0)
+    try:
+        assert server.server_address[0] == "127.0.0.1"
+    finally:
+        server.server_close()
