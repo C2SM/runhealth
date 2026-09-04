@@ -52,6 +52,69 @@ def parse_since(text: str) -> float | None:
 # -- discovery ------------------------------------------------------------
 
 
+def is_remote(spec: str) -> bool:
+    """True for an rsync-style ``host:path`` spec.
+
+    Mirrors rsync's own rule: remote if a colon appears before the first
+    slash, so ``santis:/scratch/run`` and ``santis:logs`` are remote while
+    ``/local:odd/path`` stays local.
+    """
+    colon = spec.find(":")
+    slash = spec.find("/")
+    return colon != -1 and (slash == -1 or colon < slash)
+
+
+def sync_remote(spec: str, pattern: str | None, staging: Path) -> Path | None:
+    """Rsync a ``host:path`` spec down to ``staging`` and return the local copy.
+
+    Assumes ``ssh host`` already works (keys set up, no prompt); rsync reuses
+    that transport. A remote directory is synced non-recursively, matching
+    only the same filename patterns ``discover`` would use locally, so a
+    directory of unrelated files does not get pulled down wholesale. A bare
+    remote file is copied as is.
+    """
+    if shutil.which("rsync") is None:
+        log("runhealth: rsync is not on PATH, cannot read a remote path")
+        return None
+    local = staging / slug(spec)
+    local.mkdir(parents=True, exist_ok=True)
+    globs = [pattern] if pattern else LOG_GLOBS
+    filters = [f"--include={g}" for g in globs] + ["--exclude=*/", "--exclude=*"]
+    command = ["rsync", "-rlptz", *filters, f"{spec}/", f"{local}/"]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=1800)
+    except (OSError, subprocess.SubprocessError) as exc:
+        log(f"runhealth: syncing {spec} failed: {exc}")
+        return None
+    if result.returncode == 0:
+        return local
+    # Not a directory: retry as a single remote file.
+    try:
+        result = subprocess.run(
+            ["rsync", "-rlptz", spec, f"{local}/"], capture_output=True, text=True, timeout=1800
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        log(f"runhealth: syncing {spec} failed: {exc}")
+        return None
+    if result.returncode != 0:
+        log(f"runhealth: syncing {spec} failed: {result.stderr.strip()[:400]}")
+        return None
+    return local
+
+
+def resolve_paths(specs: list[str], pattern: str | None, staging: Path) -> list[Path]:
+    """Local paths to scan, syncing any ``host:path`` spec down first."""
+    resolved = []
+    for spec in specs:
+        if is_remote(spec):
+            local = sync_remote(spec, pattern, staging)
+            if local is not None:
+                resolved.append(local)
+        else:
+            resolved.append(Path(spec))
+    return resolved
+
+
 def discover(paths: list[Path], pattern: str | None) -> list[Path]:
     """Files to analyse, newest first."""
     found: list[Path] = []
@@ -292,7 +355,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="Read HPC batch job logs and write a system-health report.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("paths", nargs="*", default=["."], help="log files or directories to scan")
+    p.add_argument(
+        "paths",
+        nargs="*",
+        default=["."],
+        help="log files or directories to scan, local or host:/path (synced over ssh/rsync)",
+    )
     p.add_argument("-o", "--outdir", default="runhealth-report", help="where to write the report")
     p.add_argument("-f", "--format", choices=["html", "md", "pdf"], default="html")
     p.add_argument("--glob", default=None, help=f"filename pattern (default: {DEFAULT_GLOB} etc.)")
@@ -321,8 +389,7 @@ def build_parser() -> argparse.ArgumentParser:
         const="",
         default=None,
         metavar="DEST",
-        help="rsync the report to DEST, e.g. user@host:/var/www/runs "
-        "(default: $RUNHEALTH_PUBLISH)",
+        help="rsync the report to DEST, e.g. user@host:/var/www/runs (default: $RUNHEALTH_PUBLISH)",
     )
     p.add_argument(
         "--publish-url",
@@ -343,8 +410,10 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _select(args) -> list[Path]:
-    files = discover([Path(p) for p in args.paths], args.glob)
+def _select(args, outdir: Path) -> list[Path]:
+    staging = outdir / ".remote-cache"
+    paths = resolve_paths(args.paths, args.glob, staging)
+    files = discover(paths, args.glob)
     if args.since:
         window = parse_since(args.since)
         if window is None:
@@ -362,13 +431,14 @@ def _publish_dest(args) -> str:
 
 
 def _once(args, outdir: Path) -> Path | None:
-    files = _select(args)
+    files = _select(args, outdir)
     if not files:
         log("runhealth: no logs matched")
         return None
     states = {} if args.no_squeue else slurm_states()
     views = build(args, files, outdir, states)
-    path = write_report(args, views, outdir, [str(Path(p).resolve()) for p in args.paths])
+    sources = [p if is_remote(p) else str(Path(p).resolve()) for p in args.paths]
+    path = write_report(args, views, outdir, sources)
     summarise(views)
     log(f"runhealth: wrote {path}")
     dest = _publish_dest(args)
@@ -385,8 +455,10 @@ def main(argv: list[str] | None = None) -> int:
             flag = " (always applied)" if p.always else ""
             print(f"{name:<14} {p.description}{flag}")
         return 0
+
+    outdir = Path(args.outdir)
     if args.list:
-        for f in _select(args):
+        for f in _select(args, outdir):
             print(f"{f}  ({f.stat().st_size / 1e6:.1f} MB)")
         return 0
 
@@ -394,7 +466,6 @@ def main(argv: list[str] | None = None) -> int:
         log("runhealth: --publish needs a destination, or $RUNHEALTH_PUBLISH set")
         return 2
 
-    outdir = Path(args.outdir)
     path = _once(args, outdir)
     if path is None:
         return 1

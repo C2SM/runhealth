@@ -10,6 +10,16 @@ Those answers are all in the log already. `runhealth` reads them out.
 runhealth /path/to/logs -o report/ --open
 ```
 
+Run it from your laptop against logs still sitting on a cluster, and the report
+ends up on your laptop too, ready to open in a browser without an SSH tunnel:
+
+```bash
+runhealth santis:/scratch/e1000/run -o report/ --open
+```
+
+Any `host:/path` works as long as `ssh host` already does; `runhealth` uses
+`rsync` under the hood to pull the matching logs down first.
+
 <p align="center">
   <img src="docs/images/timeline.svg" alt="A run timeline: one blue phase filling the whole allocation, with a red silence bar above it" width="820">
 </p>
