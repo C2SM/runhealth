@@ -1056,12 +1056,17 @@ def render_index(
         outcome = log.outcome.text if log.outcome else ""
         rows.append(
             f'<tr data-grade="{a.grade}">'
+            f'<td data-v="{esc(a.status)}">'
+            f'{_badge(STATUS_LEVEL.get(a.status, "info"), a.status.title())}</td>'
             f'<td data-v="{esc(a.grade)}">{_badge(a.grade)}</td>'
             f'<td data-v="{esc(log.name)}"><a href="{esc(v.page)}">'
-            f'{esc(log.fields.get("job_name") or log.name)}</a><br>'
-            f'<span style="color:var(--muted);font-size:12px">{esc(a.status.title())}'
-            + (f" &middot; {esc(outcome[:70])}" if outcome else "")
-            + "</span></td>"
+            f'{esc(log.fields.get("job_name") or log.name)}</a>'
+            + (
+                f'<br><span style="color:var(--muted);font-size:12px">{esc(outcome[:70])}</span>'
+                if outcome
+                else ""
+            )
+            + "</td>"
             f'<td class="n" data-v="{esc(log.fields.get("job_id") or "")}">'
             f'{esc(log.fields.get("job_id") or "&ndash;")}</td>'
             f'<td class="n" data-v="{log.first_wall or 0}">{esc(started)}</td>'
@@ -1100,7 +1105,8 @@ def render_index(
         f'<h2 class="sec" id="{toc.add("runs", "Runs")}">Runs</h2>',
         filters,
         '<div class="scroll"><table><thead><tr>'
-        '<th class="sortable">health</th><th class="sortable">run</th>'
+        '<th class="sortable">status</th><th class="sortable">health</th>'
+        '<th class="sortable">run</th>'
         '<th class="sortable">job</th><th class="sortable">started</th>'
         '<th class="sortable">wall</th><th class="sortable">nodes</th>'
         '<th class="sortable">progress</th><th class="sortable">rate</th>'
@@ -1117,13 +1123,14 @@ def render_index(
 def render_markdown(views: list[RunView], sources: list[str], title: str) -> str:
     out = [f"# {title}", "", f"Sources: {', '.join(sources)}", ""]
     out += [
-        "| health | run | job | started | wall | progress | rate | longest silence |",
-        "| --- | --- | --- | --- | ---: | ---: | ---: | ---: |",
+        "| status | health | run | job | started | wall | progress | rate | longest silence |",
+        "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: |",
     ]
     for v in sorted(views, key=lambda v: v.log.first_wall or 0, reverse=True):
         s = v.assessment.stats
         out.append(
-            f"| **{v.assessment.grade.upper()}** | {v.log.fields.get('job_name') or v.log.name} "
+            f"| **{v.assessment.status.upper()}** | **{v.assessment.grade.upper()}** "
+            f"| {v.log.fields.get('job_name') or v.log.name} "
             f"| {v.log.fields.get('job_id') or '-'} | {format_stamp(v.log.first_wall) or '-'} "
             f"| {format_duration(s.get('wall_seconds')) or '-'} "
             f"| {s.get('progress_last') or '-'} "
