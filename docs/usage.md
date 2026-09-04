@@ -5,6 +5,7 @@
 | You want to | Run |
 | --- | --- |
 | Look at everything in a directory | `runhealth /path/to/logs -o report/` |
+| Look at logs on a remote cluster, from your laptop | `runhealth santis:/path/to/logs -o report/ --open` |
 | Look at one log and open it | `runhealth LOG.myjob.12345.o -o report/ --open` |
 | Only the recent ones | `runhealth /path/to/logs --last 5 --since 7d -o report/` |
 | Follow a job that is running now | `runhealth /path/to/logs --watch 60 -o report/` |
@@ -18,6 +19,34 @@
 Everything is written under `-o`, and re-running over the same directory reuses
 the cache, so it costs about a second. Every flag is listed in the
 [command line reference](cli.md).
+
+## Remote logs
+
+The recommended way to run `runhealth` is from your own machine, pointing at
+logs that live on a cluster:
+
+```bash
+runhealth santis:/scratch/e1000/run -o report/ --open
+```
+
+Any path argument written as `host:/path` (or `user@host:/path`, or a path
+relative to the remote home directory, `host:logs`) is treated as remote,
+exactly like `scp` or `rsync` read it. This assumes `ssh host` already works
+without a prompt, since `runhealth` shells out to `rsync` over that same
+connection to pull the matching logs down into `<outdir>/.remote-cache/`
+before reading them. Only files matching the active glob are transferred, and
+only from that one directory, not its subdirectories.
+
+The result is a report written to your local disk, so `--open` shows it
+straight away with no port forwarding or `--serve`/`ssh -L` dance needed. It
+also composes with `--watch`: each pass re-syncs first, so a report on your
+laptop keeps following a job that is still writing its log on the cluster.
+
+A local path and a remote one can be mixed freely in the same invocation:
+
+```bash
+runhealth santis:/scratch/e1000/run ./local-logs -o report/
+```
 
 ## Running jobs
 

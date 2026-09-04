@@ -25,6 +25,58 @@ def test_discover_skips_empty_files(tmp_path):
     assert cli.discover([tmp_path], "*.log") == []
 
 
+def test_is_remote_detects_rsync_style_specs():
+    assert cli.is_remote("santis:/scratch/e1000/run")
+    assert cli.is_remote("user@host:relative/path")
+    assert not cli.is_remote("/local/path")
+    assert not cli.is_remote(".")
+
+
+def _fake_ssh(tmp_path) -> Path:
+    # A colon before the first slash is enough to make sync_remote shell out
+    # over ssh, so tests fake the remote shell rather than needing a real
+    # host: a wrapper that drops the hostname argument and runs the rest
+    # (rsync's own --server invocation) right here.
+    rsh = tmp_path / "fake-ssh"
+    rsh.write_text('#!/bin/sh\nshift\nexec "$@"\n')
+    rsh.chmod(0o755)
+    return rsh
+
+
+def test_sync_remote_pulls_matching_files_non_recursively(tmp_path, monkeypatch):
+    monkeypatch.setenv("RSYNC_RSH", str(_fake_ssh(tmp_path)))
+    remote = tmp_path / "remote"
+    (remote / "sub").mkdir(parents=True)
+    (remote / "LOG.demo.1.o").write_text("x\n")
+    (remote / "notes.txt").write_text("y\n")
+    (remote / "sub" / "LOG.deep.1.o").write_text("z\n")
+
+    local = cli.sync_remote(f"fakehost:{remote}", None, tmp_path / "staging")
+
+    assert local is not None
+    assert sorted(p.name for p in local.iterdir()) == ["LOG.demo.1.o"]
+
+
+def test_sync_remote_falls_back_to_a_single_file(tmp_path, monkeypatch):
+    monkeypatch.setenv("RSYNC_RSH", str(_fake_ssh(tmp_path)))
+    remote_file = tmp_path / "LOG.demo.1.o"
+    remote_file.write_text("x\n")
+
+    local = cli.sync_remote(f"fakehost:{remote_file}", None, tmp_path / "staging")
+
+    assert local is not None
+    assert (local / "LOG.demo.1.o").read_text() == "x\n"
+
+
+def test_end_to_end_from_a_remote_spec(tmp_path, monkeypatch):
+    monkeypatch.setenv("RSYNC_RSH", str(_fake_ssh(tmp_path)))
+    out = tmp_path / "report"
+    rc = cli.main([f"fakehost:{FIXTURES}", "--glob", "*.log", "-o", str(out), "--no-squeue"])
+    assert rc == 0
+    assert (out / "index.html").is_file()
+    assert (out / "icon_hang.html").is_file()
+
+
 def test_parse_since():
     assert cli.parse_since("7d") == 7 * 86400
     assert cli.parse_since("90m") == 5400

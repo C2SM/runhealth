@@ -12,7 +12,7 @@ runhealth [PATH ...] [-o OUTDIR] [-f html|md|pdf]
 
 | Option | |
 | --- | --- |
-| `PATH ...` | files or directories; defaults to the working directory |
+| `PATH ...` | files or directories, local or `host:/path` over ssh/rsync (see [Remote logs](usage.md#remote-logs)); defaults to the working directory |
 | `-o, --outdir` | where the report is written (default `runhealth-report`) |
 | `-f, --format` | `html` (default), `md` or `pdf` |
 | `--glob` | filename pattern to scan directories with |
