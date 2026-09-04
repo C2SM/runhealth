@@ -48,7 +48,7 @@ def test_the_hung_sample_is_diagnosed_from_its_silence(demos):
 def test_the_figures_shipped_in_the_readme_can_be_regenerated(tmp_path, demos):
     from runhealth import plots
 
-    figs = {f.key for f in plots.render_run(*demos["demo"], tmp_path, "demo", dpi=60)}
+    figs = {f.key for f in plots.render_run(*demos["demo"], tmp_path, "demo")}
     assert {"progress", "timers", "warnings"} <= figs
-    hang = {f.key for f in plots.render_run(*demos["demo_hang"], tmp_path, "hang", dpi=60)}
+    hang = {f.key for f in plots.render_run(*demos["demo_hang"], tmp_path, "hang")}
     assert "timeline" in hang

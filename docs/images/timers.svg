@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 180" width="900" height="180" class="rh-svg" role="img" aria-label="Top-level timer totals per rank group, with per-rank spread" preserveAspectRatio="xMidYMid meet" data-plot="232,6,606,168" font-size="9px" font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif"><style>:root { --bg: #fcfcfb; --panel: #ffffff; --panel-2: #f5f4f0; --ink: #16150f; --muted: #75736b; --line: #e2e1d9; --line-2: #cecdc3; --ok: #2f8f5b; --info: #3d7fd6; --warn: #c98216; --fail: #c8452f; --grid: #e8e7e0; --axis: #c1bfb4; --tick: #6a6862; --whisker: #3f3e38; --shadow: 0 1px 2px rgba(20,18,10,.05), 0 4px 14px rgba(20,18,10,.04); --s0: #3d7fd6; --s1: #c98216; --s2: #2f8f5b; --s3: #8b5cc7; --s4: #c8452f; --s5: #0f8c95; --s6: #a6742a; --p0: #3d75b6; --p1: #35669f; --p2: #2d5789; --p3: #264a74; --p4: #1f3d60; --p5: #18314d; --p6: #4b6b8c; }
+.rh-svg { width: 100%; height: auto; display: block; overflow: visible;
+  font: 9px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+.rh-svg .grid { stroke: var(--grid); stroke-width: 1; }
+.rh-svg .ax-line { stroke: var(--axis); stroke-width: 1; }
+.rh-svg .tick { fill: var(--tick); font-size: 8.5px; }
+.rh-svg .ax-label { fill: var(--muted); font-size: 9px; }
+.rh-svg .panel-title { fill: var(--ink); font-size: 10px; font-weight: 650; }
+.rh-svg .row-label { fill: var(--muted); font-size: 8.5px; }
+.rh-svg .val { fill: var(--tick); font-size: 8.5px; }
+.rh-svg .in-bar { fill: #fff; font-size: 8.5px; font-weight: 650; }
+.rh-svg .in-bar.dim { font-weight: 400; opacity: .85; }
+.rh-svg .ref { stroke: var(--muted); stroke-width: 1; }
+.rh-svg .dash { stroke-dasharray: 4 3; }
+.rh-svg .ref-label { fill: var(--muted); font-size: 8.5px; }
+.rh-svg .whisker { stroke: var(--whisker); stroke-width: 1.1; opacity: .75; }
+.rh-svg .io-tick { stroke: var(--muted); stroke-width: 1.2; opacity: .7; }
+.rh-svg .legend-text { fill: var(--muted); font-size: 9px; }
+
+/* Paint modes. A class sets --c; these three decide what is done with it. */
+.rh-svg .fill { fill: var(--c); stroke: none; }
+.rh-svg .stroke { fill: none; stroke: var(--c); stroke-width: 1.6;
+  stroke-linejoin: round; stroke-linecap: round; }
+.rh-svg .area { fill: var(--c); stroke: none; opacity: .13; }
+.rh-svg .range { fill: none; stroke: var(--c); stroke-width: 5;
+  stroke-linecap: round; opacity: .6; }
+.rh-svg .s0 { --c: var(--s0); } .rh-svg .s1 { --c: var(--s1); }
+.rh-svg .s2 { --c: var(--s2); } .rh-svg .s3 { --c: var(--s3); }
+.rh-svg .s4 { --c: var(--s4); } .rh-svg .s5 { --c: var(--s5); }
+.rh-svg .s6 { --c: var(--s6); }
+.rh-svg .p0 { --c: var(--p0); } .rh-svg .p1 { --c: var(--p1); }
+.rh-svg .p2 { --c: var(--p2); } .rh-svg .p3 { --c: var(--p3); }
+.rh-svg .p4 { --c: var(--p4); } .rh-svg .p5 { --c: var(--p5); }
+.rh-svg .p6 { --c: var(--p6); }
+.rh-svg .lv-ok { --c: var(--ok); } .rh-svg .lv-info { --c: var(--info); }
+.rh-svg .lv-warn { --c: var(--warn); } .rh-svg .lv-fail { --c: var(--fail); }
+.rh-svg .ink { --c: var(--ink); }
+</style><title>Top-level timer totals per rank group, with per-rank spread</title><defs><clipPath id="clip-demo-timer_breakdown"><rect x="232" y="2" width="606" height="176"/></clipPath></defs><g class="rh-frame"><text x="8" y="22" class="panel-title" fill="#16150f" font-size="10px" font-weight="650">Timer report, ranks 0-31   total = 19m 11s</text>
+<text x="844" y="45" class="val" text-anchor="start" fill="#6a6862" font-size="8.5px">81%</text>
+<text x="844" y="69" class="val" text-anchor="start" fill="#6a6862" font-size="8.5px">10%</text>
+<text x="844" y="93" class="val" text-anchor="start" fill="#6a6862" font-size="8.5px">5%</text>
+<text x="844" y="117" class="val" text-anchor="start" fill="#6a6862" font-size="8.5px">4%</text>
+<text x="224" y="45" class="tick" text-anchor="end" fill="#6a6862" font-size="8.5px">integrate_nh</text>
+<text x="224" y="69" class="tick" text-anchor="end" fill="#6a6862" font-size="8.5px">exch_data.wait</text>
+<text x="224" y="93" class="tick" text-anchor="end" fill="#6a6862" font-size="8.5px">wrt_output</text>
+<text x="224" y="117" class="tick" text-anchor="end" fill="#6a6862" font-size="8.5px">coupling</text>
+<line x1="232" y1="130" x2="838" y2="130" class="ax-line" stroke="#c1bfb4" fill="none"/>
+<g class="rh-xticks"><line x1="232" y1="34" x2="232" y2="130" class="grid" stroke="#e8e7e0" fill="none"/><line x1="232" y1="130" x2="232" y2="134" class="ax-line" stroke="#c1bfb4" fill="none"/><text x="232" y="145" class="tick" text-anchor="middle" fill="#6a6862" font-size="8.5px">0</text><line x1="355.65" y1="34" x2="355.65" y2="130" class="grid" stroke="#e8e7e0" fill="none"/><line x1="355.65" y1="130" x2="355.65" y2="134" class="ax-line" stroke="#c1bfb4" fill="none"/><text x="355.65" y="145" class="tick" text-anchor="middle" fill="#6a6862" font-size="8.5px">3</text><line x1="479.29" y1="34" x2="479.29" y2="130" class="grid" stroke="#e8e7e0" fill="none"/><line x1="479.29" y1="130" x2="479.29" y2="134" class="ax-line" stroke="#c1bfb4" fill="none"/><text x="479.29" y="145" class="tick" text-anchor="middle" fill="#6a6862" font-size="8.5px">7</text><line x1="602.94" y1="34" x2="602.94" y2="130" class="grid" stroke="#e8e7e0" fill="none"/><line x1="602.94" y1="130" x2="602.94" y2="134" class="ax-line" stroke="#c1bfb4" fill="none"/><text x="602.94" y="145" class="tick" text-anchor="middle" fill="#6a6862" font-size="8.5px">10</text><line x1="726.58" y1="34" x2="726.58" y2="130" class="grid" stroke="#e8e7e0" fill="none"/><line x1="726.58" y1="130" x2="726.58" y2="134" class="ax-line" stroke="#c1bfb4" fill="none"/><text x="726.58" y="145" class="tick" text-anchor="middle" fill="#6a6862" font-size="8.5px">13</text></g>
+<text x="535" y="161" class="ax-label" text-anchor="middle" fill="#75736b" font-size="9px">average across ranks (min)</text></g><g class="rh-geometry" clip-path="url(#clip-demo-timer_breakdown)"><rect x="232" y="34" width="577.43" height="16" class="s0 fill mark" rx="2" data-tip="integrate_nh&#10;15m 34s average across ranks  (81.1% of total)&#10;fastest rank 15m 02s, slowest 16m 01s&#10;spread 1.07x&#10;slowest rank 21&#10;4,000 calls" tabindex="0" role="img" aria-label="integrate_nh. 15m 34s average across ranks  (81.1% of total). fastest rank 15m 02s, slowest 16m 01s. spread 1.07x. slowest rank 21. 4,000 calls" fill="#3d7fd6"/>
+<line x1="789.64" y1="42" x2="826.12" y2="42" class="whisker" stroke="#3f3e38" fill="none"/>
+<line x1="789.64" y1="38" x2="789.64" y2="46" class="whisker" stroke="#3f3e38" fill="none"/>
+<line x1="826.12" y1="38" x2="826.12" y2="46" class="whisker" stroke="#3f3e38" fill="none"/>
+<rect x="232" y="58" width="72.95" height="16" class="s0 fill mark" rx="2" data-tip="exch_data.wait&#10;1m 58s average across ranks  (10.3% of total)&#10;fastest rank 31s, slowest 4m 47s&#10;spread 9.26x&#10;slowest rank 21&#10;84,000 calls" tabindex="0" role="img" aria-label="exch_data.wait. 1m 58s average across ranks  (10.3% of total). fastest rank 31s, slowest 4m 47s. spread 9.26x. slowest rank 21. 84,000 calls" fill="#3d7fd6"/>
+<line x1="251.17" y1="66" x2="409.43" y2="66" class="whisker" stroke="#3f3e38" fill="none"/>
+<line x1="251.17" y1="62" x2="251.17" y2="70" class="whisker" stroke="#3f3e38" fill="none"/>
+<line x1="409.43" y1="62" x2="409.43" y2="70" class="whisker" stroke="#3f3e38" fill="none"/>
+<rect x="232" y="82" width="32.15" height="16" class="s0 fill mark" rx="2" data-tip="wrt_output&#10;52s average across ranks  (4.5% of total)&#10;fastest rank 38s, slowest 1m 11s&#10;spread 1.87x&#10;slowest rank 4&#10;24 calls" tabindex="0" role="img" aria-label="wrt_output. 52s average across ranks  (4.5% of total). fastest rank 38s, slowest 1m 11s. spread 1.87x. slowest rank 4. 24 calls" fill="#3d7fd6"/>
+<line x1="255.49" y1="90" x2="275.89" y2="90" class="whisker" stroke="#3f3e38" fill="none"/>
+<line x1="255.49" y1="86" x2="255.49" y2="94" class="whisker" stroke="#3f3e38" fill="none"/>
+<line x1="275.89" y1="86" x2="275.89" y2="94" class="whisker" stroke="#3f3e38" fill="none"/>
+<rect x="232" y="106" width="31.53" height="16" class="s0 fill mark" rx="2" data-tip="coupling&#10;51s average across ranks  (4.4% of total)&#10;fastest rank 47s, slowest 56s&#10;spread 1.19x&#10;slowest rank 12&#10;400 calls" tabindex="0" role="img" aria-label="coupling. 51s average across ranks  (4.4% of total). fastest rank 47s, slowest 56s. spread 1.19x. slowest rank 12. 400 calls" fill="#3d7fd6"/>
+<line x1="261.06" y1="114" x2="266.62" y2="114" class="whisker" stroke="#3f3e38" fill="none"/>
+<line x1="261.06" y1="110" x2="261.06" y2="118" class="whisker" stroke="#3f3e38" fill="none"/>
+<line x1="266.62" y1="110" x2="266.62" y2="118" class="whisker" stroke="#3f3e38" fill="none"/></g></svg>

@@ -2,21 +2,25 @@
 
 No template engine: the pages are small enough that string fragments are
 easier to read and to change than a template language, and it keeps the
-dependency list to matplotlib and PyYAML.
+dependency list to PyYAML alone.
 
-The HTML carries a real print stylesheet, so a browser's Save as PDF produces
-a proper document. ``--format pdf`` uses WeasyPrint when it is installed and
-otherwise says so rather than failing.
+A page is a sticky header, a table of contents that tracks the reading
+position, and one column of content. The figures are SVG written by
+:mod:`runhealth.plots` and are complete before any script runs, so the same
+page serves a browser, the print stylesheet and WeasyPrint. The script adds
+tooltips, legend toggling, brushing to zoom, and a shared marker across the
+charts that share a wall-clock axis.
 """
 
 from __future__ import annotations
 
 import html
-import shutil
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from . import style
 from .extract import RunLog
 from .health import Assessment, Check, counter_rows
 from .logfile import format_duration, format_stamp
@@ -33,6 +37,9 @@ STATUS_LEVEL = {
     "INCOMPLETE": "warn",
     "UNKNOWN": "info",
 }
+# Lines per block in an embedded log. Each block is skipped by the browser
+# until it is scrolled near, which is what keeps a large log openable.
+LOG_BLOCK = 200
 
 
 @dataclass
@@ -63,28 +70,78 @@ def _num(value, suffix: str = "") -> str:
     return f"{value:,}{suffix}" if isinstance(value, int) else f"{value}{suffix}"
 
 
+# -- icons ----------------------------------------------------------------
+
+# Line icons in the Lucide idiom, inlined because a report has to work with
+# no network. Each is decorative; the button around it carries the label.
+_ICON = (
+    '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" '
+    'aria-hidden="true" focusable="false">{}</svg>'
+)
+ICONS = {
+    "system": _ICON.format(
+        '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>'
+    ),
+    "light": _ICON.format(
+        '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4'
+        'M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/>'
+    ),
+    "dark": _ICON.format('<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>'),
+}
+THEME_LABEL = {
+    "system": "Follow the system theme",
+    "light": "Light theme",
+    "dark": "Dark theme",
+}
+
+
+def theme_switch() -> str:
+    buttons = "".join(
+        f'<button type="button" data-theme-set="{mode}" aria-pressed="false" '
+        f'title="{esc(THEME_LABEL[mode])}" aria-label="{esc(THEME_LABEL[mode])}">'
+        f"{ICONS[mode]}</button>"
+        for mode in ("system", "light", "dark")
+    )
+    return f'<div class="theme" role="group" aria-label="Colour theme">{buttons}</div>'
+
+
+# -- table of contents ----------------------------------------------------
+
+
+class Toc:
+    """Anchors collected while a page is built, in reading order."""
+
+    def __init__(self) -> None:
+        self.items: list[tuple[str, str, int]] = []
+
+    def add(self, anchor: str, label: str, level: int = 1) -> str:
+        self.items.append((anchor, label, level))
+        return anchor
+
+    def render(self) -> str:
+        if len(self.items) < 2:
+            return ""
+        links = "".join(
+            f'<a href="#{esc(anchor)}" class="lv{level}">{esc(label)}</a>'
+            for anchor, label, level in self.items
+        )
+        return (
+            '<aside class="toc" aria-label="On this page">'
+            '<p class="toc-h">On this page</p>'
+            f'<nav id="toc">{links}</nav></aside>'
+        )
+
+
 CSS = """
-:root {
-  --bg: #fcfcfb; --panel: #ffffff; --panel-2: #f5f4f0; --ink: #16150f;
-  --muted: #75736b; --line: #e2e1d9; --line-2: #cecdc3;
-  --ok: #2f8f5b; --info: #3d7fd6; --warn: #c98216; --fail: #c8452f;
-  --shadow: 0 1px 2px rgba(20,18,10,.05), 0 4px 14px rgba(20,18,10,.04);
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #14150f; --panel: #1c1e17; --panel-2: #23251d; --ink: #edece4;
-    --muted: #9d9b90; --line: #32342a; --line-2: #444639;
-    --ok: #64c48c; --info: #7cb0ef; --warn: #e5a94c; --fail: #ef7a63;
-    --shadow: none;
-  }
-}
-:root[data-theme="dark"] {
-  --bg: #14150f; --panel: #1c1e17; --panel-2: #23251d; --ink: #edece4;
-  --muted: #9d9b90; --line: #32342a; --line-2: #444639;
-  --ok: #64c48c; --info: #7cb0ef; --warn: #e5a94c; --fail: #ef7a63;
-  --shadow: none;
-}
+:root { --nav-h: 52px; }
+/*LIGHT*/
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { /*DARK*/ } }
+:root[data-theme="dark"] { /*DARK*/ }
+
 * { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
   font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -93,16 +150,74 @@ body {
 code, .mono, td.n, .kv dd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 a { color: inherit; text-decoration: none; border-bottom: 1px solid var(--line-2); }
 a:hover { border-bottom-color: currentColor; }
-.wrap { max-width: 1120px; margin: 0 auto; padding: 34px 26px 90px; }
-header.top { display: flex; align-items: flex-start; gap: 18px; flex-wrap: wrap;
-  border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 26px; }
-header.top h1 { font-size: 25px; margin: 0 0 4px; letter-spacing: -.015em; }
-header.top .sub { color: var(--muted); font-size: 13px; }
-header.top .spacer { flex: 1 1 auto; }
+:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; border-radius: 3px; }
+.skip { position: absolute; left: -9999px; top: 0; background: var(--panel); z-index: 60;
+  padding: 9px 14px; border: 1px solid var(--line-2); border-radius: 0 0 8px 0; }
+.skip:focus { left: 0; }
+
+/* -- sticky header -- */
+.nav { position: sticky; top: 0; z-index: 40; background: var(--bg);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: saturate(180%) blur(10px); border-bottom: 1px solid var(--line); }
+@supports not (backdrop-filter: blur(1px)) { .nav { background: var(--bg); } }
+.nav-in { max-width: 1420px; margin: 0 auto; height: var(--nav-h); padding: 0 20px;
+  display: flex; align-items: center; gap: 10px; }
+.nav .brand { font-weight: 650; font-size: 13.5px; letter-spacing: -.01em; border: none;
+  flex: 0 0 auto; }
+.nav .sep { color: var(--line-2); }
+.nav .here { font-size: 13.5px; font-weight: 550; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; min-width: 0; }
+.nav .spacer { flex: 1 1 auto; }
+.nav .up { font-size: 12.5px; color: var(--muted); border: none; flex: 0 0 auto; }
+.nav .up:hover { color: var(--ink); }
+
+.theme { display: inline-flex; gap: 1px; padding: 2px; flex: 0 0 auto;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; }
+.theme button { display: grid; place-items: center; width: 30px; height: 26px; padding: 0;
+  background: none; border: none; border-radius: 999px; color: var(--muted); cursor: pointer; }
+.theme button:hover { color: var(--ink); }
+.theme button[aria-pressed="true"] { background: var(--panel); color: var(--ink);
+  box-shadow: var(--shadow); }
+.ico { width: 15px; height: 15px; }
+
+/* -- shell and table of contents -- */
+.shell { max-width: 1420px; margin: 0 auto; padding: 0 20px 90px;
+  display: grid; grid-template-columns: 216px minmax(0, 1fr); gap: 34px; align-items: start; }
+.toc { position: sticky; top: calc(var(--nav-h) + 20px); padding-top: 30px; }
+.toc-h { margin: 0 0 9px; font-size: 11px; text-transform: uppercase; letter-spacing: .09em;
+  color: var(--muted); font-weight: 650; }
+.toc nav { display: flex; flex-direction: column; gap: 1px;
+  border-left: 1px solid var(--line); }
+.toc a { border: none; font-size: 13px; color: var(--muted); padding: 4px 0 4px 13px;
+  margin-left: -1px; border-left: 2px solid transparent; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.toc a.lv2 { padding-left: 25px; font-size: 12.5px; }
+.toc a:hover { color: var(--ink); }
+.toc a[aria-current="true"] { color: var(--ink); font-weight: 600;
+  border-left-color: var(--info); }
+main { min-width: 0; padding-top: 30px; }
+main > *:first-child { margin-top: 0; }
+
+@media (max-width: 1040px) {
+  .shell { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0 16px 80px; }
+  .toc { position: sticky; top: var(--nav-h); z-index: 30; padding: 8px 0 9px;
+    background: var(--bg); border-bottom: 1px solid var(--line); }
+  .toc-h { display: none; }
+  .toc nav { flex-direction: row; gap: 6px; overflow-x: auto; border-left: none;
+    scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
+  .toc a { border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px;
+    margin: 0; flex: 0 0 auto; }
+  .toc a.lv2 { display: none; }
+  .toc a[aria-current="true"] { border-color: var(--info); }
+  main { padding-top: 22px; }
+}
+
+/* -- page head -- */
+.head { border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 24px; }
+.head h1 { font-size: 25px; margin: 0 0 5px; letter-spacing: -.018em; overflow-wrap: anywhere; }
+.head .sub { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .crumb { font-size: 12px; color: var(--muted); text-transform: uppercase;
-  letter-spacing: .09em; margin-bottom: 6px; }
-button.theme { background: var(--panel); border: 1px solid var(--line-2); color: var(--muted);
-  border-radius: 999px; padding: 5px 13px; font-size: 12px; cursor: pointer; }
+  letter-spacing: .09em; margin-bottom: 7px; }
 
 .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
   padding: 2px 11px 2px 6px; font-size: 12px; font-weight: 600; white-space: nowrap;
@@ -123,7 +238,8 @@ button.theme { background: var(--panel); border: 1px solid var(--line-2); color:
 
 h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .1em;
   color: var(--muted); font-weight: 650; margin: 34px 0 12px;
-  border-top: 1px solid var(--line); padding-top: 16px; }
+  border-top: 1px solid var(--line); padding-top: 16px;
+  scroll-margin-top: calc(var(--nav-h) + 16px); }
 
 .check { background: var(--panel); border: 1px solid var(--line); border-left: 3px solid;
   border-radius: 9px; padding: 13px 16px; margin-bottom: 9px; box-shadow: var(--shadow); }
@@ -140,26 +256,38 @@ h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .1em;
   overflow-wrap: anywhere; }
 .check li::before { content: "\\2014"; position: absolute; left: 0; opacity: .5; }
 
+/* -- figures -- */
 figure.fig { margin: 0 0 22px; background: var(--panel); border: 1px solid var(--line);
-  border-radius: 10px; padding: 16px; box-shadow: var(--shadow); }
-figure.fig h3 { margin: 0 0 2px; font-size: 15px; }
-figure.fig .cap { color: var(--muted); font-size: 13px; margin: 0 0 12px; max-width: 74ch; }
-figure.fig img { width: 100%; height: auto; display: block; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) figure.fig img { filter: invert(.92) hue-rotate(180deg); }
-}
-:root[data-theme="dark"] figure.fig img { filter: invert(.92) hue-rotate(180deg); }
+  border-radius: 10px; padding: 16px; box-shadow: var(--shadow);
+  scroll-margin-top: calc(var(--nav-h) + 16px); }
+figure.fig .fh { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+figure.fig h3 { margin: 0; font-size: 15px; }
+figure.fig .note { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+figure.fig .zoomed { margin-left: auto; font-size: 12px; color: var(--muted);
+  background: none; border: 1px solid var(--line-2); border-radius: 999px;
+  padding: 2px 10px; cursor: pointer; }
+figure.fig .cap { color: var(--muted); font-size: 13px; margin: 4px 0 12px; max-width: 78ch; }
+.chart { position: relative; }
+.chart .tip { position: absolute; z-index: 20; pointer-events: none; max-width: 340px;
+  background: var(--panel); color: var(--ink); border: 1px solid var(--line-2);
+  border-radius: 8px; padding: 7px 10px; box-shadow: 0 4px 18px rgba(0,0,0,.16);
+  font-size: 12px; line-height: 1.45; }
+.chart .tip b { display: block; font-size: 12.5px; margin-bottom: 2px; }
+.chart .tip span { display: block; color: var(--muted); overflow-wrap: anywhere; }
 
 table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em;
   color: var(--muted); font-weight: 650; padding: 7px 10px; border-bottom: 1px solid var(--line-2);
   white-space: nowrap; }
 td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-td.n { text-align: right; white-space: nowrap; font-size: 12.5px; }
+td.n { text-align: right; white-space: nowrap; font-size: 12.5px;
+  font-variant-numeric: tabular-nums; }
 tbody tr:hover { background: var(--panel-2); }
 .scroll { overflow-x: auto; background: var(--panel); border: 1px solid var(--line);
   border-radius: 10px; box-shadow: var(--shadow); }
 th.sortable { cursor: pointer; } th.sortable:hover { color: var(--ink); }
+th.sortable[data-dir="asc"]::after { content: " \\2191"; }
+th.sortable[data-dir="desc"]::after { content: " \\2193"; }
 
 details { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   padding: 0 16px; margin-bottom: 9px; box-shadow: var(--shadow); }
@@ -185,38 +313,128 @@ dl.kv dt { color: var(--muted); } dl.kv dd { margin: 0; overflow-wrap: anywhere;
 footer { color: var(--muted); font-size: 12px; margin-top: 46px;
   border-top: 1px solid var(--line); padding-top: 14px; }
 
+/* -- embedded log -- */
+.logview { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px; line-height: 1.55; }
+.logview .blk { content-visibility: auto; contain-intrinsic-size: auto 340px; }
+.logview b { display: block; padding: 0 14px 0 66px; text-indent: -52px;
+  font-weight: 400; white-space: pre-wrap; overflow-wrap: anywhere;
+  scroll-margin-top: calc(var(--nav-h) + 90px); }
+.logview b::before { content: attr(data-n); display: inline-block; width: 44px;
+  margin-right: 8px; text-align: right; color: var(--muted); user-select: none; }
+.logview b:target { background: var(--panel-2);
+  background: color-mix(in srgb, var(--warn) 24%, transparent); }
+.logview b:hover { background: var(--panel-2); }
+
+/*CHART*/
+/*INTERACTION*/
+
 @media print {
   :root { --bg: #fff; --panel: #fff; --panel-2: #fff; --ink: #000; --muted: #444;
     --line: #ccc; --line-2: #999; --shadow: none; }
   body { font-size: 10.5pt; }
-  .wrap { max-width: none; padding: 0; }
-  button.theme, .filters { display: none; }
+  .nav, .toc, .filters, .skip, figure.fig .zoomed, .chart .tip { display: none !important; }
+  .shell { display: block; max-width: none; padding: 0; }
+  main { padding-top: 0; }
+  /* auto-fit grids are not universal in print engines; flex is. */
+  .tiles { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tile { flex: 1 1 132px; }
+  .badge { display: inline-block; }
   .check, figure.fig, details, .scroll { break-inside: avoid; page-break-inside: avoid;
     box-shadow: none; }
   h2.sec { break-before: page; page-break-before: always; }
   h2.sec:first-of-type { break-before: auto; page-break-before: auto; }
   details { border: none; padding: 0; } details > summary::after { content: ""; }
   details .body { display: block !important; }
-  figure.fig img { filter: none !important; }
   a { border-bottom: none; }
+  .rh-svg .mark { opacity: 1 !important; }
+/*PRINT*/
 }
 """
 
-JS = """
+
+def stylesheet() -> str:
+    dark = " ".join(f"--{k}: {v};" for k, v in style.tokens(dark=True).items())
+    out = CSS
+    for marker, text in (
+        ("/*LIGHT*/", style.token_block(":root")),
+        ("/*DARK*/", dark),
+        ("/*CHART*/", style.CHART_CSS),
+        ("/*INTERACTION*/", style.CHART_INTERACTION_CSS),
+        ("/*PRINT*/", style.print_overrides()),
+    ):
+        out = out.replace(marker, text)
+    return out
+
+
+# The theme has to be settled before the first paint, or a dark-mode reader
+# gets a white flash on every page. This is the only script in the head.
+HEAD_JS = """
+try {
+  var m = localStorage.getItem('runhealth-theme');
+  if (m === 'light' || m === 'dark') document.documentElement.setAttribute('data-theme', m);
+} catch (e) {}
+"""
+
+JS = r"""
 (function () {
+  'use strict';
   var root = document.documentElement;
-  var saved = null;
-  try { saved = localStorage.getItem('runhealth-theme'); } catch (e) {}
-  if (saved) root.setAttribute('data-theme', saved);
-  var btn = document.getElementById('theme');
-  if (btn) btn.addEventListener('click', function () {
-    var dark = root.getAttribute('data-theme') === 'dark' ||
-      (!root.getAttribute('data-theme') &&
-       window.matchMedia('(prefers-color-scheme: dark)').matches);
-    var next = dark ? 'light' : 'dark';
-    root.setAttribute('data-theme', next);
-    try { localStorage.setItem('runhealth-theme', next); } catch (e) {}
+  var SVGNS = 'http://www.w3.org/2000/svg';
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // -- theme: system, light or dark ------------------------------------
+  var stored = 'system';
+  try { stored = localStorage.getItem('runhealth-theme') || 'system'; } catch (e) {}
+  function setTheme(mode) {
+    if (mode === 'system') root.removeAttribute('data-theme');
+    else root.setAttribute('data-theme', mode);
+    try {
+      if (mode === 'system') localStorage.removeItem('runhealth-theme');
+      else localStorage.setItem('runhealth-theme', mode);
+    } catch (e) {}
+    document.querySelectorAll('[data-theme-set]').forEach(function (b) {
+      b.setAttribute('aria-pressed', b.dataset.themeSet === mode ? 'true' : 'false');
+    });
+  }
+  setTheme(stored === 'light' || stored === 'dark' ? stored : 'system');
+  document.querySelectorAll('[data-theme-set]').forEach(function (b) {
+    b.addEventListener('click', function () { setTheme(b.dataset.themeSet); });
   });
+
+  // -- table of contents: mark the section being read ------------------
+  var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+  if (links.length && 'IntersectionObserver' in window) {
+    var targets = links.map(function (l) {
+      return document.getElementById(decodeURIComponent(l.hash.slice(1)));
+    });
+    var seen = {};
+    var mark = function () {
+      var best = -1;
+      for (var i = 0; i < targets.length; i++) if (seen[i]) best = i;
+      links.forEach(function (l, i) {
+        if (i === best) l.setAttribute('aria-current', 'true');
+        else l.removeAttribute('aria-current');
+      });
+      var active = links[best];
+      if (active && active.parentNode.scrollWidth > active.parentNode.clientWidth) {
+        var box = active.parentNode;
+        var want = active.offsetLeft - box.clientWidth / 2 + active.offsetWidth / 2;
+        box.scrollTo({ left: want, behavior: reduce ? 'auto' : 'smooth' });
+      }
+    };
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        var i = targets.indexOf(e.target);
+        if (i >= 0) seen[i] = e.isIntersecting || e.boundingClientRect.top < 0;
+      });
+      mark();
+    }, { rootMargin: '-' + (60 + 40) + 'px 0px -55% 0px', threshold: 0 });
+    targets.forEach(function (t) { if (t) io.observe(t); });
+  }
+
+  // -- index table: filter by grade, sort by column --------------------
   document.querySelectorAll('.filters button').forEach(function (b) {
     b.addEventListener('click', function () {
       var want = b.dataset.grade;
@@ -228,11 +446,15 @@ JS = """
       });
     });
   });
-  document.querySelectorAll('th.sortable').forEach(function (th, i) {
+  document.querySelectorAll('th.sortable').forEach(function (th) {
     th.addEventListener('click', function () {
-      var tb = th.closest('table').tBodies[0];
+      var table = th.closest('table');
+      var tb = table.tBodies[0];
       var idx = Array.prototype.indexOf.call(th.parentNode.children, th);
       var dir = th.dataset.dir === 'asc' ? -1 : 1;
+      table.querySelectorAll('th.sortable').forEach(function (o) {
+        if (o !== th) o.removeAttribute('data-dir');
+      });
       th.dataset.dir = dir === 1 ? 'asc' : 'desc';
       var rows = Array.prototype.slice.call(tb.rows);
       rows.sort(function (a, b) {
@@ -244,16 +466,346 @@ JS = """
       rows.forEach(function (r) { tb.appendChild(r); });
     });
   });
+
+  // -- figures ---------------------------------------------------------
+  var STEPS = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200,
+               10800, 21600, 43200, 86400];
+
+  function niceTicks(lo, hi, target) {
+    if (!(hi > lo)) return [lo];
+    var raw = (hi - lo) / target;
+    var mag = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10));
+    var step = [1, 2, 2.5, 5, 10].map(function (m) { return m * mag; })
+      .filter(function (s) { return s >= raw; })[0] || 10 * mag;
+    var out = [], v = Math.ceil(lo / step) * step;
+    for (; v <= hi + step * 1e-6; v += step) out.push(v);
+    return out.length ? out : [lo, hi];
+  }
+  function timeTicks(lo, hi) {
+    var want = (hi - lo) / 7;
+    var step = STEPS.filter(function (s) { return s >= want; })[0] || STEPS[STEPS.length - 1];
+    var out = [], v = Math.ceil(lo / step) * step;
+    for (; v <= hi; v += step) out.push(v);
+    return out.length ? out : [lo, hi];
+  }
+  function fmtDuration(span) {
+    var size = span >= 7200 ? 3600 : span >= 120 ? 60 : 1;
+    var dec = span >= 7200 ? 1 : 0;
+    return function (v) { return (v / size).toFixed(dec); };
+  }
+  function fmtSi(v) {
+    var a = Math.abs(v);
+    if (a >= 1e9) return (v / 1e9).toFixed(1).replace(/\.0$/, '') + 'G';
+    if (a >= 1e6) return (v / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (a >= 1e3) return (v / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
+    if (a && a < 1) return String(Number(v.toPrecision(2)));
+    return Math.round(v).toLocaleString();
+  }
+
+  var clocks = [];   // charts that can mark an instant for their peers
+
+  document.querySelectorAll('.chart').forEach(function (host) {
+    var svg = host.querySelector('svg.rh-svg');
+    if (!svg) return;
+    var tip = host.querySelector('.tip');
+    var plot = (svg.dataset.plot || '').split(',').map(Number);
+    var timeBox = (svg.dataset.xbox || svg.dataset.plot || '').split(',').map(Number);
+    var samples = svg.dataset.samples ? JSON.parse(svg.dataset.samples) : null;
+    var dragging = false;
+    var domain = svg.dataset.xdomain ? svg.dataset.xdomain.split(',').map(Number) : null;
+    var overlay = document.createElementNS(SVGNS, 'g');
+    overlay.setAttribute('class', 'rh-overlay');
+    svg.appendChild(overlay);
+
+    function el(name, attrs) {
+      var n = document.createElementNS(SVGNS, name);
+      for (var k in attrs) n.setAttribute(k, attrs[k]);
+      return n;
+    }
+    function userX(clientX) {
+      var r = svg.getBoundingClientRect();
+      var vb = svg.viewBox.baseVal;
+      return vb.x + (clientX - r.left) / r.width * vb.width;
+    }
+    function pageXY(ux, uy) {
+      var r = svg.getBoundingClientRect();
+      var vb = svg.viewBox.baseVal;
+      var hostRect = host.getBoundingClientRect();
+      return [
+        r.left - hostRect.left + (ux - vb.x) / vb.width * r.width,
+        r.top - hostRect.top + (uy - vb.y) / vb.height * r.height
+      ];
+    }
+
+    // -- tooltip --
+    function showTip(text, left, top) {
+      if (!tip) return;
+      while (tip.firstChild) tip.removeChild(tip.firstChild);
+      var lines = String(text).split('\n');
+      var head = document.createElement('b');
+      head.textContent = lines[0];
+      tip.appendChild(head);
+      lines.slice(1).forEach(function (line) {
+        var s = document.createElement('span');
+        s.textContent = line;
+        tip.appendChild(s);
+      });
+      tip.hidden = false;
+      var w = tip.offsetWidth, h = tip.offsetHeight;
+      var maxX = host.clientWidth - w - 4;
+      tip.style.left = Math.max(4, Math.min(left + 12, maxX)) + 'px';
+      tip.style.top = (top - h - 12 < 0 ? top + 18 : top - h - 12) + 'px';
+    }
+    function hideTip() { if (tip) tip.hidden = true; }
+
+    host.addEventListener('pointerover', function (e) {
+      var m = e.target.closest && e.target.closest('[data-tip]');
+      if (m) showTip(m.dataset.tip, e.clientX - host.getBoundingClientRect().left,
+                     e.clientY - host.getBoundingClientRect().top);
+    });
+    host.addEventListener('pointermove', function (e) {
+      var m = e.target.closest && e.target.closest('[data-tip]');
+      if (m) showTip(m.dataset.tip, e.clientX - host.getBoundingClientRect().left,
+                     e.clientY - host.getBoundingClientRect().top);
+    });
+    host.addEventListener('pointerleave', function () { hideTip(); clearCross(); tell(null); });
+    host.addEventListener('focusin', function (e) {
+      var m = e.target.closest && e.target.closest('[data-tip]');
+      if (!m || !m.getBoundingClientRect) return;
+      var b = m.getBoundingClientRect(), h = host.getBoundingClientRect();
+      showTip(m.dataset.tip, b.left - h.left + b.width / 2, b.top - h.top);
+    });
+    host.addEventListener('focusout', hideTip);
+
+    // Clicking a mark that names a log line, or a run, follows it.
+    host.addEventListener('click', function (e) {
+      var m = e.target.closest && e.target.closest('[data-line],[data-href]');
+      if (!m) return;
+      if (m.dataset.href) { window.location.href = m.dataset.href; return; }
+      var target = host.dataset.logHref;
+      if (target) window.location.href = target + '#L' + m.dataset.line;
+    });
+    host.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      var m = e.target.closest && e.target.closest('[data-line],[data-href]');
+      if (m) { e.preventDefault(); m.dispatchEvent(new MouseEvent('click', { bubbles: true })); }
+    });
+
+    // -- legend toggles a series --
+    svg.querySelectorAll('.legend-item').forEach(function (item) {
+      function toggle() {
+        var on = item.getAttribute('aria-pressed') !== 'false';
+        item.setAttribute('aria-pressed', on ? 'false' : 'true');
+        var series = svg.querySelector('.series[data-series="' + item.dataset.series + '"]');
+        if (series) series.hidden = on;
+      }
+      item.addEventListener('click', toggle);
+      item.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+      });
+    });
+
+    // -- crosshair over a sampled series --
+    var cross = null;
+    function clearCross() { if (cross) { overlay.removeChild(cross); cross = null; } }
+    function nearest(ux) {
+      var best = null, gap = Infinity;
+      for (var i = 0; i < samples.length; i++) {
+        var d = Math.abs(samples[i][0] - ux);
+        if (d < gap) { gap = d; best = samples[i]; }
+      }
+      return best;
+    }
+    if (samples && samples.length) {
+      svg.addEventListener('pointermove', function (e) {
+        if (dragging) return;
+        var ux = userX(e.clientX);
+        if (ux < timeBox[0] - 2 || ux > timeBox[0] + timeBox[2] + 2) { clearCross(); return; }
+        var s = nearest(ux);
+        if (!s) return;
+        clearCross();
+        cross = el('g', {});
+        cross.appendChild(el('line', {
+          'class': 'cross', x1: s[0], y1: timeBox[1], x2: s[0], y2: timeBox[1] + timeBox[3]
+        }));
+        cross.appendChild(el('circle', { 'class': 'cross-dot', cx: s[0], cy: s[1], r: 3 }));
+        overlay.appendChild(cross);
+        var at = pageXY(s[0], s[1]);
+        showTip(s[3], at[0], at[1]);
+        tell(s[2]);
+      });
+    }
+
+    // -- share the hovered instant with the other time charts --
+    function tell(t) {
+      clocks.forEach(function (c) { if (c.svg !== svg) c.peer(t); });
+    }
+    function xForTime(t) {
+      if (domain && svg.dataset.xfmt === 'duration') {
+        var span = domain[1] - domain[0];
+        if (!span) return null;
+        return timeBox[0] + (t - domain[0]) / span * timeBox[2];
+      }
+      if (samples && samples.length) {
+        var best = null, gap = Infinity;
+        for (var i = 0; i < samples.length; i++) {
+          var d = Math.abs(samples[i][2] - t);
+          if (d < gap) { gap = d; best = samples[i]; }
+        }
+        return best ? best[0] : null;
+      }
+      return null;
+    }
+    if (svg.dataset.time) {
+      var peerLine = null;
+      clocks.push({
+        svg: svg,
+        peer: function (t) {
+          if (peerLine) { overlay.removeChild(peerLine); peerLine = null; }
+          if (t === null || t === undefined) return;
+          var x = xForTime(t);
+          if (x === null || x < timeBox[0] - 1 || x > timeBox[0] + timeBox[2] + 1) return;
+          peerLine = el('line', {
+            'class': 'peer', x1: x, y1: timeBox[1], x2: x, y2: timeBox[1] + timeBox[3]
+          });
+          overlay.appendChild(peerLine);
+        }
+      });
+      if (!samples) {
+        svg.addEventListener('pointermove', function (e) {
+          if (dragging || !domain) return;
+          var ux = userX(e.clientX);
+          if (ux < timeBox[0] || ux > timeBox[0] + timeBox[2]) { tell(null); return; }
+          var span = domain[1] - domain[0];
+          tell(domain[0] + (ux - timeBox[0]) / timeBox[2] * span);
+        });
+      }
+    }
+
+    // -- brush to zoom the x axis --
+    if (svg.dataset.zoom && domain) {
+      var geometry = svg.querySelector('.rh-geometry');
+      // Text and markers keep their own size, so they are moved rather than
+      // transformed with the geometry.
+      var floating = Array.prototype.slice.call(
+        svg.querySelectorAll('.rh-labels [x], .rh-points [cx]'));
+      var xticks = svg.querySelector('.rh-xticks');
+      var button = host.parentNode.querySelector('.zoomed');
+      var view = domain.slice();
+      var start = null, band = null;
+
+      floating.forEach(function (n) {
+        n.dataset.x0 = n.getAttribute(n.hasAttribute('cx') ? 'cx' : 'x');
+      });
+
+      function toData(ux) {
+        return domain[0] + (ux - plot[0]) / plot[2] * (domain[1] - domain[0]);
+      }
+      function toPixel(value) {
+        return plot[0] + (value - view[0]) / (view[1] - view[0]) * plot[2];
+      }
+      function apply() {
+        // Map the visible window onto the plot area: x' = k * x + shift.
+        var k = (domain[1] - domain[0]) / (view[1] - view[0]);
+        var left = plot[0] + (view[0] - domain[0]) / (domain[1] - domain[0]) * plot[2];
+        var shift = plot[0] - k * left;
+        if (geometry) {
+          geometry.setAttribute('transform', 'matrix(' + k + ',0,0,1,' + shift + ',0)');
+        }
+        floating.forEach(function (n) {
+          var key = n.hasAttribute('cx') ? 'cx' : 'x';
+          var moved = k * Number(n.dataset.x0) + shift;
+          n.setAttribute(key, moved);
+          n.style.display = (moved < plot[0] - 1 || moved > plot[0] + plot[2] + 1) ? 'none' : '';
+        });
+        redrawAxis();
+        if (button) button.hidden = (view[0] === domain[0] && view[1] === domain[1]);
+      }
+      function redrawAxis() {
+        if (!xticks) return;
+        while (xticks.firstChild) xticks.removeChild(xticks.firstChild);
+        var duration = svg.dataset.xfmt === 'duration';
+        var ticks = duration ? timeTicks(view[0], view[1]) : niceTicks(view[0], view[1], 7);
+        var fmt = duration ? fmtDuration(view[1] - view[0]) : fmtSi;
+        var base = plot[1] + plot[3];
+        ticks.forEach(function (t) {
+          var x = toPixel(t);
+          if (x < plot[0] - 0.5 || x > plot[0] + plot[2] + 0.5) return;
+          xticks.appendChild(el('line', {
+            'class': 'grid', x1: x, y1: plot[1], x2: x, y2: base
+          }));
+          xticks.appendChild(el('line', {
+            'class': 'ax-line', x1: x, y1: base, x2: x, y2: base + 4
+          }));
+          var label = el('text', {
+            'class': 'tick', x: x, y: base + 15, 'text-anchor': 'middle'
+          });
+          label.textContent = fmt(t);
+          xticks.appendChild(label);
+        });
+      }
+      function reset() { view = domain.slice(); apply(); }
+      if (button) button.addEventListener('click', reset);
+
+      svg.addEventListener('pointerdown', function (e) {
+        if (e.button !== 0) return;
+        var ux = userX(e.clientX);
+        if (ux < plot[0] || ux > plot[0] + plot[2]) return;
+        dragging = true;
+        start = ux;
+        band = el('rect', { 'class': 'brush', x: ux, y: plot[1], width: 0, height: plot[3] });
+        overlay.appendChild(band);
+        try { svg.setPointerCapture(e.pointerId); } catch (err) {}
+        hideTip();
+        clearCross();
+      });
+      svg.addEventListener('pointermove', function (e) {
+        if (!dragging || !band) return;
+        var ux = Math.max(plot[0], Math.min(userX(e.clientX), plot[0] + plot[2]));
+        band.setAttribute('x', Math.min(start, ux));
+        band.setAttribute('width', Math.abs(ux - start));
+      });
+      svg.addEventListener('pointerup', function (e) {
+        if (!dragging) return;
+        dragging = false;
+        var ux = Math.max(plot[0], Math.min(userX(e.clientX), plot[0] + plot[2]));
+        if (band) { overlay.removeChild(band); band = null; }
+        if (Math.abs(ux - start) < 6) return;
+        var lo = toData(Math.min(start, ux)), hi = toData(Math.max(start, ux));
+        if (hi - lo <= 0) return;
+        view = [lo, hi];
+        apply();
+      });
+      svg.addEventListener('dblclick', reset);
+    }
+  });
 })();
 """
 
 
-def _page(title: str, body: str) -> str:
+def _page(title: str, nav: str, toc: str, body: str) -> str:
     return (
         '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
-        f"<title>{esc(title)}</title>\n<style>{CSS}</style>\n</head>\n<body>\n"
-        f'<div class="wrap">\n{body}\n</div>\n<script>{JS}</script>\n</body>\n</html>\n'
+        f"<title>{esc(title)}</title>\n"
+        f"<script>{HEAD_JS}</script>\n"
+        f"<style>{stylesheet()}</style>\n</head>\n<body>\n"
+        '<a class="skip" href="#main">Skip to content</a>\n'
+        f"{nav}\n"
+        f'<div class="shell">\n{toc}\n<main id="main">\n{body}\n</main>\n</div>\n'
+        f"<script>{JS}</script>\n</body>\n</html>\n"
+    )
+
+
+def _nav(here: str, badge: str = "", up: str = "") -> str:
+    trail = f'<span class="sep">/</span><span class="here">{esc(here)}</span>' if here else ""
+    return (
+        '<header class="nav"><div class="nav-in">'
+        f'<a class="brand" href="{esc(up or "#main")}">runhealth</a>'
+        f"{trail}{badge}"
+        '<div class="spacer"></div>'
+        f"{theme_switch()}"
+        "</div></header>"
     )
 
 
@@ -276,6 +828,23 @@ def _check_card(c: Check) -> str:
         + (f'<div class="d">{esc(c.detail)}</div>' if c.detail else "")
         + (f"<ul>{ev}</ul>" if ev else "")
         + "</div>"
+    )
+
+
+def _figure(f: Figure, log_href: str = "") -> str:
+    note = f'<span class="note">{esc(f.note)}</span>' if f.note else ""
+    reset = (
+        '<button type="button" class="zoomed" hidden>reset zoom</button>'
+        if 'data-zoom="1"' in f.svg
+        else ""
+    )
+    chart = f' data-log-href="{esc(log_href)}"' if log_href else ""
+    return (
+        f'<figure class="fig" id="fig-{esc(f.key)}">'
+        f'<div class="fh"><h3>{esc(f.title)}</h3>{note}{reset}</div>'
+        f'<p class="cap">{esc(f.caption)}</p>'
+        f'<div class="chart"{chart}>{f.svg}<div class="tip" role="tooltip" hidden></div></div>'
+        "</figure>"
     )
 
 
@@ -406,13 +975,9 @@ def _node_table(log: RunLog) -> str:
 
 def run_tiles(log: RunLog, a: Assessment) -> str:
     s = a.stats
-    tiles = [
-        _badge(STATUS_LEVEL.get(a.status, "info"), a.status.title()),
-        format_duration(s.get("wall_seconds")) or "&ndash;",
-    ]
     out = [
-        _tile(tiles[0], "status"),
-        _tile(tiles[1], "wall clock"),
+        _tile(_badge(STATUS_LEVEL.get(a.status, "info"), a.status.title()), "status"),
+        _tile(format_duration(s.get("wall_seconds")) or "&ndash;", "wall clock"),
     ]
     if s.get("sypd"):
         out.append(_tile(f"{s['sypd']:.2f}", log.setting("throughput_label", "rate")))
@@ -428,39 +993,40 @@ def run_tiles(log: RunLog, a: Assessment) -> str:
 
 def render_run(view: RunView, index_href: str = "index.html") -> str:
     log, a = view.log, view.assessment
-    title = f"{log.fields.get('job_name') or log.name} - run health"
-    figures = "".join(
-        f'<figure class="fig"><h3>{esc(f.title)}</h3>'
-        f'<p class="cap">{esc(f.caption)}</p>'
-        f'<img src="{esc(f.href)}" alt="{esc(f.title)}"></figure>'
-        for f in view.figures
-    )
+    name = log.fields.get("job_name") or log.name
+    title = f"{name} - run health"
+    toc = Toc()
     body = [
-        '<header class="top"><div>'
+        f'<div class="head" id="{toc.add("summary", "Summary")}">'
         f'<div class="crumb"><a href="{esc(index_href)}">All runs</a></div>'
-        f"<h1>{esc(log.fields.get('job_name') or log.name)}</h1>"
+        f"<h1>{esc(name)}</h1>"
         f'<div class="sub">job {esc(log.fields.get("job_id") or "?")} &middot; '
         f'{esc(format_stamp(log.first_wall) or "unknown start")} &rarr; '
-        f'{esc(format_stamp(log.last_wall) or "unknown end")}</div>'
-        '</div><div class="spacer"></div>'
-        '<button class="theme" id="theme">theme</button></header>',
+        f'{esc(format_stamp(log.last_wall) or "unknown end")}</div></div>',
         run_tiles(log, a),
-        '<h2 class="sec">Checks</h2>',
+        f'<h2 class="sec" id="{toc.add("checks", "Checks")}">Checks</h2>',
         "".join(_check_card(c) for c in a.checks),
     ]
-    if figures:
-        body += ['<h2 class="sec">Figures</h2>', figures]
+    if view.figures:
+        body.append(f'<h2 class="sec" id="{toc.add("figures", "Figures")}">Figures</h2>')
+        for f in view.figures:
+            toc.add(f"fig-{f.key}", f.title, level=2)
+            body.append(_figure(f, view.log_href))
     detail = _timer_tables(a) + _counter_table(log) + _node_table(log) + _provenance(log)
     if view.log_href:
         detail += _details(
-            "Raw log", f'<p><a href="{esc(view.log_href)}">{esc(Path(view.log_href).name)}</a></p>'
+            "Raw log",
+            f'<p><a href="{esc(view.log_href)}">{esc(Path(view.log_href).name)}</a> '
+            f"&mdash; {log.n_lines:,} lines. Clicking a silence in the timeline opens "
+            "it at the line the run went quiet.</p>",
         )
     if detail:
-        body += ['<h2 class="sec">Detail</h2>', detail]
+        body += [f'<h2 class="sec" id="{toc.add("detail", "Detail")}">Detail</h2>', detail]
     if log.notes:
         body.append("<footer>" + "<br>".join(esc(n) for n in log.notes) + "</footer>")
     body.append(_footer())
-    return _page(title, "\n".join(body))
+    nav = _nav(name, _badge(a.grade), up=index_href)
+    return _page(title, nav, toc.render(), "\n".join(body))
 
 
 def _footer() -> str:
@@ -510,13 +1076,6 @@ def render_index(
             f'{format_duration(s.get("max_gap")) or "&ndash;"}</td>'
             "</tr>"
         )
-    figure = ""
-    if overview:
-        figure = (
-            f'<figure class="fig"><h3>{esc(overview.title)}</h3>'
-            f'<p class="cap">{esc(overview.caption)}</p>'
-            f'<img src="{esc(overview.href)}" alt="{esc(overview.title)}"></figure>'
-        )
     filters = (
         '<div class="filters"><button data-grade="all" aria-pressed="true">all</button>'
         + "".join(
@@ -526,16 +1085,19 @@ def render_index(
         )
         + "</div>"
     )
+    toc = Toc()
     body = [
-        '<header class="top"><div>'
+        f'<div class="head" id="{toc.add("summary", "Summary")}">'
         '<div class="crumb">runhealth</div>'
         f"<h1>{esc(title)}</h1>"
-        f'<div class="sub">{esc(", ".join(sources))}</div>'
-        '</div><div class="spacer"></div>'
-        '<button class="theme" id="theme">theme</button></header>',
+        f'<div class="sub">{esc(", ".join(sources))}</div></div>',
         f'<div class="tiles">{"".join(tiles)}</div>',
-        figure,
-        '<h2 class="sec">Runs</h2>',
+    ]
+    if overview:
+        body.append(f'<h2 class="sec" id="{toc.add("overview", "All runs")}">Comparison</h2>')
+        body.append(_figure(overview))
+    body += [
+        f'<h2 class="sec" id="{toc.add("runs", "Runs")}">Runs</h2>',
         filters,
         '<div class="scroll"><table><thead><tr>'
         '<th class="sortable">health</th><th class="sortable">run</th>'
@@ -546,7 +1108,7 @@ def render_index(
         f"</tr></thead><tbody>{''.join(rows)}</tbody></table></div>",
         _footer(),
     ]
-    return _page(title, "\n".join(body))
+    return _page(title, _nav("", ""), toc.render(), "\n".join(body))
 
 
 # -- Markdown -------------------------------------------------------------
@@ -581,6 +1143,8 @@ def render_markdown(views: list[RunView], sources: list[str], title: str) -> str
             for e in c.evidence[:6]:
                 out.append(f"    - `{e}`")
         for f in v.figures:
+            if not f.href:
+                continue
             out += ["", f"### {f.title}", "", f"![{f.title}]({f.href})", "", f"*{f.caption}*"]
     out.append("")
     return "\n".join(out)
@@ -603,12 +1167,46 @@ def to_pdf(html_path: Path, pdf_path: Path) -> str:
     return f"Wrote {pdf_path}"
 
 
+# -- the embedded log -----------------------------------------------------
+
+
 def copy_log(log: RunLog, outdir: Path, max_bytes: int) -> str:
-    """Copy the raw log next to the report when it is small enough to be useful."""
+    """Write the raw log as a page whose lines can be linked to.
+
+    A plain copy of the file cannot be opened at a particular line, and the
+    line a run went quiet at is exactly what a silence in the timeline should
+    lead to. Lines are grouped into blocks the browser can skip rendering
+    until they are scrolled near, so a large log still opens.
+    """
     src = Path(log.path)
     if not src.is_file() or src.stat().st_size > max_bytes:
         return ""
-    dest = outdir / "logs" / src.name
+    dest = outdir / "logs" / f"{src.name}.html"
     dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(src, dest)
+    blocks, current = [], []
+    with src.open("r", errors="replace") as handle:
+        for n, line in enumerate(handle, 1):
+            current.append(f'<b id="L{n}" data-n="{n}">{esc(line.rstrip(chr(10)))}</b>')
+            if len(current) >= LOG_BLOCK:
+                blocks.append(f'<div class="blk">{"".join(current)}</div>')
+                current = []
+    if current:
+        blocks.append(f'<div class="blk">{"".join(current)}</div>')
+    name = log.fields.get("job_name") or log.name
+    toc = Toc()
+    body = (
+        f'<div class="head" id="{toc.add("summary", "Log")}">'
+        f'<div class="crumb"><a href="../{esc(page_name(log))}">Back to the report</a></div>'
+        f"<h1>{esc(src.name)}</h1>"
+        f'<div class="sub">{log.n_lines:,} lines, {src.stat().st_size / 1e6:.1f} MB</div></div>'
+        f'<div class="logview">{"".join(blocks)}</div>'
+    )
+    nav = _nav(src.name, "", up=f"../{page_name(log)}")
+    dest.write_text(_page(f"{name} - raw log", nav, "", body))
     return f"logs/{dest.name}"
+
+
+def page_name(log: RunLog) -> str:
+    """The run page a log view belongs to. Mirrors the CLI's slug."""
+    stem = Path(log.path).stem
+    return (re.sub(r"[^A-Za-z0-9._-]+", "-", stem).strip("-") or "run") + ".html"

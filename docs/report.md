@@ -39,7 +39,7 @@ compares against is [adjustable per profile](#profile-thresholds).
 healthy. The regular small spikes here are hourly output; the tall one is a
 network stall that output alone does not explain.
 
-```{image} images/progress.png
+```{image} images/progress.svg
 :alt: Progress rate over the run, flat apart from regular output spikes and one tall stall
 ```
 
@@ -48,7 +48,7 @@ the average across ranks and the whisker spans fastest to slowest, so a long
 whisker is imbalance. `exch_data.wait` below is 10 % of the run on average but
 about 25 % on the slowest rank.
 
-```{image} images/timers.png
+```{image} images/timers.svg
 :alt: Timer breakdown per rank group, with whiskers spanning fastest to slowest rank
 ```
 
@@ -56,7 +56,7 @@ about 25 % on the slowest rank.
 producing them. A burst that lines up with a slow stretch in the progress plot
 points at the fabric rather than the code.
 
-```{image} images/warnings.png
+```{image} images/warnings.svg
 :alt: Message families per minute across the run, beside the nodes producing them
 ```
 
@@ -66,4 +66,29 @@ line before it, **load imbalance** per timer, and the **network counter spread**
 between the least and most loaded NIC.
 
 Every figure is skipped rather than faked when the log does not contain what it
-needs. `--no-plots` skips all of them, and `--dpi` sets their resolution.
+needs, and `--no-plots` leaves all of them out.
+
+### Reading them in a browser
+
+The figures are SVG written into the page, not pictures of figures, so they are
+interactive without anything being downloaded:
+
+- **Hover, tap or tab onto any mark** for the numbers behind it: what a phase
+  is called and how much of the allocation it took, which rank was slowest in a
+  timer, how many lines a node contributed. Everything a tooltip says is also
+  the mark's accessible name, so a screen reader and the keyboard reach the
+  same facts.
+- **Drag across the timeline or the progress rate** to zoom into a stretch of
+  the run; the axis relabels itself and *reset zoom* returns. Double-clicking
+  also resets.
+- **Hovering one time-based chart marks the same instant in the others**, which
+  is how a burst of network messages gets lined up against a slow patch in the
+  progress rate.
+- **Click a legend entry** to hide that message family.
+- **Click a silence** to open the log at the line the run went quiet, when the
+  report was built with `--embed-logs`.
+
+The page follows the system light or dark setting, and the switch in the header
+overrides it per reader. None of this is needed to read a figure: the markup is
+complete before any script runs, which is why the same figure prints properly
+and survives being turned into a PDF.
