@@ -155,6 +155,24 @@ def test_the_source_bar_leads_with_the_path_and_its_actions(tmp_path, parsed, as
     assert "raw log" in html
 
 
+def test_a_badge_paints_its_dot_in_the_grade_colour(parsed, assessed):
+    html = report.render_run(views(parsed, assessed, ["icon_hang"])[0])
+    # currentColor here would resolve to the dot's own colour, which is the
+    # colour the letter is knocked out in, leaving the letter invisible.
+    assert "background: currentColor" not in html
+    for grade in ("ok", "info", "warn", "fail"):
+        assert f".badge.g-{grade} .mark {{ background: var(--{grade}); }}" in html
+
+
+def test_the_index_shows_a_dash_for_a_job_without_an_id(parsed, assessed):
+    html = report.render_index(
+        views(parsed, assessed, ["slurm_generic"]), ["here:/tmp"], None, "Test"
+    )
+    # The entity has to survive, rather than being escaped into its own text.
+    assert "&amp;ndash;" not in html
+    assert "&ndash;" in html
+
+
 def test_a_path_chip_separates_the_machine_from_the_path():
     chip = report.path_chip("santis:/scratch/e1000/LOG.demo.1.o")
     assert '<span class="host">santis</span>' in chip

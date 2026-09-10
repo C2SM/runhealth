@@ -310,11 +310,19 @@ main > *:first-child { margin-top: 0; }
 .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
   padding: 2px 11px 2px 6px; font-size: 12px; font-weight: 600; white-space: nowrap;
   border: 1px solid currentColor; }
-.badge .mark { display: inline-grid; place-items: center; width: 17px; height: 17px;
-  border-radius: 999px; background: currentColor; color: var(--panel);
+/* The dot is filled with the grade's colour and the letter is knocked out of
+   it. The fill cannot be currentColor: on this element that resolves to this
+   element's own colour, which is the knockout colour, so the letter and the
+   dot come out the same and the letter disappears. */
+.badge .mark { display: inline-grid; place-items: center; min-width: 17px; height: 17px;
+  padding: 0 3px; border-radius: 999px; color: var(--panel);
   font-size: 10px; font-weight: 700; }
 .g-ok { color: var(--ok); } .g-info { color: var(--info); }
 .g-warn { color: var(--warn); } .g-fail { color: var(--fail); }
+.badge.g-ok .mark { background: var(--ok); }
+.badge.g-info .mark { background: var(--info); }
+.badge.g-warn .mark { background: var(--warn); }
+.badge.g-fail .mark { background: var(--fail); }
 
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   gap: 10px; margin: 0 0 26px; }
@@ -1016,8 +1024,11 @@ def _nav(here: str, badge: str = "", up: str = "") -> str:
 
 
 def _badge(level: str, text: str = "") -> str:
+    # The letter in the dot repeats what the label beside it says, so a
+    # screen reader is spared "X problem".
     return (
-        f'<span class="badge g-{level}"><span class="mark">{GRADE_MARK.get(level, "?")}</span>'
+        f'<span class="badge g-{level}"><span class="mark" aria-hidden="true">'
+        f'{GRADE_MARK.get(level, "?")}</span>'
         f"{esc(text or GRADE_TEXT.get(level, level))}</span>"
     )
 
@@ -1343,7 +1354,7 @@ def render_index(
             )
             + "</td>"
             f'<td class="n" data-v="{esc(log.fields.get("job_id") or "")}">'
-            f'{esc(log.fields.get("job_id") or "&ndash;")}</td>'
+            f'{esc(log.fields.get("job_id")) or "&ndash;"}</td>'
             f'<td class="n" data-v="{log.first_wall or 0}">{esc(started)}</td>'
             f'<td class="n" data-v="{s.get("wall_seconds") or 0}">'
             f'{format_duration(s.get("wall_seconds")) or "&ndash;"}</td>'
