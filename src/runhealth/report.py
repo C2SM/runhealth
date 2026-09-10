@@ -266,7 +266,7 @@ figure.fig .note { font-size: 12px; color: var(--muted); font-variant-numeric: t
 figure.fig .zoomed { margin-left: auto; font-size: 12px; color: var(--muted);
   background: none; border: 1px solid var(--line-2); border-radius: 999px;
   padding: 2px 10px; cursor: pointer; }
-figure.fig .cap { color: var(--muted); font-size: 13px; margin: 4px 0 12px; max-width: 78ch; }
+figure.fig .cap { color: var(--muted); font-size: 13px; margin: 4px 0 12px; }
 .chart { position: relative; }
 .chart .tip { position: absolute; z-index: 20; pointer-events: none; max-width: 340px;
   background: var(--panel); color: var(--ink); border: 1px solid var(--line-2);
