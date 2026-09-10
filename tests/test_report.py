@@ -155,10 +155,10 @@ def test_the_source_bar_leads_with_the_path_and_its_actions(tmp_path, parsed, as
     assert "raw log" in html
 
 
-def test_a_badge_paints_its_dot_in_the_grade_colour(parsed, assessed):
+def test_a_badge_paints_its_dot_in_the_grade_color(parsed, assessed):
     html = report.render_run(views(parsed, assessed, ["icon_hang"])[0])
-    # currentColor here would resolve to the dot's own colour, which is the
-    # colour the letter is knocked out in, leaving the letter invisible.
+    # currentColor here would resolve to the dot's own color, which is the
+    # color the letter is knocked out in, leaving the letter invisible.
     assert "background: currentColor" not in html
     for grade in ("ok", "info", "warn", "fail"):
         assert f".badge.g-{grade} .mark {{ background: var(--{grade}); }}" in html

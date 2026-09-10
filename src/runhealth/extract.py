@@ -572,6 +572,6 @@ def parse(
     ex.log.offset = st.st_size
     if ex.log.attempts > 1:
         ex.log.notes.append(
-            f"This file holds {ex.log.attempts} job attempts; only the last is analysed."
+            f"This file holds {ex.log.attempts} job attempts; only the last is analyzed."
         )
     return ex.finish()

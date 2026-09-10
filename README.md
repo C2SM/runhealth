@@ -78,6 +78,6 @@ The sources are Markdown under [`docs/`](docs/); build them locally with
 uv run --group docs sphinx-build -b html docs docs/_build/html
 ```
 
-## Licence
+## License
 
 BSD 3-Clause. See [LICENSE](LICENSE).

@@ -1,4 +1,4 @@
-"""Colour a shell script for the report, without a JavaScript library.
+"""Color a shell script for the report, without a JavaScript library.
 
 A report has to work with no network, and the run script viewer is the only
 place a page shows source code, so the markup is produced here rather than
@@ -7,7 +7,7 @@ text once and every match becomes a span; anything unmatched is plain text.
 
 The grammar is deliberately shallow. Heredocs and nested expansions are not
 tracked, because the aim is a script a reader can skim, not a parser: the
-worst a mistake costs is one span with the wrong colour.
+worst a mistake costs is one span with the wrong color.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ VAR_RE = re.compile(_VAR)
 
 TOKEN_RE = re.compile(
     # A '#' opens a comment only at the start of a word, which keeps
-    # ${var#trim} and colour#codes out of it.
+    # ${var#trim} and color#codes out of it.
     r"(?P<cmt>(?<![^\s])\#[^\n]*)"
     r"|(?P<sq>'[^'\n]*'?)"
     r"|(?P<dq>\"(?:\\.|[^\"\\\n])*\"?)"

@@ -751,7 +751,7 @@ def render_index(
         title="All runs",
         note=f"{len(usable)} runs",
         caption=(
-            "Wall clock and throughput per run, oldest first, coloured by health grade. "
+            "Wall clock and throughput per run, oldest first, colored by health grade. "
             "Click a bar to open that run."
         ),
         svg=ch.render(f"Wall clock and throughput across {len(usable)} runs"),

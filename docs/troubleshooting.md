@@ -6,7 +6,7 @@
   else, and `--list` to see what would be read. Empty files are skipped.
 
 **Everything is `INCOMPLETE`**
-: No profile recognised your success line. Check `runhealth --list-profiles`,
+: No profile recognized your success line. Check `runhealth --list-profiles`,
   then add an [`outcome` rule](#profile-outcome) in a
   profile of your own.
 
@@ -38,7 +38,7 @@
 
 **The wall clock looks impossible**
 : A file holding several job attempts, from a resubmission appending to the same
-  name, is analysed as its **last** attempt, and the report says so at the
+  name, is analyzed as its **last** attempt, and the report says so at the
   bottom of the page.
 
 ## Limitations

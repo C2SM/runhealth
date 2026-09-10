@@ -45,6 +45,6 @@ Open `docs/_build/html/index.html`. Add `-W` to turn warnings into errors, which
 is what the [GitHub Actions workflow](https://github.com/C2SM/runhealth/blob/main/.github/workflows/docs.yml)
 does before publishing to GitHub Pages on every push to `main`.
 
-## Licence
+## License
 
 BSD 3-Clause. See [LICENSE](https://github.com/C2SM/runhealth/blob/main/LICENSE).

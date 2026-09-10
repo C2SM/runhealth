@@ -153,7 +153,7 @@ def theme_switch() -> str:
         f"{ICONS[mode]}</button>"
         for mode in ("system", "light", "dark")
     )
-    return f'<div class="theme" role="group" aria-label="Colour theme">{buttons}</div>'
+    return f'<div class="theme" role="group" aria-label="Color theme">{buttons}</div>'
 
 
 # -- table of contents ----------------------------------------------------
@@ -283,7 +283,7 @@ main > *:first-child { margin-top: 0; }
   min-width: 0; }
 .src-path { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   overflow-wrap: anywhere; gap: 0; }
-/* Only the chip's own icon, so the copy button keeps its own colour. */
+/* Only the chip's own icon, so the copy button keeps its own color. */
 .src-path > .ico { flex: 0 0 auto; color: var(--muted); margin-right: 8px; }
 .src-btn .ico { flex: 0 0 auto; color: var(--muted); }
 .src-path .host { font-weight: 650; }
@@ -310,9 +310,9 @@ main > *:first-child { margin-top: 0; }
 .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
   padding: 2px 11px 2px 6px; font-size: 12px; font-weight: 600; white-space: nowrap;
   border: 1px solid currentColor; }
-/* The dot is filled with the grade's colour and the letter is knocked out of
+/* The dot is filled with the grade's color and the letter is knocked out of
    it. The fill cannot be currentColor: on this element that resolves to this
-   element's own colour, which is the knockout colour, so the letter and the
+   element's own color, which is the knockout color, so the letter and the
    dot come out the same and the letter disappears. */
 .badge .mark { display: inline-grid; place-items: center; min-width: 17px; height: 17px;
   padding: 0 3px; border-radius: 999px; color: var(--panel);

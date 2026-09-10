@@ -64,7 +64,7 @@ def test_error_signatures_collapse_by_shape(parsed):
     assert "nid000001" in next(iter(errors.values())).nodes
 
 
-def test_only_the_last_attempt_is_analysed(parsed):
+def test_only_the_last_attempt_is_analyzed(parsed):
     log = parsed["icon_two_attempts"]
     assert log.attempts == 2
     assert log.outcome.level == "ok"

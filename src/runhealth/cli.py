@@ -145,7 +145,7 @@ def source_of(path: Path, remotes: list[tuple[str, Path]]) -> str:
 
 
 def discover(paths: list[Path], pattern: str | None) -> list[Path]:
-    """Files to analyse, newest first."""
+    """Files to analyze, newest first."""
     found: list[Path] = []
     for p in paths:
         if p.is_file():

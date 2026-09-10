@@ -7,7 +7,7 @@ draw them would have to be fetched before the report could be read. Reports
 are routinely opened on a login node with no route to the internet, so the
 figures are plain SVG written straight into the page.
 
-Colour lives in CSS classes rather than in ``fill`` attributes, so one
+Color lives in CSS classes rather than in ``fill`` attributes, so one
 figure serves the light theme, the dark theme and the print stylesheet
 without being drawn three times. Any element carrying ``data-tip`` becomes a
 hover, focus and tap target; the tooltip engine lives in
@@ -71,7 +71,7 @@ def num(value: float) -> str:
 def a(**kw) -> str:
     """Render attributes. ``cls`` becomes ``class``, ``_`` becomes ``-``.
 
-    A class that names a colour also gets the matching presentation
+    A class that names a color also gets the matching presentation
     attributes, so a renderer that never reads the page stylesheet still
     draws the figure as intended. See :func:`runhealth.style.svg_attributes`.
     """
