@@ -51,6 +51,7 @@ class RunView:
     figures: list[Figure] = field(default_factory=list)
     page: str = ""
     log_href: str = ""
+    source: str = ""
 
 
 def esc(text: object) -> str:
@@ -327,6 +328,27 @@ footer { color: var(--muted); font-size: 12px; margin-top: 46px;
   background: color-mix(in srgb, var(--warn) 24%, transparent); }
 .logview b:hover { background: var(--panel-2); }
 
+/* -- run script modal -- */
+.script-link { background: none; border: none; padding: 0; margin: 0; font: inherit;
+  color: inherit; cursor: pointer; border-bottom: 1px solid var(--line-2); }
+.script-link:hover { border-bottom-color: currentColor; }
+dialog.script-modal { width: min(820px, calc(100vw - 32px));
+  max-height: min(720px, calc(100vh - 64px)); padding: 0; border: 1px solid var(--line);
+  border-radius: 12px; background: var(--panel); color: var(--ink);
+  box-shadow: 0 12px 40px rgba(0,0,0,.28); }
+dialog.script-modal::backdrop { background: rgba(0,0,0,.5); }
+.script-hd { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 18px; border-bottom: 1px solid var(--line); position: sticky; top: 0;
+  background: var(--panel); }
+.script-hd h2 { margin: 0; font-size: 15px; }
+.script-close { background: none; border: none; font-size: 20px; line-height: 1;
+  color: var(--muted); cursor: pointer; padding: 2px 6px; }
+.script-close:hover { color: var(--ink); }
+.script-body { margin: 0; padding: 16px 18px; overflow: auto;
+  max-height: calc(min(720px, calc(100vh - 64px)) - 52px);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+
 /*CHART*/
 /*INTERACTION*/
 
@@ -334,7 +356,7 @@ footer { color: var(--muted); font-size: 12px; margin-top: 46px;
   :root { --bg: #fff; --panel: #fff; --panel-2: #fff; --ink: #000; --muted: #444;
     --line: #ccc; --line-2: #999; --shadow: none; }
   body { font-size: 10.5pt; }
-  .nav, .toc, .filters, .skip, figure.fig .zoomed, .chart .tip { display: none !important; }
+  .nav, .toc, .filters, .skip, figure.fig .zoomed, .chart .tip, dialog { display: none !important; }
   .shell { display: block; max-width: none; padding: 0; }
   main { padding-top: 0; }
   /* auto-fit grids are not universal in print engines; flex is. */
@@ -402,6 +424,19 @@ JS = r"""
   document.querySelectorAll('[data-theme-set]').forEach(function (b) {
     b.addEventListener('click', function () { setTheme(b.dataset.themeSet); });
   });
+
+  // -- run script modal --------------------------------------------------
+  var scriptModal = document.querySelector('dialog.script-modal');
+  if (scriptModal) {
+    document.querySelectorAll('[data-open-script]').forEach(function (btn) {
+      btn.addEventListener('click', function () { scriptModal.showModal(); });
+    });
+    var scriptClose = scriptModal.querySelector('.script-close');
+    if (scriptClose) scriptClose.addEventListener('click', function () { scriptModal.close(); });
+    scriptModal.addEventListener('click', function (e) {
+      if (e.target === scriptModal) scriptModal.close();
+    });
+  }
 
   // -- table of contents: mark the section being read ------------------
   var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
@@ -996,13 +1031,20 @@ def render_run(view: RunView, index_href: str = "index.html") -> str:
     name = log.fields.get("job_name") or log.name
     title = f"{name} - run health"
     toc = Toc()
+    sub = (
+        f'job {esc(log.fields.get("job_id") or "?")} &middot; '
+        f'{esc(format_stamp(log.first_wall) or "unknown start")} &rarr; '
+        f'{esc(format_stamp(log.last_wall) or "unknown end")}'
+    )
+    if view.source:
+        sub += f' &middot; <span class="mono">{esc(view.source)}</span>'
+    if log.runscript:
+        sub += ' &middot; <button type="button" class="script-link" data-open-script>run script</button>'
     body = [
         f'<div class="head" id="{toc.add("summary", "Summary")}">'
         f'<div class="crumb"><a href="{esc(index_href)}">All runs</a></div>'
         f"<h1>{esc(name)}</h1>"
-        f'<div class="sub">job {esc(log.fields.get("job_id") or "?")} &middot; '
-        f'{esc(format_stamp(log.first_wall) or "unknown start")} &rarr; '
-        f'{esc(format_stamp(log.last_wall) or "unknown end")}</div></div>',
+        f'<div class="sub">{sub}</div></div>',
         run_tiles(log, a),
         f'<h2 class="sec" id="{toc.add("checks", "Checks")}">Checks</h2>',
         "".join(_check_card(c) for c in a.checks),
@@ -1025,6 +1067,12 @@ def render_run(view: RunView, index_href: str = "index.html") -> str:
     if log.notes:
         body.append("<footer>" + "<br>".join(esc(n) for n in log.notes) + "</footer>")
     body.append(_footer())
+    if log.runscript:
+        body.append(
+            '<dialog class="script-modal"><div class="script-hd"><h2>Run script</h2>'
+            '<button type="button" class="script-close" aria-label="Close">&times;</button></div>'
+            f'<pre class="script-body">{esc(log.runscript)}</pre></dialog>'
+        )
     nav = _nav(name, _badge(a.grade), up=index_href)
     return _page(title, nav, toc.render(), "\n".join(body))
 

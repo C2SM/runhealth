@@ -194,3 +194,26 @@ def tail_offset(path: Path, window: int) -> int:
         fh.seek(size - window)
         fh.readline()  # discard the partial line
         return fh.tell()
+
+
+PREAMBLE_MAX_LINES = 4000
+
+
+def read_preamble(path: Path) -> str:
+    """The unstamped lines at the head of a timestamped log.
+
+    A stamping wrapper only starts once the run script's own output begins,
+    so everything before the first stamped line is the script that was
+    submitted -- SLURM's own preamble plus whatever ``#SBATCH`` directives and
+    shell commands the job used to set itself up.
+    """
+    lines: list[str] = []
+    with path.open("rb") as fh:
+        for raw in fh:
+            if len(lines) >= PREAMBLE_MAX_LINES:
+                break
+            text = raw.decode("utf-8", "replace")
+            if TS_RE.match(text) or BRACKET_TS_RE.match(text):
+                break
+            lines.append(text.rstrip("\n"))
+    return "\n".join(lines)
