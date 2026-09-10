@@ -155,6 +155,42 @@ def test_the_source_bar_leads_with_the_path_and_its_actions(tmp_path, parsed, as
     assert "raw log" in html
 
 
+def test_a_path_chip_separates_the_machine_from_the_path():
+    chip = report.path_chip("santis:/scratch/e1000/LOG.demo.1.o")
+    assert '<span class="host">santis</span>' in chip
+    assert '<span class="p">/scratch/e1000/LOG.demo.1.o</span>' in chip
+    assert 'data-copy="santis:/scratch/e1000/LOG.demo.1.o"' in chip
+
+
+def test_a_path_chip_leaves_a_plain_path_whole():
+    # A colon only counts as a machine before the first slash, as rsync reads it.
+    chip = report.path_chip("/scratch/odd:name/LOG.o")
+    assert 'class="host"' not in chip
+    assert '<span class="p">/scratch/odd:name/LOG.o</span>' in chip
+
+
+def test_paths_can_be_copied(tmp_path, parsed, assessed):
+    view = views(parsed, assessed, ["icon_success"])[0]
+    view.source = "santis:/scratch/run/LOG.demo.1.o"
+    html = report.render_run(view)
+    # The header path, and the one in the provenance table.
+    assert html.count('class="copy"') >= 2
+    assert 'data-copy="santis:/scratch/run/LOG.demo.1.o"' in html
+    assert 'aria-label="Copy the path"' in html
+
+
+def test_the_index_formats_each_source_it_read(parsed, assessed):
+    html = report.render_index(
+        views(parsed, assessed, ["icon_success", "icon_hang"]),
+        ["santis:/scratch/e1000/run"],
+        None,
+        "Test",
+    )
+    assert '<span class="host">santis</span>' in html
+    assert '<span class="p">/scratch/e1000/run</span>' in html
+    assert 'data-copy="santis:/scratch/e1000/run"' in html
+
+
 def test_the_run_script_modal_can_be_saved_and_is_highlighted(parsed, assessed):
     view = views(parsed, assessed, ["icon_success"])[0]
     html = report.render_run(view)
@@ -182,6 +218,15 @@ def test_one_grade_of_check_needs_no_filter():
     assert '<button data-grade="fail">' in report._grade_filters(
         {"ok": 1, "fail": 2}, ".check", "Filter"
     )
+
+
+def test_the_table_of_contents_tracks_live_geometry(parsed, assessed):
+    html = report.render_run(views(parsed, assessed, ["icon_success"])[0])
+    # Remembered intersections went stale when a jump to an anchor carried a
+    # heading past the reading line without ever crossing it, which left the
+    # section the reader had just left still marked.
+    assert "getBoundingClientRect().top - LINE" in html
+    assert "'scroll', onScroll" in html
 
 
 def test_the_summary_anchor_clamps_to_the_top_of_the_page(parsed, assessed):

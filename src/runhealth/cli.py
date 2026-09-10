@@ -472,7 +472,9 @@ def _once(args, outdir: Path) -> Path | None:
         return None
     states = {} if args.no_squeue else slurm_states()
     views = build(args, files, outdir, states, remotes)
-    sources = [p if is_remote(p) else str(Path(p).resolve()) for p in args.paths]
+    # Named the same way a run page names its log, so both read alike.
+    here = socket.gethostname()
+    sources = [p if is_remote(p) else f"{here}:{Path(p).resolve()}" for p in args.paths]
     path = write_report(args, views, outdir, sources)
     summarise(views)
     log(f"runhealth: wrote {path}")

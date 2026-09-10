@@ -105,12 +105,45 @@ ICONS = {
     "download": _ICON.format(
         '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>'
     ),
+    "copy": _ICON.format(
+        '<rect x="9" y="9" width="13" height="13" rx="2"/>'
+        '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'
+    ),
+    "check": _ICON.format('<path d="M20 6 9 17l-5-5"/>'),
 }
 THEME_LABEL = {
     "system": "Follow the system theme",
     "light": "Light theme",
     "dark": "Dark theme",
 }
+
+
+def _copy_button(text: str, what: str = "path") -> str:
+    """A button that puts ``text`` on the clipboard. Two icons: idle, copied."""
+    label = f"Copy the {what}"
+    return (
+        f'<button type="button" class="copy" data-copy="{esc(text)}" '
+        f'title="{esc(label)}" aria-label="{esc(label)}">'
+        f'{ICONS["copy"]}{ICONS["check"]}</button>'
+    )
+
+
+def path_chip(spec: str) -> str:
+    """A ``machine:/path`` as one copyable chip, machine set apart from path.
+
+    A colon before the first slash is a machine, the way rsync reads it;
+    anything else is a plain local path with nothing to separate.
+    """
+    host, sep, path = spec.partition(":")
+    if not sep or "/" in host:
+        host, path = "", spec
+    named = (
+        f'<span class="host">{esc(host)}</span><span class="sep">:</span>' if host else ""
+    )
+    return (
+        f'<span class="src-path" title="{esc(spec)}">{ICONS["host"]}'
+        f'{named}<span class="p">{esc(path)}</span>{_copy_button(spec)}</span>'
+    )
 
 
 def theme_switch() -> str:
@@ -249,8 +282,22 @@ main > *:first-child { margin-top: 0; }
   padding: 6px 11px; font-size: 12.5px; color: var(--ink); box-shadow: var(--shadow);
   min-width: 0; }
 .src-path { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  overflow-wrap: anywhere; }
-.src-path .ico, .src-btn .ico { flex: 0 0 auto; color: var(--muted); }
+  overflow-wrap: anywhere; gap: 0; }
+/* Only the chip's own icon, so the copy button keeps its own colour. */
+.src-path > .ico { flex: 0 0 auto; color: var(--muted); margin-right: 8px; }
+.src-btn .ico { flex: 0 0 auto; color: var(--muted); }
+.src-path .host { font-weight: 650; }
+.src-path .sep { color: var(--muted); margin: 0 1px; }
+.src-path .p { color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+.copy { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0;
+  margin-left: 7px; flex: 0 0 auto; background: none; border: none; border-radius: 6px;
+  color: var(--muted); cursor: pointer; vertical-align: -6px; }
+.copy:hover { background: var(--panel-2); color: var(--ink); }
+.copy .ico { width: 13px; height: 13px; }
+.copy .ico + .ico { display: none; }
+.copy.copied { color: var(--ok); }
+.copy.copied .ico { display: none; }
+.copy.copied .ico + .ico { display: block; }
 .src-btn { font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
   white-space: nowrap; }
 .src-btn:hover { border-color: var(--info); color: var(--info); }
@@ -406,7 +453,7 @@ dialog.script-modal::backdrop { background: rgba(10,10,8,.55); }
     --line: #ccc; --line-2: #999; --shadow: none; }
   body { font-size: 10.5pt; }
   .nav, .toc, .filters, .skip, figure.fig .zoomed, .chart .tip, dialog,
-  .src-btn { display: none !important; }
+  .src-btn, .copy { display: none !important; }
   .src-path { box-shadow: none; }
   .shell { display: block; max-width: none; padding: 0; }
   main { padding-top: 0; }
@@ -510,16 +557,64 @@ JS = r"""
     }
   }
 
+  // -- copy a path to the clipboard --------------------------------------
+  function copyFallback(text) {
+    // A report is often read straight off disk, where the async clipboard
+    // is not always given to the page.
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-1000px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) {}
+    ta.remove();
+    return ok;
+  }
+  document.querySelectorAll('[data-copy]').forEach(function (btn) {
+    var label = btn.getAttribute('aria-label');
+    btn.addEventListener('click', function () {
+      var said = function () {
+        btn.classList.add('copied');
+        btn.setAttribute('aria-label', 'Copied');
+        setTimeout(function () {
+          btn.classList.remove('copied');
+          btn.setAttribute('aria-label', label);
+        }, 1400);
+      };
+      var text = btn.dataset.copy;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(said, function () {
+          if (copyFallback(text)) said();
+        });
+      } else if (copyFallback(text)) {
+        said();
+      }
+    });
+  });
+
   // -- table of contents: mark the section being read ------------------
+  // Read from the live geometry on every frame that scrolls, rather than
+  // from remembered intersections: a jump to an anchor can carry a heading
+  // from above the reading line to below it without ever crossing it, which
+  // leaves an observer holding the section the reader has just left.
   var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
-  if (links.length && 'IntersectionObserver' in window) {
+  if (links.length) {
     var targets = links.map(function (l) {
       return document.getElementById(decodeURIComponent(l.hash.slice(1)));
     });
-    var seen = {};
-    var mark = function () {
-      var best = -1;
-      for (var i = 0; i < targets.length; i++) if (seen[i]) best = i;
+    var LINE = 100;   // just below the sticky header
+    var shown = -1;
+    function mark() {
+      var best = 0;
+      for (var i = 0; i < targets.length; i++) {
+        if (targets[i] && targets[i].getBoundingClientRect().top - LINE <= 0) best = i;
+      }
+      if (best === shown) return;
+      shown = best;
       links.forEach(function (l, i) {
         if (i === best) l.setAttribute('aria-current', 'true');
         else l.removeAttribute('aria-current');
@@ -530,15 +625,16 @@ JS = r"""
         var want = active.offsetLeft - box.clientWidth / 2 + active.offsetWidth / 2;
         box.scrollTo({ left: want, behavior: reduce ? 'auto' : 'smooth' });
       }
-    };
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) {
-        var i = targets.indexOf(e.target);
-        if (i >= 0) seen[i] = e.isIntersecting || e.boundingClientRect.top < 0;
-      });
-      mark();
-    }, { rootMargin: '-' + (60 + 40) + 'px 0px -55% 0px', threshold: 0 });
-    targets.forEach(function (t) { if (t) io.observe(t); });
+    }
+    var queued = false;
+    function onScroll() {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(function () { queued = false; mark(); });
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    mark();
   }
 
   // -- filter by grade: the index's rows, or a run's checks -------------
@@ -975,8 +1071,12 @@ def _figure(f: Figure, log_href: str = "") -> str:
     )
 
 
-def _kv(pairs: list[tuple[str, str]]) -> str:
-    rows = "".join(f"<dt>{esc(k)}</dt><dd>{esc(v)}</dd>" for k, v in pairs if v not in (None, ""))
+def _kv(pairs: list[tuple[str, str]], copy: tuple[str, ...] = ()) -> str:
+    rows = "".join(
+        f"<dt>{esc(k)}</dt><dd>{esc(v)}{_copy_button(v) if k in copy else ''}</dd>"
+        for k, v in pairs
+        if v not in (None, "")
+    )
     return f'<dl class="kv">{rows}</dl>' if rows else ""
 
 
@@ -1078,7 +1178,7 @@ def _provenance(log: RunLog) -> str:
             ),
         ),
     ]
-    body = _kv(pairs)
+    body = _kv(pairs, copy=("Log file",))
     if any(v for _, v in model):
         body += '<div style="height:14px"></div>' + _kv(model)
     return _details("Job and build provenance", body)
@@ -1109,10 +1209,7 @@ def _source_bar(view: RunView) -> str:
     """
     parts = []
     if view.source:
-        parts.append(
-            f'<span class="src-path" title="{esc(view.source)}">{ICONS["host"]}'
-            f"{esc(view.source)}</span>"
-        )
+        parts.append(path_chip(view.source))
     if view.log.runscript:
         parts.append(
             '<button type="button" class="src-btn key" data-open-script>'
@@ -1265,7 +1362,8 @@ def render_index(
         f'<div class="head" id="{toc.add("summary", "Summary")}">'
         '<div class="crumb">runhealth</div>'
         f"<h1>{esc(title)}</h1>"
-        f'<div class="sub">{esc(", ".join(sources))}</div></div>',
+        f'<div class="sub">{len(views)} run(s) read from:</div>'
+        f'<div class="source">{"".join(path_chip(s) for s in sources)}</div></div>',
         f'<div class="tiles">{"".join(tiles)}</div>',
     ]
     if overview:
