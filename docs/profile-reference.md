@@ -1,24 +1,25 @@
 # Profile reference
 
 The complete schema of a profile file. A profile tells `runhealth` what a code
-prints, and the core never hard-codes a model: everything specific lives here.
-For the shortest useful example and how profiles are selected, start with
-[Profiles](profiles.md).
+prints, and the core never hard-codes a model: everything code-specific is
+defined here. For a minimal example and for how profiles are selected, start
+with [Profiles](profiles.md).
 
-The file name is irrelevant; the `name:` field identifies the profile. Bundled
-profiles live in `src/runhealth/profiles/` and are worth reading as worked
+The file name is irrelevant; the `name:` field identifies the profile. The
+bundled profiles in `src/runhealth/profiles/` are worth reading as worked
 examples: `slurm.yaml`, `icon.yaml`, `cray-mpich.yaml`.
 
 ## Composition
 
-Several profiles apply to one log. Each contributes its own rules and settings,
-in order of `priority` (low first, so a later profile can override a setting).
-The `slurm` profile has `always: true` and applies to every log; everything else
-is selected by its `detect` patterns, or pinned with `--profile a,b`.
+Several profiles can apply to one log. Each contributes its own rules and
+settings, in order of `priority` (lowest first, so that a later profile can
+override a setting). The `slurm` profile has `always: true` and applies to
+every log; every other profile is selected by its `detect` patterns, or pinned
+with `--profile a,b`.
 
-Keep concerns separate. The fabric counters a Cray machine prints have nothing
-to do with the model running on it, which is why they live in `cray-mpich.yaml`
-rather than in `icon.yaml`.
+Concerns should be kept separate. The fabric counters printed by a Cray machine
+are unrelated to the model running on it, which is why they are defined in
+`cray-mpich.yaml` rather than in `icon.yaml`.
 
 ## Skeleton
 
@@ -57,24 +58,24 @@ model_version:
 ```
 
 Patterns are Python regular expressions, matched with `re.search` against the
-line *after* the timestamp and rank prefix have been stripped. Anchor with `^`
-when you mean the start of the message.
+line *after* the timestamp and rank prefix have been removed. Anchor a pattern
+with `^` to refer to the start of the message.
 
 (profile-contains)=
 
 ### `contains` and why it matters
 
-Rules run against every line of the file, and a file can hold a million of them.
-Before running a regex, `runhealth` checks whether a literal substring is
-present, which is much cheaper. It derives that literal from the pattern itself
-and gives up (running the regex always) whenever the pattern contains an
-alternation or a quantifier that could make the literal optional.
+Rules are applied to every line of the file, and a file can hold a million
+lines. Before running a regular expression, `runhealth` checks whether a
+literal substring is present, which is much cheaper. It derives that literal
+from the pattern itself and falls back to always running the regular expression
+whenever the pattern contains an alternation or a quantifier that could make
+the literal optional.
 
-Give `contains:` explicitly when the derivation gives up but you know a literal
-that must appear -- for a pattern like
-`'Constructing the .* coupling frame'` the hint `coupling frame` saves real
-time. The literal must appear in **every** line the pattern matches, or those
-lines will be silently skipped.
+Specify `contains:` explicitly when the derivation fails but a literal is known
+to appear. For a pattern such as `'Constructing the .* coupling frame'`, the
+hint `coupling frame` saves considerable time. The literal must appear in
+**every** line the pattern matches, otherwise those lines are silently skipped.
 
 ## Detection
 
@@ -85,28 +86,29 @@ detect:
   - '# ICON run script'
 ```
 
-Any match in the first 8 MB of the log selects the profile. Include something
-that survives an early crash: a job that dies during MPI startup prints none of
-the model's own output, but the runscript it echoed at the top is still there.
+Any match within the first 8 MB of the log selects the profile. Include a
+pattern that survives an early crash: a job that dies during MPI startup prints
+none of the model's own output, but the run script echoed at the top of the
+file is still present.
 
 ## The job script preamble
 
-Many run scripts echo a copy of themselves before their output starts being
+Many run scripts echo a copy of themselves before their output begins to be
 timestamped. That copy contains every string the script can ever print,
 including both its success and its failure message, so rules must not fire
 there. In a timestamped log, `runhealth` treats everything before the first
-timestamp as preamble and applies only rules marked `preamble: true` to it --
+timestamp as preamble and applies only rules marked `preamble: true` to it,
 which is how `#SBATCH` directives are read.
 
 Two consequences for profile authors:
 
-- Anchor an `outcome` pattern with `^` so it matches the printed line and not
-  the `echo "..."` that produced it.
-- Mark a rule `preamble: true` when it should match only in the job script.
+- Anchor an `outcome` pattern with `^` so that it matches the printed line and
+  not the `echo "..."` that produced it.
+- Mark a rule `preamble: true` when it should match only within the job script.
 
 ## Sections
 
-### `fields` -- one value per run
+### `fields`: one value per run
 
 ```yaml
 fields:
@@ -118,7 +120,7 @@ fields:
 `group` picks the capture group (default 1), `cast` is `int` or `float`, and
 `keep` is `first` (default) or `last`.
 
-### `keyvalues` -- a dictionary
+### `keyvalues`: a dictionary
 
 The pattern must capture two groups: the key and the value.
 
@@ -136,7 +138,7 @@ keyvalues:
 `sbatch` is special: its `time` entry is read as the requested wall-clock limit,
 which the wall-time check and the attempt-boundary detection both rely on.
 
-### `series` -- repeated events
+### `series`: repeated events
 
 ```yaml
 series:
@@ -153,13 +155,13 @@ line.
 
 `role` marks what the series is for:
 
-- `progress` -- the throughput signal. Wall time between consecutive events
+- `progress`: the throughput signal. Wall time between consecutive events
   gives the progress rate; if a captured field named by
   `settings.model_time_field` parses as a date, the simulated-time rate is
   computed as well.
-- `io` -- output and checkpoint events, ticked on the timeline.
+- `io`: output and checkpoint events, ticked on the timeline.
 
-### `markers` -- phases
+### `markers`: phases
 
 ```yaml
 markers:
@@ -171,15 +173,15 @@ markers:
     label: time loop
 ```
 
-Markers cut the wall clock into phases. **The label names the stretch that
+Markers divide the wall clock into phases. **The label names the interval that
 starts at the marker**, not the marker itself, which is why `first_step` is
-labelled `time loop`. Only the first occurrence is kept unless you set
-`all: true`.
+labeled `time loop`. Only the first occurrence is kept unless `all: true` is
+set.
 
-### `groups` -- messages you must not store
+### `groups`: messages that must not be stored
 
-A file can contain hundreds of thousands of copies of one warning. `groups`
-counts them instead of keeping them.
+A file can contain hundreds of thousands of copies of a single warning.
+`groups` counts them instead of storing them.
 
 ```yaml
 groups:
@@ -192,17 +194,17 @@ groups:
     claim: true         # keep these lines out of the generic error scan
 ```
 
-Counts are kept per key, per node, and per minute of the run. `claim: true`
-tells the core that this family is accounted for, so the same lines are not also
-collected as anonymous errors.
+Counts are kept per key, per node and per minute of the run. `claim: true`
+tells the core that this family is already accounted for, so that the same
+lines are not additionally collected as anonymous errors.
 
-### `tables` -- structured blocks
+### `tables`: structured blocks
 
 Two shapes are supported.
 
-**`ruled`** -- columns delimited by a rule row of dash runs, with a header row
-beside it. The rule row gives exact column spans, so a name containing spaces is
-never guessed at.
+**`ruled`**: columns delimited by a rule row of dash sequences, with a header
+row beside it. The rule row defines exact column spans, so a name containing
+spaces never has to be guessed.
 
 ```yaml
 tables:
@@ -214,8 +216,8 @@ tables:
     durations: [t_min, t_avg, t_max]   # columns holding 16m43s-style values
 ```
 
-**`trailing-numbers`** -- no rules; each row is a label followed by a fixed
-count of numeric fields, so a label with spaces still works.
+**`trailing-numbers`**: no rule rows; each row is a label followed by a fixed
+number of numeric fields, so a label containing spaces still works.
 
 ```yaml
   cxi_counters:
@@ -227,13 +229,13 @@ count of numeric fields, so a label with spaces still works.
     include_start: true        # the start line is itself the header row
 ```
 
-The block ends at a closing rule or a blank line. A table opened by a
-rank-labelled line only accepts lines from that same rank, so interleaved output
+The block ends at a closing rule row or a blank line. A table opened by a
+rank-labeled line accepts only lines from that same rank, so interleaved output
 from other ranks does not corrupt it.
 
 (profile-outcome)=
 
-### `outcome` -- the verdict
+### `outcome`: the verdict
 
 ```yaml
 outcome:
@@ -241,9 +243,9 @@ outcome:
   - {re: '^Script run successfully: (.+)', level: ok}
 ```
 
-`level` is `ok`, `fail` or `info`. The **last** match in the file wins, since
-the real verdict is written at the end. Capture group 1 becomes the text shown
-in the report.
+`level` is `ok`, `fail` or `info`. The **last** match in the file takes
+precedence, since the actual verdict is written at the end. Capture group 1
+becomes the text shown in the report.
 
 ### `attempt_boundary`
 
@@ -252,15 +254,15 @@ attempt_boundary:
   - '^end_of_job_script'
 ```
 
-A resubmitted job can append to the same file. `runhealth` already spots this
-from a run of unstamped lines, or from a pause longer than the scheduler could
-have allowed, and analyses only the last attempt. A profile can add a precise
-marker of its own. Boundary rules are ignored until enough of an attempt has
-been seen, so the first preamble never triggers one.
+A resubmitted job can append to the same file. `runhealth` already detects this
+from a sequence of unstamped lines, or from a pause longer than the scheduler
+could have allowed, and analyzes only the last attempt. A profile can add a
+precise marker of its own. Boundary rules are ignored until a sufficient part
+of an attempt has been seen, so the first preamble never triggers one.
 
 ## `settings`
 
-Names and column mappings the analysis uses. Everything is optional.
+Names and column mappings used by the analysis. All entries are optional.
 
 | Key | Meaning |
 | --- | --- |
@@ -276,14 +278,14 @@ Names and column mappings the analysis uses. Everything is optional.
 | `counter_columns` | map of `samples`, `min`, `mean`, `max` to column names |
 | `counter_watch` | counter names worth reporting |
 | `congestion_groups` | message groups that indicate fabric congestion |
-| `congestion_keys` | the keys within those groups that actually mean congestion |
+| `congestion_keys` | the keys within those groups that actually indicate congestion |
 
 (profile-thresholds)=
 
 ## `thresholds`
 
-Every number a check compares against. The defaults come from `slurm.yaml`; a
-profile or a site can override any of them.
+Every number a check compares against. The defaults are defined in
+`slurm.yaml`; a profile or a site can override any of them.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
@@ -292,11 +294,11 @@ profile or a site can override any of them.
 | `gap_warn_factor` | 5 | in-loop pause, as a multiple of the typical interval |
 | `walltime_warn` | 0.9 | fraction of the requested limit that warns |
 | `outlier_factor` | 3 | progress interval counted as an outlier |
-| `imbalance_warn` | 1.25 | slowest rank over fastest, worth reporting |
-| `imbalance_fail` | 2.0 | ... and worth calling severe |
+| `imbalance_warn` | 1.25 | ratio of slowest to fastest rank that is worth reporting |
+| `imbalance_fail` | 2.0 | ... and that is considered severe |
 | `drift_warn` | 0.2 | slowdown between first and last quarter |
 | `timer_share_floor` | 0.05 | ignore timers below this share of the run |
-| `group_warn` | 1000 | message family large enough to warn about ... |
+| `group_warn` | 1000 | message family large enough to warrant a warning ... |
 | `group_share_warn` | 0.2 | ... if it is also this fraction of the whole log |
 | `node_share_warn` | 0.25 | one node's share of a family that makes it suspect |
 
@@ -307,6 +309,6 @@ runhealth mylog.out --profile mymodel -o /tmp/check --no-plots
 runhealth --list-profiles
 ```
 
-If a rule never fires, the usual causes are a `contains:` literal that does not
-appear in every matching line, a pattern anchored with `^` that is actually
+If a rule never fires, the common causes are a `contains:` literal that does
+not appear in every matching line, a pattern anchored with `^` that is in fact
 indented, or a rule that should have been marked `preamble: true`.
