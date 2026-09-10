@@ -28,6 +28,14 @@
   observations, not failures; they are meant to draw the eye. Thresholds are all
   [adjustable per profile](#profile-thresholds).
 
+**`--open` opens nothing, or the wrong thing**
+: It asks the shell to open a `file://` path, which needs a browser registered
+  for one. A bare SSH session has none, WSL needs its Windows interop enabled,
+  and a minimal desktop may hand the file to an editor instead. Use
+  [`--serve`](usage.md#sharing-a-report) instead: with both flags `--open` aims
+  the browser at the served address, and otherwise
+  `http://127.0.0.1:8000/` can be opened by hand.
+
 **The wall clock looks impossible**
 : A file holding several job attempts, from a resubmission appending to the same
   name, is analysed as its **last** attempt, and the report says so at the

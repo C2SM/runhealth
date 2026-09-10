@@ -110,3 +110,11 @@ The page follows the system light or dark setting, and the switch in the header
 overrides it per reader. None of this is needed to read a figure: the markup is
 complete before any script runs, which is why the same figure prints properly
 and survives being turned into a PDF.
+
+## Getting around a page
+
+The header stays put as you scroll, and on a run page it carries that run's name
+and grade beside a link back to the index. The table of contents marks the
+section being read and follows the scroll; its first entry returns to the top of
+the page. On a narrow screen it becomes a row of chips under the header, and
+scrolls itself to keep the current section in view.

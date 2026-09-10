@@ -50,6 +50,10 @@ runhealth: parsed 2 log(s) in 0.2s
 runhealth: wrote /tmp/demo/index.html
 ```
 
+Where the shell has no browser to hand a local file to -- a bare SSH session,
+or WSL with its Windows interop off -- swap `--open` for `--serve` and browse
+to <http://127.0.0.1:8000/>.
+
 ## Documentation
 
 The full documentation lives at **<https://c2sm.github.io/runhealth/>**:
