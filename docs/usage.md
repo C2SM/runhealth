@@ -48,6 +48,10 @@ A local path and a remote one can be mixed freely in the same invocation:
 runhealth santis:/scratch/e1000/run ./local-logs -o report/
 ```
 
+Each run page still names the original `host:/path`, not the local copy under
+`.remote-cache/` that was actually parsed, so a report built on your laptop
+still says exactly where on the cluster a log lives.
+
 ## Running jobs
 
 A log with no final status is reported as **RUNNING** while it is still being
