@@ -23,6 +23,7 @@ from pathlib import Path
 from . import style
 from .extract import RunLog
 from .health import Assessment, Check, counter_rows
+from .highlight import bash_html
 from .logfile import format_duration, format_stamp
 from .plots import Figure
 
@@ -89,6 +90,21 @@ ICONS = {
         'M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/>'
     ),
     "dark": _ICON.format('<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>'),
+    "host": _ICON.format(
+        '<rect x="2" y="2" width="20" height="8" rx="2"/>'
+        '<rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01M6 18h.01"/>'
+    ),
+    "script": _ICON.format(
+        '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>'
+        '<path d="M14 2v6h6"/><path d="m9 13 2 2-2 2M13 17h3"/>'
+    ),
+    "log": _ICON.format(
+        '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>'
+        '<path d="M14 2v6h6M8 13h8M8 17h5"/>'
+    ),
+    "download": _ICON.format(
+        '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>'
+    ),
 }
 THEME_LABEL = {
     "system": "Follow the system theme",
@@ -214,11 +230,35 @@ main > *:first-child { margin-top: 0; }
 }
 
 /* -- page head -- */
-.head { border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 24px; }
+/* The head is the first thing on every page, and the margin below exceeds
+   everything above it in any layout -- the sticky header, the padding, and
+   the horizontal table of contents narrow pages get -- so following the
+   first link scrolls to the very top instead of leaving the title tucked
+   under the header. A scroll offset cannot go negative, so it simply clamps. */
+.head { border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 24px;
+  scroll-margin-top: calc(var(--nav-h) + 100px); }
 .head h1 { font-size: 25px; margin: 0 0 5px; letter-spacing: -.018em; overflow-wrap: anywhere; }
 .head .sub { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .crumb { font-size: 12px; color: var(--muted); text-transform: uppercase;
   letter-spacing: .09em; margin-bottom: 7px; }
+
+/* -- where the log came from, and what can be opened from it -- */
+.source { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 13px; }
+.src-path, .src-btn { display: inline-flex; align-items: center; gap: 7px;
+  background: var(--panel); border: 1px solid var(--line-2); border-radius: 8px;
+  padding: 6px 11px; font-size: 12.5px; color: var(--ink); box-shadow: var(--shadow);
+  min-width: 0; }
+.src-path { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow-wrap: anywhere; }
+.src-path .ico, .src-btn .ico { flex: 0 0 auto; color: var(--muted); }
+.src-btn { font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  white-space: nowrap; }
+.src-btn:hover { border-color: var(--info); color: var(--info); }
+.src-btn:hover .ico { color: var(--info); }
+.src-btn.key { border-color: color-mix(in srgb, var(--info) 50%, var(--line-2));
+  color: var(--info); }
+.src-btn.key .ico { color: var(--info); }
+.src-btn.key:hover { background: color-mix(in srgb, var(--info) 10%, var(--panel)); }
 
 .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
   padding: 2px 11px 2px 6px; font-size: 12px; font-weight: 600; white-space: nowrap;
@@ -328,26 +368,35 @@ footer { color: var(--muted); font-size: 12px; margin-top: 46px;
   background: color-mix(in srgb, var(--warn) 24%, transparent); }
 .logview b:hover { background: var(--panel-2); }
 
-/* -- run script modal -- */
-.script-link { background: none; border: none; padding: 0; margin: 0; font: inherit;
-  color: inherit; cursor: pointer; border-bottom: 1px solid var(--line-2); }
-.script-link:hover { border-bottom-color: currentColor; }
-dialog.script-modal { width: min(820px, calc(100vw - 32px));
-  max-height: min(720px, calc(100vh - 64px)); padding: 0; border: 1px solid var(--line);
-  border-radius: 12px; background: var(--panel); color: var(--ink);
-  box-shadow: 0 12px 40px rgba(0,0,0,.28); }
-dialog.script-modal::backdrop { background: rgba(0,0,0,.5); }
-.script-hd { display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  padding: 14px 18px; border-bottom: 1px solid var(--line); position: sticky; top: 0;
-  background: var(--panel); }
-.script-hd h2 { margin: 0; font-size: 15px; }
-.script-close { background: none; border: none; font-size: 20px; line-height: 1;
-  color: var(--muted); cursor: pointer; padding: 2px 6px; }
-.script-close:hover { color: var(--ink); }
-.script-body { margin: 0; padding: 16px 18px; overflow: auto;
-  max-height: calc(min(720px, calc(100vh - 64px)) - 52px);
+/* -- the run script, in a modal -- */
+/* A column with one scrolling row: the panel takes its height from the
+   viewport and the script scrolls inside it, whatever the header measures. */
+dialog.script-modal { width: min(960px, calc(100vw - 28px)); max-height: min(82vh, 820px);
+  padding: 0; overflow: hidden; border: 1px solid var(--line-2); border-radius: 12px;
+  background: var(--panel); color: var(--ink); box-shadow: 0 18px 50px rgba(0,0,0,.3); }
+dialog.script-modal[open] { display: flex; flex-direction: column; }
+dialog.script-modal::backdrop { background: rgba(10,10,8,.55); }
+.script-hd { flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+  padding: 11px 13px; border-bottom: 1px solid var(--line); background: var(--panel-2); }
+.script-hd h2 { margin: 0; font-size: 14px; flex: 0 0 auto; }
+.script-hd .name { font-size: 12px; color: var(--muted); overflow: hidden; min-width: 0;
+  text-overflow: ellipsis; white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.script-acts { flex: 0 0 auto; margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.script-close { display: grid; place-items: center; width: 28px; height: 28px; padding: 0;
+  background: none; border: 1px solid transparent; border-radius: 7px; color: var(--muted);
+  font: inherit; font-size: 17px; line-height: 1; cursor: pointer; }
+.script-close:hover { background: var(--panel); border-color: var(--line-2); color: var(--ink); }
+.script-body { flex: 1 1 auto; min-height: 0; overflow: auto; margin: 0; padding: 14px 16px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+  font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.script-body code { font: inherit; }
+.sy-cmt { color: var(--syn-cmt); font-style: italic; }
+.sy-dir { color: var(--syn-dir); font-weight: 600; }
+.sy-str { color: var(--syn-str); }
+.sy-var { color: var(--syn-var); }
+.sy-kw { color: var(--syn-kw); font-weight: 600; }
+.sy-cmd { color: var(--syn-cmd); }
 
 /*CHART*/
 /*INTERACTION*/
@@ -356,7 +405,9 @@ dialog.script-modal::backdrop { background: rgba(0,0,0,.5); }
   :root { --bg: #fff; --panel: #fff; --panel-2: #fff; --ink: #000; --muted: #444;
     --line: #ccc; --line-2: #999; --shadow: none; }
   body { font-size: 10.5pt; }
-  .nav, .toc, .filters, .skip, figure.fig .zoomed, .chart .tip, dialog { display: none !important; }
+  .nav, .toc, .filters, .skip, figure.fig .zoomed, .chart .tip, dialog,
+  .src-btn { display: none !important; }
+  .src-path { box-shadow: none; }
   .shell { display: block; max-width: none; padding: 0; }
   main { padding-top: 0; }
   /* auto-fit grids are not universal in print engines; flex is. */
@@ -425,17 +476,38 @@ JS = r"""
     b.addEventListener('click', function () { setTheme(b.dataset.themeSet); });
   });
 
-  // -- run script modal --------------------------------------------------
+  // -- the run script modal ----------------------------------------------
   var scriptModal = document.querySelector('dialog.script-modal');
-  if (scriptModal) {
+  if (scriptModal && scriptModal.showModal) {
+    var scriptBody = scriptModal.querySelector('.script-body');
     document.querySelectorAll('[data-open-script]').forEach(function (btn) {
-      btn.addEventListener('click', function () { scriptModal.showModal(); });
+      btn.addEventListener('click', function () {
+        scriptModal.showModal();
+        if (scriptBody) { scriptBody.scrollTop = 0; scriptBody.focus(); }
+      });
     });
-    var scriptClose = scriptModal.querySelector('.script-close');
-    if (scriptClose) scriptClose.addEventListener('click', function () { scriptModal.close(); });
+    scriptModal.querySelectorAll('[data-close-script]').forEach(function (b) {
+      b.addEventListener('click', function () { scriptModal.close(); });
+    });
+    // The backdrop belongs to the dialog element, so a click that reaches it
+    // rather than the panel is a click outside.
     scriptModal.addEventListener('click', function (e) {
       if (e.target === scriptModal) scriptModal.close();
     });
+    var save = scriptModal.querySelector('[data-download-script]');
+    if (save && scriptBody) {
+      save.addEventListener('click', function () {
+        var blob = new Blob([scriptBody.textContent], { type: 'text/x-shellscript' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = save.dataset.downloadScript || 'runscript.sh';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      });
+    }
   }
 
   // -- table of contents: mark the section being read ------------------
@@ -469,15 +541,18 @@ JS = r"""
     targets.forEach(function (t) { if (t) io.observe(t); });
   }
 
-  // -- index table: filter by grade, sort by column --------------------
-  document.querySelectorAll('.filters button').forEach(function (b) {
-    b.addEventListener('click', function () {
-      var want = b.dataset.grade;
-      b.parentNode.querySelectorAll('button').forEach(function (o) {
-        o.setAttribute('aria-pressed', o === b ? 'true' : 'false');
-      });
-      document.querySelectorAll('tbody tr[data-grade]').forEach(function (tr) {
-        tr.hidden = want !== 'all' && tr.dataset.grade !== want;
+  // -- filter by grade: the index's rows, or a run's checks -------------
+  document.querySelectorAll('.filters').forEach(function (box) {
+    var target = box.dataset.target || 'tbody tr[data-grade]';
+    box.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var want = b.dataset.grade;
+        box.querySelectorAll('button').forEach(function (o) {
+          o.setAttribute('aria-pressed', o === b ? 'true' : 'false');
+        });
+        document.querySelectorAll(target).forEach(function (el) {
+          el.hidden = want !== 'all' && el.dataset.grade !== want;
+        });
       });
     });
   });
@@ -858,10 +933,27 @@ def _tile(value: str, label: str) -> str:
 def _check_card(c: Check) -> str:
     ev = "".join(f"<li>{esc(e)}</li>" for e in c.evidence)
     return (
-        f'<div class="check l-{c.level}"><div class="hd">'
+        f'<div class="check l-{c.level}" data-grade="{c.level}"><div class="hd">'
         f'<span class="t">{esc(c.title)}</span><span class="h">{esc(c.headline)}</span></div>'
         + (f'<div class="d">{esc(c.detail)}</div>' if c.detail else "")
         + (f"<ul>{ev}</ul>" if ev else "")
+        + "</div>"
+    )
+
+
+def _grade_filters(counts: dict[str, int], target: str, label: str) -> str:
+    """A filter row, or nothing when there is only one grade to filter on."""
+    if len(counts) < 2:
+        return ""
+    return (
+        f'<div class="filters" data-target="{esc(target)}" role="group" '
+        f'aria-label="{esc(label)}">'
+        '<button data-grade="all" aria-pressed="true">all</button>'
+        + "".join(
+            f'<button data-grade="{g}">{GRADE_TEXT[g]} ({counts[g]})</button>'
+            for g in ("fail", "warn", "info", "ok")
+            if counts.get(g)
+        )
         + "</div>"
     )
 
@@ -1008,6 +1100,51 @@ def _node_table(log: RunLog) -> str:
     )
 
 
+def _source_bar(view: RunView) -> str:
+    """Where the log is, and what can be opened from it.
+
+    Given its own row under the title rather than a clause in the subtitle:
+    the path is what a reader needs in order to go back to the file itself,
+    and the run script is the first thing asked for when a job misbehaved.
+    """
+    parts = []
+    if view.source:
+        parts.append(
+            f'<span class="src-path" title="{esc(view.source)}">{ICONS["host"]}'
+            f"{esc(view.source)}</span>"
+        )
+    if view.log.runscript:
+        parts.append(
+            '<button type="button" class="src-btn key" data-open-script>'
+            f'{ICONS["script"]}run script</button>'
+        )
+    if view.log_href:
+        parts.append(
+            f'<a class="src-btn" href="{esc(view.log_href)}">{ICONS["log"]}raw log</a>'
+        )
+    return f'<div class="source">{"".join(parts)}</div>' if parts else ""
+
+
+def _script_modal(view: RunView) -> str:
+    """The run script itself, highlighted and ready to be saved."""
+    log = view.log
+    if not log.runscript:
+        return ""
+    stem = Path(log.path).stem or log.name or "run"
+    return (
+        '<dialog class="script-modal" aria-label="Run script">'
+        '<div class="script-hd"><h2>Run script</h2>'
+        f'<span class="name">{esc(Path(log.path).name)}</span>'
+        '<div class="script-acts">'
+        f'<button type="button" class="src-btn" data-download-script="{esc(stem)}.run.sh">'
+        f'{ICONS["download"]}download</button>'
+        '<button type="button" class="script-close" data-close-script '
+        'aria-label="Close">&times;</button></div></div>'
+        '<pre class="script-body" tabindex="0"><code>'
+        f"{bash_html(log.runscript)}</code></pre></dialog>"
+    )
+
+
 def run_tiles(log: RunLog, a: Assessment) -> str:
     s = a.stats
     out = [
@@ -1031,22 +1168,20 @@ def render_run(view: RunView, index_href: str = "index.html") -> str:
     name = log.fields.get("job_name") or log.name
     title = f"{name} - run health"
     toc = Toc()
-    sub = (
-        f'job {esc(log.fields.get("job_id") or "?")} &middot; '
-        f'{esc(format_stamp(log.first_wall) or "unknown start")} &rarr; '
-        f'{esc(format_stamp(log.last_wall) or "unknown end")}'
-    )
-    if view.source:
-        sub += f' &middot; <span class="mono">{esc(view.source)}</span>'
-    if log.runscript:
-        sub += ' &middot; <button type="button" class="script-link" data-open-script>run script</button>'
+    counts: dict[str, int] = {}
+    for c in a.checks:
+        counts[c.level] = counts.get(c.level, 0) + 1
     body = [
         f'<div class="head" id="{toc.add("summary", "Summary")}">'
         f'<div class="crumb"><a href="{esc(index_href)}">All runs</a></div>'
         f"<h1>{esc(name)}</h1>"
-        f'<div class="sub">{sub}</div></div>',
+        f'<div class="sub">job {esc(log.fields.get("job_id") or "?")} &middot; '
+        f'{esc(format_stamp(log.first_wall) or "unknown start")} &rarr; '
+        f'{esc(format_stamp(log.last_wall) or "unknown end")}</div>'
+        f"{_source_bar(view)}</div>",
         run_tiles(log, a),
         f'<h2 class="sec" id="{toc.add("checks", "Checks")}">Checks</h2>',
+        _grade_filters(counts, ".check", "Filter checks by grade"),
         "".join(_check_card(c) for c in a.checks),
     ]
     if view.figures:
@@ -1067,12 +1202,7 @@ def render_run(view: RunView, index_href: str = "index.html") -> str:
     if log.notes:
         body.append("<footer>" + "<br>".join(esc(n) for n in log.notes) + "</footer>")
     body.append(_footer())
-    if log.runscript:
-        body.append(
-            '<dialog class="script-modal"><div class="script-hd"><h2>Run script</h2>'
-            '<button type="button" class="script-close" aria-label="Close">&times;</button></div>'
-            f'<pre class="script-body">{esc(log.runscript)}</pre></dialog>'
-        )
+    body.append(_script_modal(view))
     nav = _nav(name, _badge(a.grade), up=index_href)
     return _page(title, nav, toc.render(), "\n".join(body))
 
@@ -1129,15 +1259,7 @@ def render_index(
             f'{format_duration(s.get("max_gap")) or "&ndash;"}</td>'
             "</tr>"
         )
-    filters = (
-        '<div class="filters"><button data-grade="all" aria-pressed="true">all</button>'
-        + "".join(
-            f'<button data-grade="{g}">{GRADE_TEXT[g]} ({counts[g]})</button>'
-            for g in ("fail", "warn", "info", "ok")
-            if counts.get(g)
-        )
-        + "</div>"
-    )
+    filters = _grade_filters(counts, "tbody tr[data-grade]", "Filter runs by grade")
     toc = Toc()
     body = [
         f'<div class="head" id="{toc.add("summary", "Summary")}">'

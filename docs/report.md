@@ -11,19 +11,23 @@ worst of its checks.
 
 ## The run page header
 
-Under the run's name: the job id, when it started and ended, and the
-`machine:/path` the log was read from. For a [remote log](usage.md#remote-logs)
-this is the original host and path, not the local copy in
-`.remote-cache/` that `runhealth` actually parsed.
+Under the run's name and its job id sits a row naming the `machine:/path` the
+log was read from, beside the things that can be opened from it. For a
+[remote log](usage.md#remote-logs) the path is the original host and path, not
+the local copy in `.remote-cache/` that `runhealth` actually parsed, so it is
+the address to go back to on the cluster.
 
-When the scheduler echoed the job script at the top of the log, a **run
-script** link sits alongside it and opens the exact script that was
-submitted, without leaving the page.
+**Run script** appears when the scheduler echoed the job script at the top of
+the log. It opens the script that was submitted, shell-highlighted, with
+`#SBATCH` directives picked out, and **download** saves it as a `.sh` file.
+**Raw log** appears when the report was built with `--embed-logs`.
 
 ## The checks
 
 Each run page opens with a list of checks. A check states what it found and
-lists the evidence behind it, so nothing has to be taken on trust.
+lists the evidence behind it, so nothing has to be taken on trust. The row of
+buttons above them filters by grade, the same way the index filters runs, which
+on a healthy-looking run with one warning saves reading past the other twelve.
 
 | Check | What it means |
 | --- | --- |
