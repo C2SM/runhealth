@@ -21,6 +21,10 @@ exec > $pipe 2>&1
 
 ICON ships `utils/timewarp`, which does exactly this.
 
+It is also what lets the report show the submitted **run script**: without a
+stamp on every line, `runhealth` cannot tell the script's own echo of itself
+apart from the run's real output.
+
 ## 2. Turn on the MPI stack's counters
 
 On Cray MPICH, `MPICH_OFI_CXI_COUNTER_REPORT=3` and `FI_LOG_LEVEL=warn` cost

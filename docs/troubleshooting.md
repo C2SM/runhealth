@@ -6,7 +6,7 @@
   else, and `--list` to see what would be read. Empty files are skipped.
 
 **Everything is `INCOMPLETE`**
-: No profile recognised your success line. Check `runhealth --list-profiles`,
+: No profile recognized your success line. Check `runhealth --list-profiles`,
   then add an [`outcome` rule](#profile-outcome) in a
   profile of your own.
 
@@ -28,9 +28,17 @@
   observations, not failures; they are meant to draw the eye. Thresholds are all
   [adjustable per profile](#profile-thresholds).
 
+**`--open` opens nothing, or the wrong thing**
+: It asks the shell to open a `file://` path, which needs a browser registered
+  for one. A bare SSH session has none, WSL needs its Windows interop enabled,
+  and a minimal desktop may hand the file to an editor instead. Use
+  [`--serve`](usage.md#sharing-a-report) instead: with both flags `--open` aims
+  the browser at the served address, and otherwise
+  `http://127.0.0.1:8000/` can be opened by hand.
+
 **The wall clock looks impossible**
 : A file holding several job attempts, from a resubmission appending to the same
-  name, is analysed as its **last** attempt, and the report says so at the
+  name, is analyzed as its **last** attempt, and the report says so at the
   bottom of the page.
 
 ## Limitations

@@ -23,6 +23,7 @@ from pathlib import Path
 from . import style
 from .extract import RunLog
 from .health import Assessment, Check, counter_rows
+from .highlight import bash_html
 from .logfile import format_duration, format_stamp
 from .plots import Figure
 
@@ -51,6 +52,7 @@ class RunView:
     figures: list[Figure] = field(default_factory=list)
     page: str = ""
     log_href: str = ""
+    source: str = ""
 
 
 def esc(text: object) -> str:
@@ -88,12 +90,60 @@ ICONS = {
         'M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/>'
     ),
     "dark": _ICON.format('<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>'),
+    "host": _ICON.format(
+        '<rect x="2" y="2" width="20" height="8" rx="2"/>'
+        '<rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01M6 18h.01"/>'
+    ),
+    "script": _ICON.format(
+        '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>'
+        '<path d="M14 2v6h6"/><path d="m9 13 2 2-2 2M13 17h3"/>'
+    ),
+    "log": _ICON.format(
+        '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>'
+        '<path d="M14 2v6h6M8 13h8M8 17h5"/>'
+    ),
+    "download": _ICON.format(
+        '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>'
+    ),
+    "copy": _ICON.format(
+        '<rect x="9" y="9" width="13" height="13" rx="2"/>'
+        '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'
+    ),
+    "check": _ICON.format('<path d="M20 6 9 17l-5-5"/>'),
 }
 THEME_LABEL = {
     "system": "Follow the system theme",
     "light": "Light theme",
     "dark": "Dark theme",
 }
+
+
+def _copy_button(text: str, what: str = "path") -> str:
+    """A button that puts ``text`` on the clipboard. Two icons: idle, copied."""
+    label = f"Copy the {what}"
+    return (
+        f'<button type="button" class="copy" data-copy="{esc(text)}" '
+        f'title="{esc(label)}" aria-label="{esc(label)}">'
+        f'{ICONS["copy"]}{ICONS["check"]}</button>'
+    )
+
+
+def path_chip(spec: str) -> str:
+    """A ``machine:/path`` as one copyable chip, machine set apart from path.
+
+    A colon before the first slash is a machine, the way rsync reads it;
+    anything else is a plain local path with nothing to separate.
+    """
+    host, sep, path = spec.partition(":")
+    if not sep or "/" in host:
+        host, path = "", spec
+    named = (
+        f'<span class="host">{esc(host)}</span><span class="sep">:</span>' if host else ""
+    )
+    return (
+        f'<span class="src-path" title="{esc(spec)}">{ICONS["host"]}'
+        f'{named}<span class="p">{esc(path)}</span>{_copy_button(spec)}</span>'
+    )
 
 
 def theme_switch() -> str:
@@ -103,7 +153,7 @@ def theme_switch() -> str:
         f"{ICONS[mode]}</button>"
         for mode in ("system", "light", "dark")
     )
-    return f'<div class="theme" role="group" aria-label="Colour theme">{buttons}</div>'
+    return f'<div class="theme" role="group" aria-label="Color theme">{buttons}</div>'
 
 
 # -- table of contents ----------------------------------------------------
@@ -213,20 +263,66 @@ main > *:first-child { margin-top: 0; }
 }
 
 /* -- page head -- */
-.head { border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 24px; }
+/* The head is the first thing on every page, and the margin below exceeds
+   everything above it in any layout -- the sticky header, the padding, and
+   the horizontal table of contents narrow pages get -- so following the
+   first link scrolls to the very top instead of leaving the title tucked
+   under the header. A scroll offset cannot go negative, so it simply clamps. */
+.head { border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 24px;
+  scroll-margin-top: calc(var(--nav-h) + 100px); }
 .head h1 { font-size: 25px; margin: 0 0 5px; letter-spacing: -.018em; overflow-wrap: anywhere; }
 .head .sub { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .crumb { font-size: 12px; color: var(--muted); text-transform: uppercase;
   letter-spacing: .09em; margin-bottom: 7px; }
 
+/* -- where the log came from, and what can be opened from it -- */
+.source { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 13px; }
+.src-path, .src-btn { display: inline-flex; align-items: center; gap: 7px;
+  background: var(--panel); border: 1px solid var(--line-2); border-radius: 8px;
+  padding: 6px 11px; font-size: 12.5px; color: var(--ink); box-shadow: var(--shadow);
+  min-width: 0; }
+.src-path { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  overflow-wrap: anywhere; gap: 0; }
+/* Only the chip's own icon, so the copy button keeps its own color. */
+.src-path > .ico { flex: 0 0 auto; color: var(--muted); margin-right: 8px; }
+.src-btn .ico { flex: 0 0 auto; color: var(--muted); }
+.src-path .host { font-weight: 650; }
+.src-path .sep { color: var(--muted); margin: 0 1px; }
+.src-path .p { color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+.copy { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0;
+  margin-left: 7px; flex: 0 0 auto; background: none; border: none; border-radius: 6px;
+  color: var(--muted); cursor: pointer; vertical-align: -6px; }
+.copy:hover { background: var(--panel-2); color: var(--ink); }
+.copy .ico { width: 13px; height: 13px; }
+.copy .ico + .ico { display: none; }
+.copy.copied { color: var(--ok); }
+.copy.copied .ico { display: none; }
+.copy.copied .ico + .ico { display: block; }
+.src-btn { font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  white-space: nowrap; }
+.src-btn:hover { border-color: var(--info); color: var(--info); }
+.src-btn:hover .ico { color: var(--info); }
+.src-btn.key { border-color: color-mix(in srgb, var(--info) 50%, var(--line-2));
+  color: var(--info); }
+.src-btn.key .ico { color: var(--info); }
+.src-btn.key:hover { background: color-mix(in srgb, var(--info) 10%, var(--panel)); }
+
 .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
   padding: 2px 11px 2px 6px; font-size: 12px; font-weight: 600; white-space: nowrap;
   border: 1px solid currentColor; }
-.badge .mark { display: inline-grid; place-items: center; width: 17px; height: 17px;
-  border-radius: 999px; background: currentColor; color: var(--panel);
+/* The dot is filled with the grade's color and the letter is knocked out of
+   it. The fill cannot be currentColor: on this element that resolves to this
+   element's own color, which is the knockout color, so the letter and the
+   dot come out the same and the letter disappears. */
+.badge .mark { display: inline-grid; place-items: center; min-width: 17px; height: 17px;
+  padding: 0 3px; border-radius: 999px; color: var(--panel);
   font-size: 10px; font-weight: 700; }
 .g-ok { color: var(--ok); } .g-info { color: var(--info); }
 .g-warn { color: var(--warn); } .g-fail { color: var(--fail); }
+.badge.g-ok .mark { background: var(--ok); }
+.badge.g-info .mark { background: var(--info); }
+.badge.g-warn .mark { background: var(--warn); }
+.badge.g-fail .mark { background: var(--fail); }
 
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   gap: 10px; margin: 0 0 26px; }
@@ -266,7 +362,7 @@ figure.fig .note { font-size: 12px; color: var(--muted); font-variant-numeric: t
 figure.fig .zoomed { margin-left: auto; font-size: 12px; color: var(--muted);
   background: none; border: 1px solid var(--line-2); border-radius: 999px;
   padding: 2px 10px; cursor: pointer; }
-figure.fig .cap { color: var(--muted); font-size: 13px; margin: 4px 0 12px; max-width: 78ch; }
+figure.fig .cap { color: var(--muted); font-size: 13px; margin: 4px 0 12px; }
 .chart { position: relative; }
 .chart .tip { position: absolute; z-index: 20; pointer-events: none; max-width: 340px;
   background: var(--panel); color: var(--ink); border: 1px solid var(--line-2);
@@ -327,6 +423,36 @@ footer { color: var(--muted); font-size: 12px; margin-top: 46px;
   background: color-mix(in srgb, var(--warn) 24%, transparent); }
 .logview b:hover { background: var(--panel-2); }
 
+/* -- the run script, in a modal -- */
+/* A column with one scrolling row: the panel takes its height from the
+   viewport and the script scrolls inside it, whatever the header measures. */
+dialog.script-modal { width: min(960px, calc(100vw - 28px)); max-height: min(82vh, 820px);
+  padding: 0; overflow: hidden; border: 1px solid var(--line-2); border-radius: 12px;
+  background: var(--panel); color: var(--ink); box-shadow: 0 18px 50px rgba(0,0,0,.3); }
+dialog.script-modal[open] { display: flex; flex-direction: column; }
+dialog.script-modal::backdrop { background: rgba(10,10,8,.55); }
+.script-hd { flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+  padding: 11px 13px; border-bottom: 1px solid var(--line); background: var(--panel-2); }
+.script-hd h2 { margin: 0; font-size: 14px; flex: 0 0 auto; }
+.script-hd .name { font-size: 12px; color: var(--muted); overflow: hidden; min-width: 0;
+  text-overflow: ellipsis; white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.script-acts { flex: 0 0 auto; margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.script-close { display: grid; place-items: center; width: 28px; height: 28px; padding: 0;
+  background: none; border: 1px solid transparent; border-radius: 7px; color: var(--muted);
+  font: inherit; font-size: 17px; line-height: 1; cursor: pointer; }
+.script-close:hover { background: var(--panel); border-color: var(--line-2); color: var(--ink); }
+.script-body { flex: 1 1 auto; min-height: 0; overflow: auto; margin: 0; padding: 14px 16px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.script-body code { font: inherit; }
+.sy-cmt { color: var(--syn-cmt); font-style: italic; }
+.sy-dir { color: var(--syn-dir); font-weight: 600; }
+.sy-str { color: var(--syn-str); }
+.sy-var { color: var(--syn-var); }
+.sy-kw { color: var(--syn-kw); font-weight: 600; }
+.sy-cmd { color: var(--syn-cmd); }
+
 /*CHART*/
 /*INTERACTION*/
 
@@ -334,7 +460,9 @@ footer { color: var(--muted); font-size: 12px; margin-top: 46px;
   :root { --bg: #fff; --panel: #fff; --panel-2: #fff; --ink: #000; --muted: #444;
     --line: #ccc; --line-2: #999; --shadow: none; }
   body { font-size: 10.5pt; }
-  .nav, .toc, .filters, .skip, figure.fig .zoomed, .chart .tip { display: none !important; }
+  .nav, .toc, .filters, .skip, figure.fig .zoomed, .chart .tip, dialog,
+  .src-btn, .copy { display: none !important; }
+  .src-path { box-shadow: none; }
   .shell { display: block; max-width: none; padding: 0; }
   main { padding-top: 0; }
   /* auto-fit grids are not universal in print engines; flex is. */
@@ -403,16 +531,98 @@ JS = r"""
     b.addEventListener('click', function () { setTheme(b.dataset.themeSet); });
   });
 
+  // -- the run script modal ----------------------------------------------
+  var scriptModal = document.querySelector('dialog.script-modal');
+  if (scriptModal && scriptModal.showModal) {
+    var scriptBody = scriptModal.querySelector('.script-body');
+    document.querySelectorAll('[data-open-script]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        scriptModal.showModal();
+        if (scriptBody) { scriptBody.scrollTop = 0; scriptBody.focus(); }
+      });
+    });
+    scriptModal.querySelectorAll('[data-close-script]').forEach(function (b) {
+      b.addEventListener('click', function () { scriptModal.close(); });
+    });
+    // The backdrop belongs to the dialog element, so a click that reaches it
+    // rather than the panel is a click outside.
+    scriptModal.addEventListener('click', function (e) {
+      if (e.target === scriptModal) scriptModal.close();
+    });
+    var save = scriptModal.querySelector('[data-download-script]');
+    if (save && scriptBody) {
+      save.addEventListener('click', function () {
+        var blob = new Blob([scriptBody.textContent], { type: 'text/x-shellscript' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = save.dataset.downloadScript || 'runscript.sh';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      });
+    }
+  }
+
+  // -- copy a path to the clipboard --------------------------------------
+  function copyFallback(text) {
+    // A report is often read straight off disk, where the async clipboard
+    // is not always given to the page.
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.top = '-1000px';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) {}
+    ta.remove();
+    return ok;
+  }
+  document.querySelectorAll('[data-copy]').forEach(function (btn) {
+    var label = btn.getAttribute('aria-label');
+    btn.addEventListener('click', function () {
+      var said = function () {
+        btn.classList.add('copied');
+        btn.setAttribute('aria-label', 'Copied');
+        setTimeout(function () {
+          btn.classList.remove('copied');
+          btn.setAttribute('aria-label', label);
+        }, 1400);
+      };
+      var text = btn.dataset.copy;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(said, function () {
+          if (copyFallback(text)) said();
+        });
+      } else if (copyFallback(text)) {
+        said();
+      }
+    });
+  });
+
   // -- table of contents: mark the section being read ------------------
+  // Read from the live geometry on every frame that scrolls, rather than
+  // from remembered intersections: a jump to an anchor can carry a heading
+  // from above the reading line to below it without ever crossing it, which
+  // leaves an observer holding the section the reader has just left.
   var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
-  if (links.length && 'IntersectionObserver' in window) {
+  if (links.length) {
     var targets = links.map(function (l) {
       return document.getElementById(decodeURIComponent(l.hash.slice(1)));
     });
-    var seen = {};
-    var mark = function () {
-      var best = -1;
-      for (var i = 0; i < targets.length; i++) if (seen[i]) best = i;
+    var LINE = 100;   // just below the sticky header
+    var shown = -1;
+    function mark() {
+      var best = 0;
+      for (var i = 0; i < targets.length; i++) {
+        if (targets[i] && targets[i].getBoundingClientRect().top - LINE <= 0) best = i;
+      }
+      if (best === shown) return;
+      shown = best;
       links.forEach(function (l, i) {
         if (i === best) l.setAttribute('aria-current', 'true');
         else l.removeAttribute('aria-current');
@@ -423,26 +633,30 @@ JS = r"""
         var want = active.offsetLeft - box.clientWidth / 2 + active.offsetWidth / 2;
         box.scrollTo({ left: want, behavior: reduce ? 'auto' : 'smooth' });
       }
-    };
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (e) {
-        var i = targets.indexOf(e.target);
-        if (i >= 0) seen[i] = e.isIntersecting || e.boundingClientRect.top < 0;
-      });
-      mark();
-    }, { rootMargin: '-' + (60 + 40) + 'px 0px -55% 0px', threshold: 0 });
-    targets.forEach(function (t) { if (t) io.observe(t); });
+    }
+    var queued = false;
+    function onScroll() {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(function () { queued = false; mark(); });
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    mark();
   }
 
-  // -- index table: filter by grade, sort by column --------------------
-  document.querySelectorAll('.filters button').forEach(function (b) {
-    b.addEventListener('click', function () {
-      var want = b.dataset.grade;
-      b.parentNode.querySelectorAll('button').forEach(function (o) {
-        o.setAttribute('aria-pressed', o === b ? 'true' : 'false');
-      });
-      document.querySelectorAll('tbody tr[data-grade]').forEach(function (tr) {
-        tr.hidden = want !== 'all' && tr.dataset.grade !== want;
+  // -- filter by grade: the index's rows, or a run's checks -------------
+  document.querySelectorAll('.filters').forEach(function (box) {
+    var target = box.dataset.target || 'tbody tr[data-grade]';
+    box.querySelectorAll('button').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var want = b.dataset.grade;
+        box.querySelectorAll('button').forEach(function (o) {
+          o.setAttribute('aria-pressed', o === b ? 'true' : 'false');
+        });
+        document.querySelectorAll(target).forEach(function (el) {
+          el.hidden = want !== 'all' && el.dataset.grade !== want;
+        });
       });
     });
   });
@@ -810,8 +1024,11 @@ def _nav(here: str, badge: str = "", up: str = "") -> str:
 
 
 def _badge(level: str, text: str = "") -> str:
+    # The letter in the dot repeats what the label beside it says, so a
+    # screen reader is spared "X problem".
     return (
-        f'<span class="badge g-{level}"><span class="mark">{GRADE_MARK.get(level, "?")}</span>'
+        f'<span class="badge g-{level}"><span class="mark" aria-hidden="true">'
+        f'{GRADE_MARK.get(level, "?")}</span>'
         f"{esc(text or GRADE_TEXT.get(level, level))}</span>"
     )
 
@@ -823,10 +1040,27 @@ def _tile(value: str, label: str) -> str:
 def _check_card(c: Check) -> str:
     ev = "".join(f"<li>{esc(e)}</li>" for e in c.evidence)
     return (
-        f'<div class="check l-{c.level}"><div class="hd">'
+        f'<div class="check l-{c.level}" data-grade="{c.level}"><div class="hd">'
         f'<span class="t">{esc(c.title)}</span><span class="h">{esc(c.headline)}</span></div>'
         + (f'<div class="d">{esc(c.detail)}</div>' if c.detail else "")
         + (f"<ul>{ev}</ul>" if ev else "")
+        + "</div>"
+    )
+
+
+def _grade_filters(counts: dict[str, int], target: str, label: str) -> str:
+    """A filter row, or nothing when there is only one grade to filter on."""
+    if len(counts) < 2:
+        return ""
+    return (
+        f'<div class="filters" data-target="{esc(target)}" role="group" '
+        f'aria-label="{esc(label)}">'
+        '<button data-grade="all" aria-pressed="true">all</button>'
+        + "".join(
+            f'<button data-grade="{g}">{GRADE_TEXT[g]} ({counts[g]})</button>'
+            for g in ("fail", "warn", "info", "ok")
+            if counts.get(g)
+        )
         + "</div>"
     )
 
@@ -848,8 +1082,12 @@ def _figure(f: Figure, log_href: str = "") -> str:
     )
 
 
-def _kv(pairs: list[tuple[str, str]]) -> str:
-    rows = "".join(f"<dt>{esc(k)}</dt><dd>{esc(v)}</dd>" for k, v in pairs if v not in (None, ""))
+def _kv(pairs: list[tuple[str, str]], copy: tuple[str, ...] = ()) -> str:
+    rows = "".join(
+        f"<dt>{esc(k)}</dt><dd>{esc(v)}{_copy_button(v) if k in copy else ''}</dd>"
+        for k, v in pairs
+        if v not in (None, "")
+    )
     return f'<dl class="kv">{rows}</dl>' if rows else ""
 
 
@@ -951,7 +1189,7 @@ def _provenance(log: RunLog) -> str:
             ),
         ),
     ]
-    body = _kv(pairs)
+    body = _kv(pairs, copy=("Log file",))
     if any(v for _, v in model):
         body += '<div style="height:14px"></div>' + _kv(model)
     return _details("Job and build provenance", body)
@@ -970,6 +1208,48 @@ def _node_table(log: RunLog) -> str:
         "<th>lines mentioning it</th></tr></thead>"
         f"<tbody>{rows}</tbody></table></div>",
         f"{len(log.nodes)} nodes",
+    )
+
+
+def _source_bar(view: RunView) -> str:
+    """Where the log is, and what can be opened from it.
+
+    Given its own row under the title rather than a clause in the subtitle:
+    the path is what a reader needs in order to go back to the file itself,
+    and the run script is the first thing asked for when a job misbehaved.
+    """
+    parts = []
+    if view.source:
+        parts.append(path_chip(view.source))
+    if view.log.runscript:
+        parts.append(
+            '<button type="button" class="src-btn key" data-open-script>'
+            f'{ICONS["script"]}run script</button>'
+        )
+    if view.log_href:
+        parts.append(
+            f'<a class="src-btn" href="{esc(view.log_href)}">{ICONS["log"]}raw log</a>'
+        )
+    return f'<div class="source">{"".join(parts)}</div>' if parts else ""
+
+
+def _script_modal(view: RunView) -> str:
+    """The run script itself, highlighted and ready to be saved."""
+    log = view.log
+    if not log.runscript:
+        return ""
+    stem = Path(log.path).stem or log.name or "run"
+    return (
+        '<dialog class="script-modal" aria-label="Run script">'
+        '<div class="script-hd"><h2>Run script</h2>'
+        f'<span class="name">{esc(Path(log.path).name)}</span>'
+        '<div class="script-acts">'
+        f'<button type="button" class="src-btn" data-download-script="{esc(stem)}.run.sh">'
+        f'{ICONS["download"]}download</button>'
+        '<button type="button" class="script-close" data-close-script '
+        'aria-label="Close">&times;</button></div></div>'
+        '<pre class="script-body" tabindex="0"><code>'
+        f"{bash_html(log.runscript)}</code></pre></dialog>"
     )
 
 
@@ -996,15 +1276,20 @@ def render_run(view: RunView, index_href: str = "index.html") -> str:
     name = log.fields.get("job_name") or log.name
     title = f"{name} - run health"
     toc = Toc()
+    counts: dict[str, int] = {}
+    for c in a.checks:
+        counts[c.level] = counts.get(c.level, 0) + 1
     body = [
         f'<div class="head" id="{toc.add("summary", "Summary")}">'
         f'<div class="crumb"><a href="{esc(index_href)}">All runs</a></div>'
         f"<h1>{esc(name)}</h1>"
         f'<div class="sub">job {esc(log.fields.get("job_id") or "?")} &middot; '
         f'{esc(format_stamp(log.first_wall) or "unknown start")} &rarr; '
-        f'{esc(format_stamp(log.last_wall) or "unknown end")}</div></div>',
+        f'{esc(format_stamp(log.last_wall) or "unknown end")}</div>'
+        f"{_source_bar(view)}</div>",
         run_tiles(log, a),
         f'<h2 class="sec" id="{toc.add("checks", "Checks")}">Checks</h2>',
+        _grade_filters(counts, ".check", "Filter checks by grade"),
         "".join(_check_card(c) for c in a.checks),
     ]
     if view.figures:
@@ -1025,6 +1310,7 @@ def render_run(view: RunView, index_href: str = "index.html") -> str:
     if log.notes:
         body.append("<footer>" + "<br>".join(esc(n) for n in log.notes) + "</footer>")
     body.append(_footer())
+    body.append(_script_modal(view))
     nav = _nav(name, _badge(a.grade), up=index_href)
     return _page(title, nav, toc.render(), "\n".join(body))
 
@@ -1068,7 +1354,7 @@ def render_index(
             )
             + "</td>"
             f'<td class="n" data-v="{esc(log.fields.get("job_id") or "")}">'
-            f'{esc(log.fields.get("job_id") or "&ndash;")}</td>'
+            f'{esc(log.fields.get("job_id")) or "&ndash;"}</td>'
             f'<td class="n" data-v="{log.first_wall or 0}">{esc(started)}</td>'
             f'<td class="n" data-v="{s.get("wall_seconds") or 0}">'
             f'{format_duration(s.get("wall_seconds")) or "&ndash;"}</td>'
@@ -1081,21 +1367,14 @@ def render_index(
             f'{format_duration(s.get("max_gap")) or "&ndash;"}</td>'
             "</tr>"
         )
-    filters = (
-        '<div class="filters"><button data-grade="all" aria-pressed="true">all</button>'
-        + "".join(
-            f'<button data-grade="{g}">{GRADE_TEXT[g]} ({counts[g]})</button>'
-            for g in ("fail", "warn", "info", "ok")
-            if counts.get(g)
-        )
-        + "</div>"
-    )
+    filters = _grade_filters(counts, "tbody tr[data-grade]", "Filter runs by grade")
     toc = Toc()
     body = [
         f'<div class="head" id="{toc.add("summary", "Summary")}">'
         '<div class="crumb">runhealth</div>'
         f"<h1>{esc(title)}</h1>"
-        f'<div class="sub">{esc(", ".join(sources))}</div></div>',
+        f'<div class="sub">{len(views)} run(s) read from:</div>'
+        f'<div class="source">{"".join(path_chip(s) for s in sources)}</div></div>',
         f'<div class="tiles">{"".join(tiles)}</div>',
     ]
     if overview:

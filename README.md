@@ -50,6 +50,10 @@ runhealth: parsed 2 log(s) in 0.2s
 runhealth: wrote /tmp/demo/index.html
 ```
 
+Where the shell has no browser to hand a local file to -- a bare SSH session,
+or WSL with its Windows interop off -- swap `--open` for `--serve` and browse
+to <http://127.0.0.1:8000/>.
+
 ## Documentation
 
 The full documentation lives at **<https://c2sm.github.io/runhealth/>**:
@@ -74,6 +78,6 @@ The sources are Markdown under [`docs/`](docs/); build them locally with
 uv run --group docs sphinx-build -b html docs docs/_build/html
 ```
 
-## Licence
+## License
 
 BSD 3-Clause. See [LICENSE](LICENSE).

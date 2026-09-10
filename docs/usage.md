@@ -7,6 +7,7 @@
 | Look at everything in a directory | `runhealth /path/to/logs -o report/` |
 | Look at logs on a remote cluster, from your laptop | `runhealth santis:/path/to/logs -o report/ --open` |
 | Look at one log and open it | `runhealth LOG.myjob.12345.o -o report/ --open` |
+| Read it in a browser from a login node | `runhealth /path/to/logs -o report/ --serve` |
 | Only the recent ones | `runhealth /path/to/logs --last 5 --since 7d -o report/` |
 | Follow a job that is running now | `runhealth /path/to/logs --watch 60 -o report/` |
 | A Markdown report instead | `runhealth /path/to/logs -f md -o report/` |
@@ -47,6 +48,10 @@ A local path and a remote one can be mixed freely in the same invocation:
 ```bash
 runhealth santis:/scratch/e1000/run ./local-logs -o report/
 ```
+
+Each run page still names the original `host:/path`, not the local copy under
+`.remote-cache/` that was actually parsed, so a report built on your laptop
+still says exactly where on the cluster a log lives.
 
 ## Running jobs
 
@@ -123,7 +128,9 @@ Combined with `--watch`, every refresh is published, which turns a running job
 into a page colleagues can keep reloading.
 
 **Or serve it yourself.** `--serve` starts a small read-only server bound to
-`127.0.0.1` only, which is the case for a login node with no web server on it:
+`127.0.0.1`, which is what a login node with no web server on it can still
+offer. The port is optional and defaults to 8000, and the server runs until
+interrupted:
 
 ```bash
 runhealth /path/to/logs -o report/ --serve 8080 --watch 60
@@ -137,6 +144,17 @@ ssh -L 8080:localhost:8080 login.cluster.example
 
 Binding to localhost is deliberate. A directory of job logs is not something to
 expose to everyone else logged into a shared node.
+
+`--serve` is also how to read a report yourself wherever the shell cannot hand
+a local file to a browser, which is the usual reason `--open` appears to do
+nothing: a bare SSH session, WSL with its Windows interop switched off, or a
+desktop with nothing registered for `.html`. Given both flags, `--open` aims
+the browser at the served address rather than at a `file://` path, and any
+browser can be pointed at `http://127.0.0.1:8000/` by hand:
+
+```bash
+runhealth /path/to/logs -o report/ --serve --open
+```
 
 ## Performance
 

@@ -23,7 +23,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .logfile import Line, iter_lines, parse_walltime, sniff
+from .logfile import Line, iter_lines, parse_walltime, read_preamble, sniff
 from .profile import Profile
 from .tables import Table, TableReader
 
@@ -127,6 +127,7 @@ class RunLog:
     gaps: list[Gap] = field(default_factory=list)
     nodes: dict[str, int] = field(default_factory=dict)
     outcome: Outcome | None = None
+    runscript: str = ""
     attempts: int = 1
     settings: dict[str, Any] = field(default_factory=dict)
     thresholds: dict[str, Any] = field(default_factory=dict)
@@ -363,6 +364,7 @@ class Extractor:
         )
         # The job script header belongs to the file, not to one attempt.
         fresh.keyvalues["sbatch"] = dict(keep.keyvalues.get("sbatch", {}))
+        fresh.runscript = keep.runscript
         self.log = fresh
         for r in self._series:
             fresh.series.setdefault(r.name, [])
@@ -562,12 +564,14 @@ def parse(
     log.mtime = st.st_mtime
     if not start:
         log.line_format = sniff(path)
+        if log.line_format == "timestamped":
+            log.runscript = read_preamble(path)
     ex._has_preamble = log.line_format == "timestamped"
     for line in iter_lines(path, start):
         ex.feed(line)
     ex.log.offset = st.st_size
     if ex.log.attempts > 1:
         ex.log.notes.append(
-            f"This file holds {ex.log.attempts} job attempts; only the last is analysed."
+            f"This file holds {ex.log.attempts} job attempts; only the last is analyzed."
         )
     return ex.finish()

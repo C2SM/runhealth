@@ -4,15 +4,33 @@
 
 One row per run, sortable by any column and filterable by health grade, with
 wall clock, throughput and longest silence side by side. Useful for spotting the
-point at which a series of runs started to degrade.
+point at which a series of runs started to degrade. Above the table, every
+directory the report was built from, each as `machine:/path` with the machine
+set apart from the path and a button that copies the whole thing.
 
 Grades are `ok`, `worth a look`, `warning` and `problem`. A run's grade is the
 worst of its checks.
 
+## The run page header
+
+Under the run's name and its job id sits a row naming the `machine:/path` the
+log was read from, beside the things that can be opened from it. For a
+[remote log](usage.md#remote-logs) the path is the original host and path, not
+the local copy in `.remote-cache/` that `runhealth` actually parsed, so it is
+the address to go back to on the cluster; the button beside it copies the whole
+`machine:/path` for pasting into a terminal.
+
+**Run script** appears when the scheduler echoed the job script at the top of
+the log. It opens the script that was submitted, shell-highlighted, with
+`#SBATCH` directives picked out, and **download** saves it as a `.sh` file.
+**Raw log** appears when the report was built with `--embed-logs`.
+
 ## The checks
 
 Each run page opens with a list of checks. A check states what it found and
-lists the evidence behind it, so nothing has to be taken on trust.
+lists the evidence behind it, so nothing has to be taken on trust. The row of
+buttons above them filters by grade, the same way the index filters runs, which
+on a healthy-looking run with one warning saves reading past the other twelve.
 
 | Check | What it means |
 | --- | --- |
@@ -92,3 +110,11 @@ The page follows the system light or dark setting, and the switch in the header
 overrides it per reader. None of this is needed to read a figure: the markup is
 complete before any script runs, which is why the same figure prints properly
 and survives being turned into a PDF.
+
+## Getting around a page
+
+The header stays put as you scroll, and on a run page it carries that run's name
+and grade beside a link back to the index. The table of contents marks the
+section being read and follows the scroll; its first entry returns to the top of
+the page. On a narrow screen it becomes a row of chips under the header, and
+scrolls itself to keep the current section in view.

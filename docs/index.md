@@ -44,6 +44,10 @@ Open `/tmp/demo/index.html`. `demo.log` is a run that finished but hit a fabric
 hiccup halfway through; `demo_hang.log` is the same job stuck in its coupling
 setup until the scheduler cut it off.
 
+If `--open` does nothing, the shell has no browser registered for a local file.
+Swap it for `--serve` and browse to <http://127.0.0.1:8000/> instead; see
+[serving a report](usage.md#sharing-a-report).
+
 On real logs the summary reads the same way. This is one afternoon of a coupled
 climate model:
 

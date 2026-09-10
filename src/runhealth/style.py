@@ -1,12 +1,12 @@
 """One palette for the figures and the pages, defined once.
 
-The figures are SVG drawn with CSS classes rather than baked-in colours, so
+The figures are SVG drawn with CSS classes rather than baked-in colors, so
 the same markup serves the light theme, the dark theme and the print
 stylesheet. That is what this module exists for: the token tables below are
 emitted as custom properties into the page, and :data:`CHART_CSS` is the one
 set of rules that reads them.
 
-Every series colour clears 3:1 against its own background and every phase in
+Every series color clears 3:1 against its own background and every phase in
 the ramp clears 4.5:1 against white, so the labels drawn inside a phase bar
 stay legible without a second palette for dark mode.
 """
@@ -39,6 +39,13 @@ LIGHT = {
     "tick": "#6a6862",
     "whisker": "#3f3e38",
     "shadow": "0 1px 2px rgba(20,18,10,.05), 0 4px 14px rgba(20,18,10,.04)",
+    # Shell syntax, for the run script a job echoed into its log.
+    "syn-cmt": "#75736b",
+    "syn-dir": "#c98216",
+    "syn-str": "#2f8f5b",
+    "syn-var": "#0f8c95",
+    "syn-kw": "#8b5cc7",
+    "syn-cmd": "#3d7fd6",
 }
 
 DARK = {
@@ -58,6 +65,12 @@ DARK = {
     "tick": "#a8a69b",
     "whisker": "#c9c7bc",
     "shadow": "none",
+    "syn-cmt": "#9d9b90",
+    "syn-dir": "#e5a94c",
+    "syn-str": "#64c48c",
+    "syn-var": "#45b3bc",
+    "syn-kw": "#b18ce0",
+    "syn-cmd": "#7cb0ef",
 }
 
 
@@ -75,7 +88,7 @@ def token_block(selector: str, dark: bool = False) -> str:
     return f"{selector} {{ {body} }}"
 
 
-# Structural figure rules. Colour comes from the tokens above, so this text is
+# Structural figure rules. Color comes from the tokens above, so this text is
 # identical in the page, in a standalone .svg file and on paper.
 CHART_CSS = """
 .rh-svg { width: 100%; height: auto; display: block; overflow: visible;
@@ -143,7 +156,7 @@ CHART_INTERACTION_CSS = """
 # always reached by the page stylesheet -- WeasyPrint, and so the PDF output,
 # treats it as its own document -- so every element also carries presentation
 # attributes. A browser's CSS outranks a presentation attribute, which is why
-# the theme still switches while the PDF still comes out in colour.
+# the theme still switches while the PDF still comes out in color.
 _PAINT: dict[str, str] = {}
 for _i, _c in enumerate(SERIES_LIGHT):
     _PAINT[f"s{_i}"] = _c
@@ -159,7 +172,7 @@ _PAINT.update(
     }
 )
 
-# Classes that paint themselves, without a colour token beside them.
+# Classes that paint themselves, without a color token beside them.
 _PLAIN: dict[str, dict[str, str]] = {
     "grid": {"stroke": LIGHT["grid"], "fill": "none"},
     "ax-line": {"stroke": LIGHT["axis"], "fill": "none"},
@@ -213,10 +226,10 @@ def svg_attributes(classes: str) -> dict[str, str]:
 
 
 def print_overrides() -> str:
-    """Literal colours for the print stylesheet.
+    """Literal colors for the print stylesheet.
 
     WeasyPrint's support for custom properties varies by version, and a PDF
-    of grey rectangles would be worse than a slightly duller palette, so the
+    of gray rectangles would be worse than a slightly duller palette, so the
     print rules restate the light tokens as plain values.
     """
     rules = [
