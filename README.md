@@ -10,15 +10,16 @@ Those answers are all in the log already. `runhealth` reads them out.
 runhealth /path/to/logs -o report/ --open
 ```
 
-Run it from your laptop against logs still sitting on a cluster, and the report
-ends up on your laptop too, ready to open in a browser without an SSH tunnel:
+Run it from your laptop against logs that are still located on a cluster, and
+the report is written to your laptop as well, ready to be opened in a browser
+without an SSH tunnel:
 
 ```bash
 runhealth santis:/scratch/e1000/run -o report/ --open
 ```
 
-Any `host:/path` works as long as `ssh host` already does; `runhealth` uses
-`rsync` under the hood to pull the matching logs down first.
+Any `host:/path` works as long as `ssh host` already does; internally,
+`runhealth` uses `rsync` to copy the matching logs first.
 
 <p align="center">
   <img src="docs/images/timeline.svg" alt="A run timeline: one blue phase filling the whole allocation, with a red silence bar above it" width="820">
@@ -27,10 +28,11 @@ Any `host:/path` works as long as `ssh host` already does; `runhealth` uses
 <p align="center"><em>One picture, one diagnosis: the job spent its entire
 allocation in the coupling setup and never wrote another line.</em></p>
 
-It is **model-agnostic**. The core understands batch logs -- timestamps, SLURM
-records, silence, error signatures -- and everything specific to a code lives in
-a **YAML profile**, so supporting your own model means writing a few regular
-expressions, not Python. ICON and Cray MPICH profiles ship with it.
+It is **model-agnostic**. The core understands batch logs in general:
+timestamps, SLURM records, silence and error signatures. Everything specific to
+a code lives in a **YAML profile**, so supporting your own model means writing
+a few regular expressions rather than Python. ICON and Cray MPICH profiles ship
+with it.
 
 ## Try it
 
@@ -50,9 +52,9 @@ runhealth: parsed 2 log(s) in 0.2s
 runhealth: wrote /tmp/demo/index.html
 ```
 
-Where the shell has no browser to hand a local file to -- a bare SSH session,
-or WSL with its Windows interop off -- swap `--open` for `--serve` and browse
-to <http://127.0.0.1:8000/>.
+Where the shell cannot pass a local file to a browser, for example in a bare
+SSH session or in WSL with its Windows interoperability switched off, use
+`--serve` instead of `--open` and browse to <http://127.0.0.1:8000/>.
 
 ## Documentation
 
@@ -67,7 +69,7 @@ The full documentation lives at **<https://c2sm.github.io/runhealth/>**:
   [profile reference](https://c2sm.github.io/runhealth/profile-reference.html):
   teaching `runhealth` a new code
 - [Get more out of your logs](https://c2sm.github.io/runhealth/logging.html):
-  two changes to a job script that pay for themselves
+  two inexpensive changes to a job script that make it far more informative
 - [Troubleshooting](https://c2sm.github.io/runhealth/troubleshooting.html)
 - [Command line reference](https://c2sm.github.io/runhealth/cli.html)
 - [Development](https://c2sm.github.io/runhealth/development.html)

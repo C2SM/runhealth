@@ -19,11 +19,11 @@ One picture, one diagnosis: the job spent its entire allocation in the coupling
 setup and never wrote another line.
 ```
 
-It is **model-agnostic**. The core understands batch logs, meaning timestamps,
-SLURM records, silence and error signatures, and everything specific to a code
-lives in a [YAML profile](profiles.md), so supporting your own model means
-writing a few regular expressions, not Python. ICON and Cray MPICH profiles ship
-with it.
+It is **model-agnostic**. The core understands batch logs in general:
+timestamps, SLURM records, silence and error signatures. Everything specific to
+a code lives in a [YAML profile](profiles.md), so supporting your own model
+means writing a few regular expressions rather than Python. ICON and Cray MPICH
+profiles ship with it.
 
 ## See it work
 
@@ -40,12 +40,12 @@ runhealth: parsed 2 log(s) in 0.2s
 runhealth: wrote /tmp/demo/index.html
 ```
 
-Open `/tmp/demo/index.html`. `demo.log` is a run that finished but hit a fabric
-hiccup halfway through; `demo_hang.log` is the same job stuck in its coupling
-setup until the scheduler cut it off.
+Open `/tmp/demo/index.html`. `demo.log` is a run that finished despite a
+transient fabric problem halfway through; `demo_hang.log` is the same job,
+stuck in its coupling setup until the scheduler terminated it.
 
 If `--open` does nothing, the shell has no browser registered for a local file.
-Swap it for `--serve` and browse to <http://127.0.0.1:8000/> instead; see
+Use `--serve` instead and browse to <http://127.0.0.1:8000/>; see
 [serving a report](usage.md#sharing-a-report).
 
 On real logs the summary reads the same way. This is one afternoon of a coupled
@@ -60,8 +60,8 @@ runhealth: parsed 11 log(s) in 12.6s
   FAIL  FAILED    2h 15m 20s  LOG.jcp_r2b8_icon4py.828160.o   - CANCELLED DUE to SIGNAL Terminated
 ```
 
-The second line is the one worth having: that run *succeeded*, and would never
-have been looked at again. It was also, for one minute, drowning in a network
+The second line is the one that matters: that run *succeeded* and would never
+have been examined again. For one minute it was also saturated by a network
 retry storm.
 
 ## What you get
@@ -82,7 +82,7 @@ report/
 :link: install
 :link-type: doc
 
-`uv sync`, and the two alternatives for a tight inode quota or a plain pip
+`uv sync`, plus the two alternatives for a tight inode quota or a plain pip
 environment.
 :::
 
@@ -90,8 +90,8 @@ environment.
 :link: usage
 :link-type: doc
 
-A recipe per question, following a running job, output formats and what the
-parser costs.
+One recipe per question, following a running job, output formats and the cost
+of parsing.
 :::
 
 :::{grid-item-card} {octicon}`graph` Reading the report

@@ -1,8 +1,9 @@
 # Profiles
 
-A profile is a YAML file describing what a code prints. Profiles compose:
-`slurm` (always applied) plus `icon` plus `cray-mpich` describe an ICON run on a
-Cray machine, and each is detected from the content of the log itself.
+A profile is a YAML file describing what a code prints. Profiles are
+composable: `slurm` (always applied) together with `icon` and `cray-mpich`
+describes an ICON run on a Cray machine, and each profile is detected from the
+content of the log itself.
 
 ```bash
 runhealth --list-profiles
@@ -19,14 +20,14 @@ runhealth --list-profiles
 
 ## Adding your own
 
-Drop a YAML file in a directory and point `runhealth` at it:
+Place a YAML file in a directory and point `runhealth` at it:
 
 ```bash
 runhealth /path/to/logs --profile-dir ./my-profiles
 export RUNHEALTH_PROFILE_DIR=$HOME/.runhealth   # or set it once
 ```
 
-Here is a complete profile for a solver that prints
+The following is a complete profile for a solver that prints
 `iteration 42, residual 1.0e-6`:
 
 ```yaml
@@ -54,12 +55,12 @@ outcome:
   - {re: '^diverged after (\d+) iterations', level: fail}
 ```
 
-That is enough for throughput, a progress-rate plot, phase timing, stall
+This is sufficient for throughput, a progress-rate plot, phase timing, stall
 detection against the typical iteration time, and a verdict. `--profile
-mysolver` pins it; without that flag it is detected automatically.
+mysolver` pins the profile; without that flag it is detected automatically.
 
-The full schema, covering timer tables, message families and thresholds, is in
-the [profile reference](profile-reference.md).
+The complete schema, covering timer tables, message families and thresholds, is
+given in the [profile reference](profile-reference.md).
 
 ```{toctree}
 :maxdepth: 2
