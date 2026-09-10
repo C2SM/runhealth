@@ -9,6 +9,17 @@ point at which a series of runs started to degrade.
 Grades are `ok`, `worth a look`, `warning` and `problem`. A run's grade is the
 worst of its checks.
 
+## The run page header
+
+Under the run's name: the job id, when it started and ended, and the
+`machine:/path` the log was read from. For a [remote log](usage.md#remote-logs)
+this is the original host and path, not the local copy in
+`.remote-cache/` that `runhealth` actually parsed.
+
+When the scheduler echoed the job script at the top of the log, a **run
+script** link sits alongside it and opens the exact script that was
+submitted, without leaving the page.
+
 ## The checks
 
 Each run page opens with a list of checks. A check states what it found and
