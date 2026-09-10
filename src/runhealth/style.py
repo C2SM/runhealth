@@ -39,6 +39,13 @@ LIGHT = {
     "tick": "#6a6862",
     "whisker": "#3f3e38",
     "shadow": "0 1px 2px rgba(20,18,10,.05), 0 4px 14px rgba(20,18,10,.04)",
+    # Shell syntax, for the run script a job echoed into its log.
+    "syn-cmt": "#75736b",
+    "syn-dir": "#c98216",
+    "syn-str": "#2f8f5b",
+    "syn-var": "#0f8c95",
+    "syn-kw": "#8b5cc7",
+    "syn-cmd": "#3d7fd6",
 }
 
 DARK = {
@@ -58,6 +65,12 @@ DARK = {
     "tick": "#a8a69b",
     "whisker": "#c9c7bc",
     "shadow": "none",
+    "syn-cmt": "#9d9b90",
+    "syn-dir": "#e5a94c",
+    "syn-str": "#64c48c",
+    "syn-var": "#45b3bc",
+    "syn-kw": "#b18ce0",
+    "syn-cmd": "#7cb0ef",
 }
 
 

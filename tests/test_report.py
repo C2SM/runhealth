@@ -144,6 +144,54 @@ def test_a_single_section_needs_no_table_of_contents():
     assert toc.render() == ""
 
 
+def test_the_source_bar_leads_with_the_path_and_its_actions(tmp_path, parsed, assessed):
+    view = views(parsed, assessed, ["icon_success"])[0]
+    view.source = "santis:/scratch/run/LOG.demo.1.o"
+    view.log_href = report.copy_log(view.log, tmp_path, max_bytes=1 << 20)
+    html = report.render_run(view)
+    assert '<div class="source">' in html
+    assert 'class="src-path"' in html and "santis:/scratch/run/LOG.demo.1.o" in html
+    assert "data-open-script" in html and "run script" in html
+    assert "raw log" in html
+
+
+def test_the_run_script_modal_can_be_saved_and_is_highlighted(parsed, assessed):
+    view = views(parsed, assessed, ["icon_success"])[0]
+    html = report.render_run(view)
+    assert '<dialog class="script-modal"' in html
+    assert 'data-download-script="icon_success.run.sh"' in html
+    assert '<span class="sy-dir">#SBATCH --nodes=2</span>' in html
+    # A column with one scrolling row, so the script scrolls and the head stays.
+    assert "dialog.script-modal[open] { display: flex" in html
+
+
+def test_a_log_without_a_run_script_offers_no_modal(parsed, assessed):
+    html = report.render_run(views(parsed, assessed, ["icon_no_timestamps"])[0])
+    assert "<dialog" not in html
+    assert "<button type=\"button\" class=\"src-btn key\" data-open-script>" not in html
+
+
+def test_checks_can_be_filtered_by_grade(parsed, assessed):
+    html = report.render_run(views(parsed, assessed, ["icon_hang"])[0])
+    assert '<div class="filters" data-target=".check"' in html
+    assert 'class="check l-fail" data-grade="fail"' in html
+
+
+def test_one_grade_of_check_needs_no_filter():
+    assert report._grade_filters({"ok": 4}, ".check", "Filter") == ""
+    assert '<button data-grade="fail">' in report._grade_filters(
+        {"ok": 1, "fail": 2}, ".check", "Filter"
+    )
+
+
+def test_the_summary_anchor_clamps_to_the_top_of_the_page(parsed, assessed):
+    html = report.render_run(views(parsed, assessed, ["icon_success"])[0])
+    assert 'href="#summary"' in html
+    # Bigger than everything above the title in any layout, so the offset
+    # clamps to zero instead of leaving it under the sticky header.
+    assert "scroll-margin-top: calc(var(--nav-h) + 100px)" in html
+
+
 def test_embedded_log_is_addressable_by_line(tmp_path, parsed, assessed):
     log = parsed["icon_hang"]
     href = report.copy_log(log, tmp_path, max_bytes=1 << 20)
