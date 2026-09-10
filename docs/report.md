@@ -4,7 +4,9 @@
 
 One row per run, sortable by any column and filterable by health grade, with
 wall clock, throughput and longest silence side by side. Useful for spotting the
-point at which a series of runs started to degrade.
+point at which a series of runs started to degrade. Above the table, every
+directory the report was built from, each as `machine:/path` with the machine
+set apart from the path and a button that copies the whole thing.
 
 Grades are `ok`, `worth a look`, `warning` and `problem`. A run's grade is the
 worst of its checks.
@@ -15,7 +17,8 @@ Under the run's name and its job id sits a row naming the `machine:/path` the
 log was read from, beside the things that can be opened from it. For a
 [remote log](usage.md#remote-logs) the path is the original host and path, not
 the local copy in `.remote-cache/` that `runhealth` actually parsed, so it is
-the address to go back to on the cluster.
+the address to go back to on the cluster; the button beside it copies the whole
+`machine:/path` for pasting into a terminal.
 
 **Run script** appears when the scheduler echoed the job script at the top of
 the log. It opens the script that was submitted, shell-highlighted, with
