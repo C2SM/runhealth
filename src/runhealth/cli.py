@@ -11,6 +11,7 @@ import json
 import os
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -102,17 +103,45 @@ def sync_remote(spec: str, pattern: str | None, staging: Path) -> Path | None:
     return local
 
 
-def resolve_paths(specs: list[str], pattern: str | None, staging: Path) -> list[Path]:
-    """Local paths to scan, syncing any ``host:path`` spec down first."""
+def resolve_paths(
+    specs: list[str], pattern: str | None, staging: Path
+) -> tuple[list[Path], list[tuple[str, Path]]]:
+    """Local paths to scan, syncing any ``host:path`` spec down first.
+
+    Also returns ``(spec, local_dir)`` pairs for the remote specs, so a synced
+    file can later be traced back to the machine it came from.
+    """
     resolved = []
+    remotes: list[tuple[str, Path]] = []
     for spec in specs:
         if is_remote(spec):
             local = sync_remote(spec, pattern, staging)
             if local is not None:
                 resolved.append(local)
+                remotes.append((spec, local))
         else:
             resolved.append(Path(spec))
-    return resolved
+    return resolved, remotes
+
+
+def source_of(path: Path, remotes: list[tuple[str, Path]]) -> str:
+    """The ``machine:/path`` a parsed log file lives at.
+
+    Synced files are traced back to the remote spec they came from; anything
+    else is assumed local, and reported under this machine's own hostname.
+    """
+    resolved = path.resolve()
+    for spec, local_dir in remotes:
+        try:
+            resolved.relative_to(local_dir.resolve())
+        except ValueError:
+            continue
+        host, _, remote = spec.partition(":")
+        remote = remote.rstrip("/")
+        if not remote or Path(remote).name == resolved.name:
+            return spec
+        return f"{host}:{remote}/{resolved.name}"
+    return f"{socket.gethostname()}:{resolved}"
 
 
 def discover(paths: list[Path], pattern: str | None) -> list[Path]:
@@ -231,7 +260,13 @@ def _worker(args) -> dict:
 # -- rendering ------------------------------------------------------------
 
 
-def build(args, files: list[Path], outdir: Path, states: dict[str, str]) -> list[RunView]:
+def build(
+    args,
+    files: list[Path],
+    outdir: Path,
+    states: dict[str, str],
+    remotes: list[tuple[str, Path]],
+) -> list[RunView]:
     profile_dirs = [Path(d) for d in (args.profile_dir or [])]
     names = [n.strip() for n in (args.profile or "").split(",") if n.strip()]
     cache = None if args.no_cache else outdir / ".cache"
@@ -246,7 +281,7 @@ def build(args, files: list[Path], outdir: Path, states: dict[str, str]) -> list
             rl.thresholds["stall_seconds"] = args.stall_seconds
         state = states.get(str(rl.fields.get("job_id") or ""), "")
         a = assess(rl, slurm_state=state)
-        v = RunView(log=rl, assessment=a)
+        v = RunView(log=rl, assessment=a, source=source_of(Path(rl.path), remotes))
         v.page = f"{slug(Path(rl.path).stem)}.html"
         if not args.no_plots:
             # Markdown needs a figure it can point at; HTML inlines the same
@@ -410,9 +445,9 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
-def _select(args, outdir: Path) -> list[Path]:
+def _select(args, outdir: Path) -> tuple[list[Path], list[tuple[str, Path]]]:
     staging = outdir / ".remote-cache"
-    paths = resolve_paths(args.paths, args.glob, staging)
+    paths, remotes = resolve_paths(args.paths, args.glob, staging)
     files = discover(paths, args.glob)
     if args.since:
         window = parse_since(args.since)
@@ -421,7 +456,7 @@ def _select(args, outdir: Path) -> list[Path]:
         else:
             cutoff = time.time() - window
             files = [f for f in files if f.stat().st_mtime >= cutoff]
-    return files[: args.last] if args.last else files
+    return (files[: args.last] if args.last else files), remotes
 
 
 def _publish_dest(args) -> str:
@@ -431,12 +466,12 @@ def _publish_dest(args) -> str:
 
 
 def _once(args, outdir: Path) -> Path | None:
-    files = _select(args, outdir)
+    files, remotes = _select(args, outdir)
     if not files:
         log("runhealth: no logs matched")
         return None
     states = {} if args.no_squeue else slurm_states()
-    views = build(args, files, outdir, states)
+    views = build(args, files, outdir, states, remotes)
     sources = [p if is_remote(p) else str(Path(p).resolve()) for p in args.paths]
     path = write_report(args, views, outdir, sources)
     summarise(views)
@@ -458,7 +493,8 @@ def main(argv: list[str] | None = None) -> int:
 
     outdir = Path(args.outdir)
     if args.list:
-        for f in _select(args, outdir):
+        files, _ = _select(args, outdir)
+        for f in files:
             print(f"{f}  ({f.stat().st_size / 1e6:.1f} MB)")
         return 0
 
