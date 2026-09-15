@@ -88,6 +88,27 @@ def test_figures_degrade_instead_of_failing(tmp_path, parsed, assessed):
     assert not parsed["empty"].notes
 
 
+def test_io_cadence_figure_marks_the_outlier_gap():
+    from runhealth import health
+    from runhealth.extract import RunLog
+
+    walls = [0.0]
+    for gap in [150.0] * 6 + [1200.0]:
+        walls.append(walls[-1] + gap)
+    log = RunLog(
+        first_wall=walls[0],
+        last_wall=walls[-1],
+        series={"output_write": [{"wall": w} for w in walls]},
+        series_roles={"output_write": "io"},
+    )
+    a = health.assess(log, now=walls[-1] + 1)
+    figure = plots.io_cadence(log, a, "test")
+    assert figure is not None
+    assert figure.key == "io_cadence"
+    assert figure.svg.startswith("<svg") and figure.svg.endswith("</svg>")
+    assert "lv-warn" in figure.svg
+
+
 def test_figure_marks_carry_their_own_tooltip(parsed, assessed):
     figs = {
         f.key: f
