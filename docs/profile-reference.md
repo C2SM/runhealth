@@ -159,7 +159,10 @@ line.
   gives the progress rate; if a captured field named by
   `settings.model_time_field` parses as a date, the simulated-time rate is
   computed as well.
-- `io`: output and checkpoint events, ticked on the timeline.
+- `io`: output and checkpoint events, ticked on the timeline. The wall-clock
+  gap between successive events of the same series is also tracked: an
+  outlier gap raises a cadence check, and the "Output cadence" figure plots
+  every series over the run.
 
 ### `markers`: phases
 
@@ -294,6 +297,7 @@ Every number a check compares against. The defaults are defined in
 | `gap_warn_factor` | 5 | in-loop pause, as a multiple of the typical interval |
 | `walltime_warn` | 0.9 | fraction of the requested limit that warns |
 | `outlier_factor` | 3 | progress interval counted as an outlier |
+| `io_gap_outlier_factor` | 4 | gap between `role: io` events counted as an outlier |
 | `imbalance_warn` | 1.25 | ratio of slowest to fastest rank that is worth reporting |
 | `imbalance_fail` | 2.0 | ... and that is considered severe |
 | `drift_warn` | 0.2 | slowdown between first and last quarter |

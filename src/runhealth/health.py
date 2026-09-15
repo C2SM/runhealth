@@ -88,6 +88,7 @@ class Assessment:
     stats: dict[str, Any] = field(default_factory=dict)
     phases: list[Phase] = field(default_factory=list)
     intervals: list[dict] = field(default_factory=list)
+    io_gaps: dict[str, list[dict]] = field(default_factory=dict)
     timers: list[TimerGroup] = field(default_factory=list)
     suspect_nodes: list[tuple[str, str]] = field(default_factory=list)
 
@@ -166,6 +167,24 @@ def intervals(log: RunLog) -> list[dict]:
     return out
 
 
+def io_cadence(log: RunLog) -> dict[str, list[dict]]:
+    """Wall-time gaps between successive events of each I/O series.
+
+    One entry per series carrying ``role: io`` (output writes, checkpoints,
+    ...), so a stall between two output files shows up the same way a stall
+    between progress reports does.
+    """
+    out: dict[str, list[dict]] = {}
+    for name, role in log.series_roles.items():
+        if role != "io":
+            continue
+        walls = [r["wall"] for r in log.series.get(name, []) if r.get("wall") is not None]
+        if len(walls) < 2:
+            continue
+        out[name] = [{"wall": b, "seconds": b - a} for a, b in zip(walls, walls[1:]) if b > a]
+    return out
+
+
 def timer_groups(log: RunLog) -> list[TimerGroup]:
     """Flatten the profile's timer tables into comparable rows."""
     table_name = log.setting("timer_table")
@@ -230,6 +249,7 @@ def assess(log: RunLog, now: float | None = None, slurm_state: str = "") -> Asse
     a = Assessment()
     a.phases = phases(log)
     a.intervals = intervals(log)
+    a.io_gaps = io_cadence(log)
     a.timers = timer_groups(log)
     stall_seconds = float(log.threshold("stall_seconds", 300))
 
@@ -242,6 +262,7 @@ def assess(log: RunLog, now: float | None = None, slurm_state: str = "") -> Asse
     a.checks.extend(_check_progress(log, a))
     a.checks.extend(_check_timers(log, a))
     a.checks.extend(_check_io(log, a))
+    a.checks.extend(_check_io_cadence(log, a))
     a.checks.extend(_check_network(log, a))
     a.checks.append(_check_errors(log, a))
     a.checks.extend(_check_groups(log, a))
@@ -642,6 +663,62 @@ def _check_io(log: RunLog, a: Assessment) -> list[Check]:
                     "Output cost",
                     "warn" if share > 0.25 else "ok",
                     f"Output timers account for up to {share * 100:.0f}% of the run",
+                    "",
+                    ev,
+                )
+            )
+    return out
+
+
+def _check_io_cadence(log: RunLog, a: Assessment) -> list[Check]:
+    """Flag an uneven cadence between the events of an I/O series.
+
+    A single output file that took far longer than its neighbours to appear
+    is usually a transient filesystem stall, not the model itself -- the same
+    reasoning the silence check applies to the log as a whole, but narrowed to
+    one recurring event.
+    """
+    out = []
+    factor = float(log.threshold("io_gap_outlier_factor", 4))
+    for name, gaps in a.io_gaps.items():
+        if len(gaps) < 4:
+            continue
+        seconds = [g["seconds"] for g in gaps]
+        good = [s for s in seconds if s > 0]
+        if not good:
+            continue
+        median = statistics.median(good)
+        label = name.replace("_", " ")
+        ev = [f"typical gap {format_duration(median)} across {len(gaps) + 1} events"]
+        slow = sorted(
+            (g for g in gaps if median and g["seconds"] > factor * median),
+            key=lambda g: -g["seconds"],
+        )
+        if slow:
+            ev += [
+                f"{format_stamp(g['wall'])}: {format_duration(g['seconds'])} "
+                f"({g['seconds'] / median:.0f}x the median)"
+                for g in slow[:5]
+            ]
+            out.append(
+                Check(
+                    f"io_cadence_{name}",
+                    f"{label.capitalize()} cadence",
+                    "warn" if len(slow) > 1 else "info",
+                    f"{len(slow)} of {len(gaps)} gaps between {label} events took more "
+                    f"than {factor:g}x the typical {format_duration(median)}",
+                    "An irregular cadence between recurring writes usually points at a "
+                    "transient filesystem stall rather than the model itself.",
+                    ev,
+                )
+            )
+        else:
+            out.append(
+                Check(
+                    f"io_cadence_{name}",
+                    f"{label.capitalize()} cadence",
+                    "ok",
+                    f"Regular cadence, typical gap {format_duration(median)}",
                     "",
                     ev,
                 )

@@ -1,6 +1,20 @@
 import pytest
 
 from runhealth import health
+from runhealth.extract import RunLog
+
+
+def _io_log(gaps: list[float]) -> RunLog:
+    """A synthetic run whose only content is a series of I/O events."""
+    walls = [0.0]
+    for g in gaps:
+        walls.append(walls[-1] + g)
+    return RunLog(
+        first_wall=walls[0],
+        last_wall=walls[-1],
+        series={"output_write": [{"wall": w} for w in walls]},
+        series_roles={"output_write": "io"},
+    )
 
 
 def test_healthy_run_is_not_flagged_as_failed(assessed):
@@ -42,6 +56,36 @@ def test_imbalance_never_fails_a_run_on_its_own(assessed):
     assert check is not None
     assert check.level in {"ok", "info", "warn"}
     assert "8.00x" in check.headline
+
+
+def test_io_cadence_is_measured_between_output_files():
+    log = _io_log([150.0] * 6)
+    gaps = health.io_cadence(log)["output_write"]
+    assert [g["seconds"] for g in gaps] == pytest.approx([150.0] * 6)
+
+
+def test_io_cadence_flags_a_gap_far_from_the_typical_one():
+    log = _io_log([150.0] * 6 + [1200.0])
+    a = health.assess(log, now=log.last_wall + 1)
+    check = a.check("io_cadence_output_write")
+    assert check is not None
+    assert check.level in {"warn", "info"}
+    assert "1200" not in check.headline  # human-formatted, not raw seconds
+    assert any("8x" in e for e in check.evidence)
+
+
+def test_io_cadence_is_ok_when_regular():
+    log = _io_log([150.0] * 6)
+    a = health.assess(log, now=log.last_wall + 1)
+    check = a.check("io_cadence_output_write")
+    assert check is not None
+    assert check.level == "ok"
+
+
+def test_io_cadence_needs_a_few_events_before_judging():
+    log = _io_log([150.0, 9000.0])
+    a = health.assess(log, now=log.last_wall + 1)
+    assert a.check("io_cadence_output_write") is None
 
 
 def test_generic_profile_still_produces_useful_checks(assessed):

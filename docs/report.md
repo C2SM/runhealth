@@ -45,6 +45,7 @@ through the other twelve checks.
 | **Where the time went** | The largest timers, as a share of the total. |
 | **Load imbalance** | How much longer the slowest rank spent in each timer than the fastest. This never fails a run on its own; it is a performance observation, and spread on a *wait* timer is the symptom of imbalance created somewhere else. |
 | **Checkpoint write / Output cost** | Volume and rate of restart writes, and the share of the run spent in output timers. |
+| **Output write cadence / Checkpoint write cadence** | The wall-clock gap between successive output or checkpoint writes. One gap far from the typical one usually means a transient filesystem stall. |
 | **Network** | Fabric counters and warnings. A burst of dropped flow-control messages means the network, not the code, was the limit. |
 | **Suspect nodes** | Nodes named in step failures, or carrying a disproportionate share of the warnings. Ready to be pasted into an `--exclude=` list. |
 | **Errors** | Error-looking lines collapsed by shape, with digits masked so the same message from a thousand ranks becomes one row. |
@@ -83,8 +84,10 @@ points to the fabric rather than to the code.
 
 In addition, on every page for which the log provides the input: the **run
 timeline** shown on the [front page](index.md), the **longest silences**, each
-labeled with the last line before it, **load imbalance** per timer, and the
-**network counter spread** between the least and the most loaded NIC.
+labeled with the last line before it, the **output cadence** -- wall time
+between successive output or checkpoint writes, one line per kind of event --
+**load imbalance** per timer, and the **network counter spread** between the
+least and the most loaded NIC.
 
 A figure is omitted rather than approximated when the log does not contain what
 it requires, and `--no-plots` leaves out all of them.

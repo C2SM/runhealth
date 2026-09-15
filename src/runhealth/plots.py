@@ -14,6 +14,7 @@ PDF.
 
 from __future__ import annotations
 
+import statistics
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -357,6 +358,87 @@ def top_gaps(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     )
 
 
+def io_cadence(log: RunLog, a: Assessment, uid: str) -> Figure | None:
+    live = {name: gaps for name, gaps in a.io_gaps.items() if len(gaps) >= 3}
+    if not live:
+        return None
+    names = sorted(live, key=lambda n: -len(live[n]))[:5]
+    total = log.wall_seconds or 1.0
+    t0 = log.first_wall or 0.0
+    factor = float(log.threshold("io_gap_outlier_factor", 4))
+    all_seconds = [g["seconds"] for n in names for g in live[n]]
+
+    ch = svg.Chart(height=258, pad=(60, 24, 20, 52), uid=uid)
+    p = ch.plot
+    x = svg.Scale(0, total, p.x, p.right)
+    overall_median = statistics.median(all_seconds)
+    if overall_median and max(all_seconds) > 20 * overall_median:
+        floor = min((v for v in all_seconds if v > 0), default=1.0)
+        y = svg.LogScale(floor * 0.8, max(all_seconds) * 1.3, p.bottom, p.y)
+        y_ticks = svg.log_ticks(y.d0, y.d1)
+    else:
+        y_max = max(all_seconds) * 1.14 or 1.0
+        y = svg.Scale(0, y_max, p.bottom, p.y)
+        y_ticks = svg.nice_ticks(0, y_max, 5)
+
+    samples = []
+    legend_entries = []
+    for i, name in enumerate(names):
+        gaps = live[name]
+        seconds = [g["seconds"] for g in gaps]
+        median = statistics.median(seconds)
+        label = name.replace("_", " ")
+        cls = f"s{i % 7}"
+        drawn = _decimate([(x(g["wall"] - t0), y(g["seconds"])) for g in gaps], p.w)
+        body = ch.path(drawn, cls=f"{cls} stroke", vector_effect="non-scaling-stroke")
+        for g, v in zip(gaps, seconds):
+            if not median or v <= factor * median:
+                continue
+            tip = _tip(
+                label,
+                f"{_dur(v)} since the previous one, {v / median:.1f}x the median",
+                f"at {format_stamp(g['wall'])}",
+            )
+            body += ch.circle(x(g["wall"] - t0), y(v), 3.4, **_mark("lv-warn fill", tip))
+        ch.geometry.append(
+            svg.tag("g", body, cls="series", data_series=str(i), aria_label=f"{label} cadence")
+        )
+        legend_entries.append((cls, f"{label} ({len(gaps) + 1} events)"))
+        for g, v in _thin(list(zip(gaps, seconds)), MAX_HOVER_SAMPLES):
+            tip = _tip(
+                label,
+                f"{_dur(v)} since the previous one",
+                f"{v / median:.2f}x the median" if median else "",
+                f"at {format_stamp(g['wall'])}",
+            )
+            samples.append(
+                [round(x(g["wall"] - t0), 1), round(y(v), 1), round(g["wall"] - t0, 1), tip]
+            )
+
+    ch.legend(legend_entries)
+    unit, fmt = _time_fmt(total)
+    ch.x_axis(x, svg.time_ticks(total), fmt, f"wall clock since the first stamped line ({unit})")
+    ch.y_axis(y, y_ticks, _dur, "gap since the previous event")
+    return Figure(
+        key="io_cadence",
+        title="Output cadence",
+        note=f"{len(names)} series" if len(names) > 1 else f"{len(live[names[0]]) + 1} events",
+        caption=(
+            "Wall time between successive output or checkpoint writes. A flat line is "
+            "a steady cadence; a spike is a single write that took much longer than its "
+            "neighbours, usually a transient filesystem stall rather than the model "
+            "itself. Click a legend entry to hide that series."
+        ),
+        svg=ch.render(
+            f"Wall-time gaps between {len(names)} kind(s) of recurring write",
+            xdomain=f"0,{svg.num(total)}",
+            xfmt="duration",
+            samples=svg.pack(samples),
+            time="1",
+        ),
+    )
+
+
 def timer_breakdown(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     picks = []
     for group in a.timers:
@@ -650,6 +732,7 @@ MAKERS = [
     phase_timeline,
     progress_rate,
     top_gaps,
+    io_cadence,
     timer_breakdown,
     imbalance,
     warning_rate,
