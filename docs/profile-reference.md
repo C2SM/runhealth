@@ -63,7 +63,7 @@ with `^` to refer to the start of the message.
 
 (profile-contains)=
 
-### `contains` and why it matters
+### `contains`: prefiltering with a literal
 
 Rules are applied to every line of the file, and a file can hold a million
 lines. Before running a regular expression, `runhealth` checks whether a
@@ -74,8 +74,9 @@ the literal optional.
 
 Specify `contains:` explicitly when the derivation fails but a literal is known
 to appear. For a pattern such as `'Constructing the .* coupling frame'`, the
-hint `coupling frame` saves considerable time. The literal must appear in
-**every** line the pattern matches, otherwise those lines are silently skipped.
+hint `coupling frame` reduces the parsing time considerably. The literal must
+appear in **every** line the pattern matches, otherwise those lines are
+silently skipped.
 
 ## Detection
 
@@ -135,8 +136,9 @@ keyvalues:
     contains: SLURM
 ```
 
-`sbatch` is special: its `time` entry is read as the requested wall-clock limit,
-which the wall-time check and the attempt-boundary detection both rely on.
+The `sbatch` entry has a special role: its `time` value is read as the
+requested wall-clock limit, on which both the wall-time check and the
+attempt-boundary detection rely.
 
 ### `series`: repeated events
 
@@ -299,11 +301,11 @@ Every number a check compares against. The defaults are defined in
 | `outlier_factor` | 3 | progress interval counted as an outlier |
 | `io_gap_outlier_factor` | 4 | gap between `role: io` events counted as an outlier |
 | `imbalance_warn` | 1.25 | ratio of slowest to fastest rank that is worth reporting |
-| `imbalance_fail` | 2.0 | ... and that is considered severe |
+| `imbalance_fail` | 2.0 | ratio of slowest to fastest rank that is considered severe |
 | `drift_warn` | 0.2 | slowdown between first and last quarter |
 | `timer_share_floor` | 0.05 | ignore timers below this share of the run |
-| `group_warn` | 1000 | message family large enough to warrant a warning ... |
-| `group_share_warn` | 0.2 | ... if it is also this fraction of the whole log |
+| `group_warn` | 1000 | size of a message family that warrants a warning, provided that `group_share_warn` is also reached |
+| `group_share_warn` | 0.2 | fraction of the whole log that such a family must also account for |
 | `node_share_warn` | 0.25 | one node's share of a family that makes it suspect |
 
 ## Testing a profile
@@ -313,6 +315,6 @@ runhealth mylog.out --profile mymodel -o /tmp/check --no-plots
 runhealth --list-profiles
 ```
 
-If a rule never fires, the common causes are a `contains:` literal that does
-not appear in every matching line, a pattern anchored with `^` that is in fact
+If a rule never fires, the usual causes are a `contains:` literal that does not
+appear in every matching line, a pattern anchored with `^` that is in fact
 indented, or a rule that should have been marked `preamble: true`.

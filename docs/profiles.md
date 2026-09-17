@@ -18,7 +18,7 @@ runhealth --list-profiles
 | `icon` | ICON output or a generated ICON runscript | time steps and SYPD, the timer report, coupling and I/O phases, `WARNING PE` families, the success/failure protocol |
 | `cray-mpich` | Slingshot or libfabric output | the CXI counter summary, libfabric flow-control warnings, MPICH aborts |
 
-## Adding your own
+## Adding a profile
 
 Place a YAML file in a directory and point `runhealth` at it:
 
@@ -56,7 +56,7 @@ outcome:
 ```
 
 This is sufficient for throughput, a progress-rate plot, phase timing, stall
-detection against the typical iteration time, and a verdict. `--profile
+detection relative to the typical iteration time, and a verdict. `--profile
 mysolver` pins the profile; without that flag it is detected automatically.
 
 The complete schema, covering timer tables, message families and thresholds, is

@@ -1,42 +1,45 @@
 # runhealth
 
-**Read a folder of HPC batch job logs. Get a report that says how the runs went.**
+**Analyze a directory of HPC batch job logs and obtain a report on how the
+runs went.**
 
-Did it finish? Did it hang, and where? How fast was it, and did it slow down?
-Was the work spread evenly across ranks? Was the machine underneath it healthy?
-Those answers are all in the log already. `runhealth` reads them out.
+A batch log already records whether the job completed, whether and where it
+hung, how fast it ran and whether it slowed down, how evenly the work was
+distributed across ranks, and whether the underlying machine was healthy.
+`runhealth` extracts that information and presents it as a report.
 
 ```bash
 runhealth /path/to/logs -o report/ --open
 ```
 
-Run it from your laptop against logs that are still located on a cluster, and
-the report is written to your laptop as well, ready to be opened in a browser
-without an SSH tunnel:
+It can be run on a local machine against logs that reside on a cluster. The
+report is then written locally as well and can be opened in a browser without
+an SSH tunnel:
 
 ```bash
 runhealth santis:/scratch/e1000/run -o report/ --open
 ```
 
-Any `host:/path` works as long as `ssh host` already does; internally,
-`runhealth` uses `rsync` to copy the matching logs first.
+Any `host:/path` argument is accepted, provided that `ssh host` already works;
+`runhealth` first copies the matching logs with `rsync`.
 
 <p align="center">
   <img src="docs/images/timeline.svg" alt="A run timeline: one blue phase filling the whole allocation, with a red silence bar above it" width="820">
 </p>
 
-<p align="center"><em>One picture, one diagnosis: the job spent its entire
-allocation in the coupling setup and never wrote another line.</em></p>
+<p align="center"><em>A single figure is sufficient for the diagnosis: the job
+spent its entire allocation in the coupling setup and wrote no further
+output.</em></p>
 
-It is **model-agnostic**. The core understands batch logs in general:
+`runhealth` is **model-agnostic**. The core interprets batch logs in general:
 timestamps, SLURM records, silence and error signatures. Everything specific to
-a code lives in a **YAML profile**, so supporting your own model means writing
-a few regular expressions rather than Python. ICON and Cray MPICH profiles ship
-with it.
+a code is defined in a **YAML profile**, so support for an additional model
+requires a few regular expressions rather than Python code. Profiles for ICON
+and Cray MPICH are included.
 
-## Try it
+## Quick start
 
-Two sample logs ship with the repository. No cluster needed:
+Two sample logs are included in the repository, so no cluster is required:
 
 ```bash
 git clone https://github.com/C2SM/runhealth.git
@@ -52,9 +55,9 @@ runhealth: parsed 2 log(s) in 0.2s
 runhealth: wrote /tmp/demo/index.html
 ```
 
-Where the shell cannot pass a local file to a browser, for example in a bare
-SSH session or in WSL with its Windows interoperability switched off, use
-`--serve` instead of `--open` and browse to <http://127.0.0.1:8000/>.
+If the shell cannot pass a local file to a browser, for example in a plain SSH
+session or in WSL with Windows interoperability disabled, use `--serve` instead
+of `--open` and open <http://127.0.0.1:8000/>.
 
 ## Documentation
 
@@ -67,14 +70,16 @@ The full documentation lives at **<https://c2sm.github.io/runhealth/>**:
   check means, how to read the figures
 - [Profiles](https://c2sm.github.io/runhealth/profiles.html) and the
   [profile reference](https://c2sm.github.io/runhealth/profile-reference.html):
-  teaching `runhealth` a new code
-- [Get more out of your logs](https://c2sm.github.io/runhealth/logging.html):
-  two inexpensive changes to a job script that make it far more informative
+  adding support for a new code
+- [Improving log quality](https://c2sm.github.io/runhealth/logging.html): two
+  low-cost changes to a job script that make its output considerably more
+  informative
 - [Troubleshooting](https://c2sm.github.io/runhealth/troubleshooting.html)
 - [Command line reference](https://c2sm.github.io/runhealth/cli.html)
 - [Development](https://c2sm.github.io/runhealth/development.html)
 
-The sources are Markdown under [`docs/`](docs/); build them locally with
+The sources are Markdown files under [`docs/`](docs/); they can be built
+locally with
 
 ```bash
 uv run --group docs sphinx-build -b html docs docs/_build/html

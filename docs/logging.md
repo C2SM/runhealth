@@ -1,13 +1,14 @@
-# Get more out of your logs
+# Improving log quality
 
-`runhealth` reports what a log contains. Two inexpensive changes to a job
-script make it contain considerably more.
+`runhealth` reports what a log contains. Two low-cost changes to a job script
+substantially increase the amount of information available.
 
-## 1. Stamp every line with the wall clock
+## 1. Add a wall-clock timestamp to every line
 
-Without a timestamp there is no silence detection, which is the single most
-valuable signal, no phase timeline and no progress rate, and `runhealth`
-states this rather than guessing. Any line-buffered filter is sufficient:
+Without timestamps there is no silence detection, which is the most informative
+single signal, no phase timeline and no progress rate; `runhealth` reports this
+limitation rather than estimating the missing values. Any line-buffered filter
+is sufficient:
 
 ```bash
 pipe=job_$$.pipe
@@ -25,10 +26,12 @@ The timestamp is also what allows the report to show the submitted **run
 script**: without a stamp on every line, `runhealth` cannot distinguish the
 script's own echo of itself from the actual output of the run.
 
-## 2. Turn on the MPI stack's counters
+## 2. Enable the counters of the MPI library
 
-On Cray MPICH, `MPICH_OFI_CXI_COUNTER_REPORT=3` and `FI_LOG_LEVEL=warn` cost
-nothing and turn "the run was slow" into "the fabric dropped 640k flow-control
-messages in one minute".
+On Cray MPICH, `MPICH_OFI_CXI_COUNTER_REPORT=3` and `FI_LOG_LEVEL=warn` add no
+measurable overhead and replace the observation that a run was slow with the
+specific finding that the fabric dropped 640k flow-control messages within one
+minute.
 
-Also worth enabling: `srun -l` for rank labels, and the model's own timers.
+Also recommended: `srun -l` for rank labels, and the timers of the model
+itself.

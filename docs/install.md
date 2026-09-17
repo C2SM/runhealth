@@ -16,7 +16,7 @@ activate the environment once with `source .venv/bin/activate`.
 :::{dropdown} Placing the environment elsewhere under a tight inode quota
 :icon: database
 
-The environment holds a few thousand files, which counts against the inode
+The environment holds a few thousand files, which count against the inode
 quota of some parallel file systems.
 
 ```bash
@@ -39,8 +39,8 @@ Requirements: Python 3.11 or newer and `pyyaml`. The figures are drawn as SVG
 by `runhealth` itself, so no plotting library has to be installed.
 :::
 
-PDF output requires one additional package, and only if `runhealth` should
-write the PDF itself rather than the HTML being printed from a browser:
+PDF output requires one additional package, and only if `runhealth` is to write
+the PDF itself rather than the HTML being printed from a browser:
 
 ```bash
 uv sync --extra pdf
