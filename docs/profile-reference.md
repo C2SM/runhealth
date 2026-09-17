@@ -121,6 +121,12 @@ fields:
 `group` picks the capture group (default 1), `cast` is `int` or `float`, and
 `keep` is `first` (default) or `last`.
 
+One name is conventional: a field called `<component>_ranks`, cast to `int`,
+declares how many ranks a component of a coupled model was given. The report
+lists them, and the coupling check uses them to assign each timer table to a
+component, assuming that the components occupy consecutive blocks of ranks in
+the order in which the log announces them.
+
 ### `keyvalues`: a dictionary
 
 The pattern must capture two groups: the key and the value.
@@ -279,6 +285,9 @@ Names and column mappings used by the analysis. All entries are optional.
 | `timer_root` | the label of its overall timer, e.g. `total` |
 | `timer_columns` | map of `total`, `min`, `max`, `min_rank`, `max_rank`, `calls`, `pes` to column names |
 | `io_timers` | timer labels that are output rather than computation |
+| `coupling_timers` | timer labels that belong to the coupler rather than to computation |
+| `coupling_wait_timers` | the subset of those on which a component blocks until its partner delivers |
+| `timer_group_ranks` | pattern matching the first and last rank in the title of a timer table, which assigns each table to a component |
 | `counter_table`, `ratio_table` | network counter blocks |
 | `counter_columns` | map of `samples`, `min`, `mean`, `max` to column names |
 | `counter_watch` | counter names worth reporting |
@@ -304,6 +313,8 @@ Every number a check compares against. The defaults are defined in
 | `imbalance_fail` | 2.0 | ratio of slowest to fastest rank that is considered severe |
 | `drift_warn` | 0.2 | slowdown between first and last quarter |
 | `timer_share_floor` | 0.05 | ignore timers below this share of the run |
+| `coupling_share_warn` | 0.15 | share of a component's time in the coupler that is worth reporting |
+| `coupling_ratio_warn` | 2.0 | how much larger that share must be than the partner's to call it waiting |
 | `group_warn` | 1000 | size of a message family that warrants a warning, provided that `group_share_warn` is also reached |
 | `group_share_warn` | 0.2 | fraction of the whole log that such a family must also account for |
 | `node_share_warn` | 0.25 | one node's share of a family that makes it suspect |

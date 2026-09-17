@@ -2,6 +2,7 @@ import pytest
 
 from runhealth import health
 from runhealth.extract import RunLog
+from runhealth.tables import Row, Table
 
 
 def _io_log(gaps: list[float]) -> RunLog:
@@ -136,3 +137,55 @@ def test_status_uses_the_scheduler_when_it_can(parsed):
     assert health.assess(log, now=1e12, slurm_state="PENDING").status == "QUEUED"
     assert health.assess(log, now=1e12, slurm_state="RUNNING").status == "STALLED"
     assert health.assess(log, now=1e12).status == "INCOMPLETE"
+
+
+def _coupled_log(atmo: float, ocean: float, ranks: int = 8) -> RunLog:
+    """A synthetic coupled run: one timer report per component, ``coupling`` in each."""
+
+    def table(title: str, coupling: float) -> Table:
+        return Table(
+            name="timers",
+            title=title,
+            rows=[
+                Row("total", 0, values={"total avg (s)": 100.0}),
+                Row("integrate", 1, values={"total avg (s)": 100.0 - coupling}),
+                Row("coupling", 1, values={"total avg (s)": coupling}),
+                Row("cpl_get", 2, values={"total avg (s)": coupling * 0.9}),
+            ],
+        )
+
+    return RunLog(
+        fields={"atmo_ranks": ranks, "ocean_ranks": ranks},
+        tables={
+            "timers": [
+                table(f"Timer report, ranks 0-{ranks - 1}", atmo),
+                table(f"Timer report, ranks {ranks}-{2 * ranks - 1}", ocean),
+            ]
+        },
+        settings={
+            "timer_table": "timers",
+            "timer_root": "total",
+            "coupling_timers": ["coupling"],
+            "coupling_wait_timers": ["cpl_get"],
+            "timer_group_ranks": r"ranks\s+(\d+)\s*-\s*(\d+)",
+        },
+    )
+
+
+def test_coupling_names_the_component_that_waits():
+    a = health.assess(_coupled_log(atmo=40.0, ocean=5.0), now=1e12)
+    check = a.check("coupling")
+    assert check.level == "warn"
+    assert "atmo is waiting for ocean" in check.headline
+    assert any(e.startswith("atmo: 40%") for e in check.evidence)
+
+
+def test_coupling_is_quiet_when_the_components_are_balanced():
+    check = health.assess(_coupled_log(atmo=8.0, ocean=6.0), now=1e12).check("coupling")
+    assert check.level == "ok"
+    assert "waiting" not in check.headline
+
+
+def test_coupling_check_is_absent_without_coupling_timers(assessed):
+    """The bundled fixtures are single-component, so nothing is attributed."""
+    assert assessed["slurm_generic"].check("coupling") is None

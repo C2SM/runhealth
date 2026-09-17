@@ -20,6 +20,8 @@ thresholds:
   imbalance_fail: 2.0
   drift_warn: 0.2             # slowdown between first and last quarter
   timer_share_floor: 0.05     # ignore timers below this share of the total
+  coupling_share_warn: 0.15   # share of a component's time spent in the coupler
+  coupling_ratio_warn: 2.0    # ... and how much larger it is than its partner's
   group_warn: 1000            # a message family this large is worth a look
   group_share_warn: 0.2       # ... and this much of the whole log
   node_share_warn: 0.25       # one node contributing this much of a family

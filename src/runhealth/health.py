@@ -12,6 +12,7 @@ The grade of a run is the worst level any check returned.
 from __future__ import annotations
 
 import math
+import re
 import statistics
 import time
 from dataclasses import dataclass, field
@@ -261,6 +262,7 @@ def assess(log: RunLog, now: float | None = None, slurm_state: str = "") -> Asse
     a.checks.append(_check_walltime(log, a))
     a.checks.extend(_check_progress(log, a))
     a.checks.extend(_check_timers(log, a))
+    a.checks.extend(_check_coupling(log, a))
     a.checks.extend(_check_io(log, a))
     a.checks.extend(_check_io_cadence(log, a))
     a.checks.extend(_check_network(log, a))
@@ -624,6 +626,111 @@ def _check_timers(log: RunLog, a: Assessment) -> list[Check]:
             )
         )
     return out
+
+
+def _components(log: RunLog) -> list[tuple[str, int, int]]:
+    """Rank range of every component, from the profile's ``*_ranks`` fields.
+
+    A coupled model gives its components consecutive blocks of ranks in the
+    order in which it announces them, so the counts alone place each component
+    on the rank axis.
+    """
+    out: list[tuple[str, int, int]] = []
+    start = 0
+    for key, value in log.fields.items():
+        if key.endswith("_ranks") and isinstance(value, int) and value > 0:
+            out.append((key[: -len("_ranks")], start, start + value - 1))
+            start += value
+    return out
+
+
+def _component_of(title: str, pattern: str, components: list[tuple[str, int, int]]) -> str:
+    """Name the component a timer table belongs to, from the ranks in its title."""
+    m = re.search(pattern, title) if pattern else None
+    if not m:
+        return ""
+    first, last = int(m.group(1)), int(m.group(2))
+    name = next((n for n, lo, hi in components if lo <= first <= hi), "")
+    return name or f"ranks {first}-{last}"
+
+
+def _check_coupling(log: RunLog, a: Assessment) -> list[Check]:
+    """Compare how much of its time each component spends in the coupler.
+
+    A coupled run prints one timer report per component, so the share of the
+    coupling timers is directly comparable between them. The component with
+    the much larger share is the one that arrives at the exchange first and
+    then waits for its partner, which is the usual signature of a rank split
+    that does not match the cost of the two components.
+    """
+    names = set(log.setting("coupling_timers", []) or [])
+    waits = set(log.setting("coupling_wait_timers", []) or [])
+    if not (names or waits) or not a.timers:
+        return []
+    components = _components(log)
+    pattern = log.setting("timer_group_ranks", "")
+    warn_share = float(log.threshold("coupling_share_warn", 0.15))
+    warn_ratio = float(log.threshold("coupling_ratio_warn", 2.0))
+
+    measured: list[tuple[float, str, str]] = []
+    for g in a.timers:
+        # A coupling timer nested below another one, typically a wait below the
+        # coupling timer itself, is already contained in it and must not be
+        # added a second time.
+        counted: list[TimerRow] = []
+        nested: list[TimerRow] = []
+        outer: int | None = None
+        for r in g.rows:
+            if outer is not None and r.depth <= outer:
+                outer = None
+            if r.label in names or r.label in waits:
+                if outer is None:
+                    counted.append(r)
+                    outer = r.depth
+                else:
+                    nested.append(r)
+        if not counted:
+            continue
+        share = sum(r.share for r in counted)
+        label = _component_of(g.title, pattern, components) or g.title
+        parts = ", ".join(
+            f"{r.label} {r.share * 100:.0f}% ({format_duration(r.total)})"
+            for r in sorted(counted + nested, key=lambda r: -r.share)
+        )
+        measured.append(
+            (share, label, f"{label}: {share * 100:.0f}% of {g.root} in the coupler - {parts}")
+        )
+    if not measured:
+        return []
+
+    measured.sort(key=lambda m: -m[0])
+    detail = (
+        "The coupling timers cover the exchange itself together with the wait for the "
+        "partner component. A share that is much larger in one component than in the "
+        "other means that component reaches the exchange first and then waits, which "
+        "usually calls for a different rank split. This never fails a run by itself."
+    )
+    if len(measured) > 1:
+        (hi, hi_name, _), (lo, lo_name, _) = measured[0], measured[1]
+        waiting = hi >= warn_share and (lo <= 0 or hi / lo >= warn_ratio)
+        level = "warn" if waiting else ("info" if hi >= warn_share else "ok")
+        headline = (
+            f"{hi_name} spends {hi * 100:.0f}% of its time in the coupler against "
+            f"{lo * 100:.0f}% for {lo_name}"
+        )
+        if waiting:
+            headline += f": {hi_name} is waiting for {lo_name}"
+    else:
+        hi, hi_name, _ = measured[0]
+        level = "info" if hi >= warn_share else "ok"
+        headline = f"{hi_name} spends {hi * 100:.0f}% of its time in the coupler"
+        detail += (
+            " Only one timer report was found here, so the wait cannot be attributed "
+            "to a partner component."
+        )
+    return [
+        Check("coupling", "Coupling cost", level, headline, detail, [e for _, _, e in measured])
+    ]
 
 
 def _check_io(log: RunLog, a: Assessment) -> list[Check]:
