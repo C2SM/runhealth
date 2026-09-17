@@ -36,6 +36,12 @@ settings:
     pes: "# PEs"
   io_timers: [wrt_output, wait_for_async_io, write_restart, restart]
   coupling_timers: [coupling, cpl_init, cpl_init_def_comp, cpl_init_enddef]
+  # Timers on which a component blocks until its partner delivers. Labels a
+  # given ICON version does not print simply never match.
+  coupling_wait_timers: [cpl_get, cpl_1stget, cpl_put]
+  # A coupled run prints one timer report per component, headed by the ranks
+  # it covers; this is what assigns each report to atmo or ocean.
+  timer_group_ranks: 'ranks\s+(\d+)\s*-\s*(\d+)'
 
 fields:
   model_version:
