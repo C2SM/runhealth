@@ -1,10 +1,12 @@
 # runhealth
 
-**Read a folder of HPC batch job logs. Get a report that says how the runs went.**
+**Analyze a directory of HPC batch job logs and obtain a report on how the
+runs went.**
 
-Did it finish? Did it hang, and where? How fast was it, and did it slow down?
-Was the work spread evenly across ranks? Was the machine underneath it healthy?
-Those answers are all in the log already. `runhealth` reads them out.
+A batch log already records whether the job completed, whether and where it
+hung, how fast it ran and whether it slowed down, how evenly the work was
+distributed across ranks, and whether the underlying machine was healthy.
+`runhealth` extracts that information and presents it as a report.
 
 ```bash
 runhealth /path/to/logs -o report/ --open
@@ -15,19 +17,19 @@ runhealth /path/to/logs -o report/ --open
 :width: 820px
 :align: center
 
-One picture, one diagnosis: the job spent its entire allocation in the coupling
-setup and never wrote another line.
+A single figure is sufficient for the diagnosis: the job spent its entire
+allocation in the coupling setup and wrote no further output.
 ```
 
-It is **model-agnostic**. The core understands batch logs in general:
+`runhealth` is **model-agnostic**. The core interprets batch logs in general:
 timestamps, SLURM records, silence and error signatures. Everything specific to
-a code lives in a [YAML profile](profiles.md), so supporting your own model
-means writing a few regular expressions rather than Python. ICON and Cray MPICH
-profiles ship with it.
+a code is defined in a [YAML profile](profiles.md), so support for an additional
+model requires a few regular expressions rather than Python code. Profiles for
+ICON and Cray MPICH are included.
 
-## See it work
+## Example
 
-Two sample logs ship with the repository. No cluster needed:
+Two sample logs are included in the repository, so no cluster is required:
 
 ```bash
 runhealth examples/ --glob '*.log' -o /tmp/demo --open
@@ -40,16 +42,16 @@ runhealth: parsed 2 log(s) in 0.2s
 runhealth: wrote /tmp/demo/index.html
 ```
 
-Open `/tmp/demo/index.html`. `demo.log` is a run that finished despite a
-transient fabric problem halfway through; `demo_hang.log` is the same job,
-stuck in its coupling setup until the scheduler terminated it.
+Open `/tmp/demo/index.html`. `demo.log` is a run that completed despite a
+transient fabric problem in the middle of the run; `demo_hang.log` is the same
+job, which remained in its coupling setup until the scheduler terminated it.
 
 If `--open` does nothing, the shell has no browser registered for a local file.
 Use `--serve` instead and browse to <http://127.0.0.1:8000/>; see
 [serving a report](usage.md#sharing-a-report).
 
-On real logs the summary reads the same way. This is one afternoon of a coupled
-climate model:
+The summary reads the same way for production logs. The following example
+covers one afternoon of a coupled climate model:
 
 ```text
 runhealth: parsed 11 log(s) in 12.6s
@@ -60,11 +62,11 @@ runhealth: parsed 11 log(s) in 12.6s
   FAIL  FAILED    2h 15m 20s  LOG.jcp_r2b8_icon4py.828160.o   - CANCELLED DUE to SIGNAL Terminated
 ```
 
-The second line is the one that matters: that run *succeeded* and would never
-have been examined again. For one minute it was also saturated by a network
-retry storm.
+The second line is the important one: the run *succeeded* and would otherwise
+not have been examined again, although for one minute it was saturated by a
+network retry storm.
 
-## What you get
+## Contents of a report
 
 ```text
 report/
@@ -73,7 +75,7 @@ report/
   .cache/                     parsed state, so the next pass is instant
 ```
 
-## Where to go next
+## Next steps
 
 ::::{grid} 1 1 2 2
 :gutter: 3
@@ -82,7 +84,7 @@ report/
 :link: install
 :link-type: doc
 
-`uv sync`, plus the two alternatives for a tight inode quota or a plain pip
+`uv sync`, and two alternatives for a restrictive inode quota or a plain pip
 environment.
 :::
 
@@ -105,7 +107,8 @@ What each check means and how to read the figures.
 :link: profiles
 :link-type: doc
 
-Teach `runhealth` a new code with a YAML file, and the full profile schema.
+Adding support for a new code with a YAML file, and the complete profile
+schema.
 :::
 
 ::::

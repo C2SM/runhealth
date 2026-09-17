@@ -10,11 +10,11 @@ uv run python examples/make_demo.py      # regenerate the sample logs
 The test fixtures are small, hand-written logs, one per case: a healthy run, a
 run that hangs in its coupling setup, two attempts in one file, a generic SLURM
 job from an unknown code, output without timestamps, and the degenerate cases
-(empty, truncated, not a log at all). No real log is committed, as such files
-are far too large; the figures in this documentation are generated from
+(empty, truncated, and not a log file at all). No real log is committed, as
+such files are too large; the figures in this documentation are generated from
 `examples/demo.log`.
 
-## The layout
+## Module layout
 
 | Module | |
 | --- | --- |

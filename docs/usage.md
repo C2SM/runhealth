@@ -2,7 +2,7 @@
 
 ## Recipes
 
-| You want to | Run |
+| Task | Command |
 | --- | --- |
 | Analyze everything in a directory | `runhealth /path/to/logs -o report/` |
 | Analyze logs on a remote cluster from your laptop | `runhealth santis:/path/to/logs -o report/ --open` |
@@ -23,8 +23,8 @@ reuses the cache, so it takes about a second. Every flag is listed in the
 
 ## Remote logs
 
-The recommended way to run `runhealth` is from your own machine, pointing at
-logs that live on a cluster:
+The recommended way to run `runhealth` is from a local machine, pointing at
+logs that reside on a cluster:
 
 ```bash
 runhealth santis:/scratch/e1000/run -o report/ --open
@@ -38,10 +38,10 @@ connection to copy the matching logs into `<outdir>/.remote-cache/` before
 reading them. Only files matching the active glob are transferred, and only
 from that one directory, not from its subdirectories.
 
-The result is a report on your local disk, so `--open` displays it immediately,
-with no need for port forwarding or for `--serve` and `ssh -L`. It also
-combines with `--watch`: each pass synchronizes first, so a report on your
-laptop keeps following a job that is still writing its log on the cluster.
+The result is a report on the local disk, so `--open` displays it immediately,
+without port forwarding or a combination of `--serve` and `ssh -L`. It also
+combines with `--watch`: each pass synchronizes first, so a local report
+continues to follow a job that is still writing its log on the cluster.
 
 A local path and a remote one can be mixed freely in the same invocation:
 
@@ -50,8 +50,8 @@ runhealth santis:/scratch/e1000/run ./local-logs -o report/
 ```
 
 Each run page still names the original `host:/path`, not the local copy under
-`.remote-cache/` that was actually parsed, so a report built on your laptop
-still states exactly where on the cluster a log resides.
+`.remote-cache/` that was actually parsed, so a locally built report still
+states exactly where on the cluster a log resides.
 
 ## Running jobs
 
@@ -62,7 +62,7 @@ says where it stopped.
 When `squeue` is available, `runhealth` asks it for the actual state, so a
 queued job appears as **QUEUED** rather than as a broken run, and a job that
 the scheduler still believes to be running while its log has gone quiet is
-reported as **STALLED**, the one case in which intervening can still help.
+reported as **STALLED**, the one case in which intervention can still help.
 `--no-squeue` disables this.
 
 ```bash
@@ -76,8 +76,8 @@ stopped, so following a growing 100 MB log costs no more than the new lines.
 
 `--format html`
 : The default. `index.html` plus a page per run, with light and dark themes,
-  [interactive figures](report.md#reading-them-in-a-browser) and a real print
-  stylesheet. The browser's **Print to PDF** produces a clean document with
+  [interactive figures](report.md#reading-the-figures-in-a-browser) and a real
+  print stylesheet. The browser's **Print to PDF** produces a clean document with
   sensible page breaks. The figures are written into the pages, so a single
   `.html` file is a complete report that can be attached to an email.
 
@@ -125,10 +125,10 @@ export RUNHEALTH_PUBLISH_URL=https://intranet.example/runs
 runhealth /path/to/logs -o report/ --publish
 ```
 
-Combined with `--watch`, every refresh is published, which turns a running job
-into a page that colleagues can reload as it progresses.
+Combined with `--watch`, every refresh is published, so that a running job is
+presented as a page that colleagues can reload as it progresses.
 
-**Or serve it yourself.** `--serve` starts a small read-only server bound to
+**Serve it directly.** `--serve` starts a small read-only server bound to
 `127.0.0.1`, which is what a login node without a web server can still offer.
 The port is optional and defaults to 8000, and the server runs until it is
 interrupted:
@@ -144,12 +144,12 @@ ssh -L 8080:localhost:8080 login.cluster.example
 ```
 
 Binding to localhost is deliberate. A directory of job logs should not be
-exposed to everyone else logged into a shared node.
+exposed to the other users of a shared node.
 
 `--serve` is also the way to read a report wherever the shell cannot pass a
 local file to a browser, which is the usual reason for `--open` appearing to do
-nothing: a bare SSH session, WSL with its Windows interoperability switched
-off, or a desktop with no application registered for `.html`. Given both flags,
+nothing: a plain SSH session, WSL with Windows interoperability disabled, or a
+desktop with no application registered for `.html`. Given both flags,
 `--open` directs the browser to the served address rather than to a `file://`
 path, and any browser can be pointed at `http://127.0.0.1:8000/` manually:
 

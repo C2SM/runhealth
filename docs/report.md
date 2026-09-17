@@ -3,14 +3,14 @@
 ## The index
 
 One row per run, sortable by any column and filterable by health grade, with
-wall clock, throughput and longest silence side by side. This makes it easy to
-identify the point at which a series of runs began to degrade. Above the
+wall clock, throughput and longest silence side by side. This makes the point
+at which a series of runs began to degrade easy to identify. Above the
 table, every directory the report was built from is listed as `machine:/path`,
 with the machine set apart from the path and a button that copies the complete
 string.
 
-Grades are `ok`, `worth a look`, `warning` and `problem`. A run's grade is the
-worst of its checks.
+The grades are `healthy`, `worth a look`, `warning` and `problem`. The grade of
+a run is the worst grade among its checks.
 
 ## The run page header
 
@@ -28,11 +28,11 @@ the log. It opens the script that was submitted, shell-highlighted, with
 
 ## The checks
 
-Each run page opens with a list of checks. A check states what it found and
-lists the supporting evidence, so nothing has to be taken on trust. The row of
-buttons above the list filters by grade, in the same way the index filters
-runs, which on a healthy-looking run with a single warning avoids reading
-through the other twelve checks.
+Each run page opens with a list of checks. A check states its finding and lists
+the supporting evidence, so that every conclusion can be verified. The row of
+buttons above the list filters by grade, in the same way as the index filters
+runs, so that a run with a single warning does not require reading through the
+remaining checks.
 
 | Check | What it means |
 | --- | --- |
@@ -46,12 +46,12 @@ through the other twelve checks.
 | **Load imbalance** | How much longer the slowest rank spent in each timer than the fastest. This never fails a run on its own; it is a performance observation, and spread on a *wait* timer is the symptom of imbalance created somewhere else. |
 | **Checkpoint write / Output cost** | Volume and rate of restart writes, and the share of the run spent in output timers. |
 | **Output write cadence / Checkpoint write cadence** | The wall-clock gap between successive output or checkpoint writes. One gap far from the typical one usually means a transient filesystem stall. |
-| **Network** | Fabric counters and warnings. A burst of dropped flow-control messages means the network, not the code, was the limit. |
-| **Suspect nodes** | Nodes named in step failures, or carrying a disproportionate share of the warnings. Ready to be pasted into an `--exclude=` list. |
+| **Network** | Fabric counters and warnings. A burst of dropped flow-control messages indicates that the network, not the code, was the limiting factor. |
+| **Suspect nodes** | Nodes named in step failures, or carrying a disproportionate share of the warnings. The list can be pasted directly into an `--exclude=` argument. |
 | **Errors** | Error-looking lines collapsed by shape, with digits masked so the same message from a thousand ranks becomes one row. |
 
-Checks for which a profile supplies no data simply do not appear. A completely
-unknown log still yields outcome, silence, wall time and errors. Every
+Checks for which a profile supplies no data do not appear. A completely unknown
+log still yields outcome, silence, wall time and errors. Every
 threshold a check compares against is
 [adjustable per profile](#profile-thresholds).
 
@@ -84,15 +84,15 @@ points to the fabric rather than to the code.
 
 In addition, on every page for which the log provides the input: the **run
 timeline** shown on the [front page](index.md), the **longest silences**, each
-labeled with the last line before it, the **output cadence** -- wall time
-between successive output or checkpoint writes, one line per kind of event --
+labeled with the last line before it, the **output cadence** (wall time between
+successive output or checkpoint writes, one line per kind of event),
 **load imbalance** per timer, and the **network counter spread** between the
 least and the most loaded NIC.
 
 A figure is omitted rather than approximated when the log does not contain what
 it requires, and `--no-plots` leaves out all of them.
 
-### Reading them in a browser
+### Reading the figures in a browser
 
 The figures are SVG written into the page, not images of figures, so they are
 interactive without anything being downloaded:
@@ -117,7 +117,7 @@ overrides it for the individual reader. None of this is required in order to
 read a figure: the markup is complete before any script runs, which is why the
 same figure prints correctly and survives conversion to PDF.
 
-## Getting around a page
+## Navigating a page
 
 The header remains in place while scrolling, and on a run page it carries that
 run's name and grade beside a link back to the index. The table of contents
