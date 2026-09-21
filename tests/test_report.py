@@ -245,7 +245,7 @@ def test_the_run_script_modal_can_be_saved_and_is_highlighted(parsed, assessed):
 def test_a_log_without_a_run_script_offers_no_modal(parsed, assessed):
     html = report.render_run(views(parsed, assessed, ["icon_no_timestamps"])[0])
     assert "<dialog" not in html
-    assert "<button type=\"button\" class=\"src-btn key\" data-open-script>" not in html
+    assert '<button type="button" class="src-btn key" data-open-script>' not in html
 
 
 def test_checks_can_be_filtered_by_grade(parsed, assessed):
