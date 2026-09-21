@@ -6,9 +6,9 @@ to ``window``. It is written once per report and loaded only when a reader
 first opens the search, which leaves a page that is never searched as cheap
 as it was before.
 
-The run scripts are most of what the index holds. They are the one place a
-reader goes looking for a literal string -- which runs asked for eight nodes,
-which one still had the old module loaded -- and a report already holds every
+The run scripts are most of what the index holds. They are the one place in
+which a reader looks for a literal string, such as the number of nodes a run
+requested or the module version it loaded, and a report already holds every
 script it has seen.
 """
 

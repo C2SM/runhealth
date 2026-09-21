@@ -432,7 +432,7 @@ def io_cadence(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         caption=(
             "Wall time between successive output or checkpoint writes. A flat line is "
             "a steady cadence; a spike is a single write that took much longer than its "
-            "neighbours, usually a transient filesystem stall rather than the model "
+            "neighbors, usually a transient file system stall rather than the model "
             "itself. Click a legend entry to hide that series."
         ),
         svg=ch.render(
@@ -570,7 +570,7 @@ def imbalance(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         note=f"worst {worst:.1f}x",
         caption=(
             "How much longer the slowest rank spent in each timer than the fastest. "
-            "A ratio on a wait or synchronisation timer measures imbalance created "
+            "A ratio on a wait or synchronization timer measures imbalance created "
             f"somewhere else. Only timers holding more than {floor * 100:.0f}% of the "
             "run are shown."
         ),
@@ -671,7 +671,7 @@ def warning_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         note=f"{sum(g.total for _, g in families):,} lines",
         caption=(
             "How message families are distributed over the run, and which nodes "
-            "produce them. A burst that lines up with a slow stretch in the progress "
+            "produce them. A burst that coincides with a slow stretch in the progress "
             "plot points at the network rather than the code. Click a legend entry to "
             "hide that family."
         ),

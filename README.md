@@ -1,7 +1,7 @@
 # runhealth
 
-**Analyze a directory of HPC batch job logs and obtain a report on how the
-runs went.**
+**Analyze a directory of HPC batch job logs and obtain a report on the
+outcome and the performance of each run.**
 
 A batch log already records whether the job completed, whether and where it
 hung, how fast it ran and whether it slowed down, how evenly the work was
@@ -61,7 +61,7 @@ of `--open` and open <http://127.0.0.1:8000/>.
 
 ## Documentation
 
-The full documentation lives at **<https://c2sm.github.io/runhealth/>**:
+The full documentation is published at **<https://c2sm.github.io/runhealth/>**:
 
 - [Install](https://c2sm.github.io/runhealth/install.html)
 - [Usage](https://c2sm.github.io/runhealth/usage.html): recipes, following a
@@ -72,14 +72,14 @@ The full documentation lives at **<https://c2sm.github.io/runhealth/>**:
   [profile reference](https://c2sm.github.io/runhealth/profile-reference.html):
   adding support for a new code
 - [Improving log quality](https://c2sm.github.io/runhealth/logging.html): two
-  low-cost changes to a job script that make its output considerably more
+  inexpensive changes to a job script that make its output considerably more
   informative
 - [Troubleshooting](https://c2sm.github.io/runhealth/troubleshooting.html)
 - [Command line reference](https://c2sm.github.io/runhealth/cli.html)
 - [Development](https://c2sm.github.io/runhealth/development.html)
 
-The sources are Markdown files under [`docs/`](docs/); they can be built
-locally with
+The sources are Markdown files under [`docs/`](docs/) and can be built locally
+with
 
 ```bash
 uv run --group docs sphinx-build -b html docs docs/_build/html

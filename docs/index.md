@@ -1,7 +1,7 @@
 # runhealth
 
-**Analyze a directory of HPC batch job logs and obtain a report on how the
-runs went.**
+**Analyze a directory of HPC batch job logs and obtain a report on the
+outcome and the performance of each run.**
 
 A batch log already records whether the job completed, whether and where it
 hung, how fast it ran and whether it slowed down, how evenly the work was
@@ -63,8 +63,8 @@ runhealth: parsed 11 log(s) in 12.6s
 ```
 
 The second line is the important one: the run *succeeded* and would otherwise
-not have been examined again, although for one minute it was saturated by a
-network retry storm.
+not have been examined again, although for one minute it was saturated by
+repeated network retries.
 
 ## Contents of a report
 
@@ -72,7 +72,7 @@ network retry storm.
 report/
   index.html                  every run, one row each, sortable and filterable
   LOG.myjob.12345.html        one page per run: checks, figures, tables
-  .cache/                     parsed state, so the next pass is instant
+  .cache/                     parsed state, so a repeated pass is fast
 ```
 
 ## Next steps

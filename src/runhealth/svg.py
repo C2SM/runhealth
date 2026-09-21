@@ -1,11 +1,11 @@
 """Draw SVG by hand.
 
-The figures a run report needs -- a phase timeline, ranked bars carrying a
-fastest-to-slowest whisker, the spread of a counter across network cards --
-are shapes no charting library draws well, and a library large enough to
-draw them would have to be fetched before the report could be read. Reports
-are routinely opened on a login node with no route to the internet, so the
-figures are plain SVG written straight into the page.
+The figures a run report needs, namely a phase timeline, ranked bars carrying
+a fastest-to-slowest whisker and the spread of a counter across network cards,
+are shapes no charting library draws well, and a library large enough to draw
+them would have to be fetched before the report could be read. Reports are
+routinely opened on a login node without access to the internet, so the figures
+are plain SVG written directly into the page.
 
 Color lives in CSS classes rather than in ``fill`` attributes, so one
 figure serves the light theme, the dark theme and the print stylesheet
@@ -24,8 +24,7 @@ from dataclasses import dataclass
 from . import style
 
 # Logical drawing width. The SVG is served with ``width: 100%``, so this is a
-# coordinate system rather than a pixel size, and the report's own column
-# width decides how large a figure ends up.
+# coordinate system rather than a pixel size.
 WIDTH = 900
 
 # Tick steps that read as a duration rather than as an arbitrary number.
@@ -56,7 +55,7 @@ def esc(text: object) -> str:
 
     Newlines become character references rather than staying literal: a
     tooltip is written into an attribute, and an XML parser would otherwise
-    normalise the line breaks away when a standalone ``.svg`` file is read.
+    normalize the line breaks away when a standalone ``.svg`` file is read.
     """
     return html.escape(str(text if text is not None else ""), quote=True).replace("\n", "&#10;")
 

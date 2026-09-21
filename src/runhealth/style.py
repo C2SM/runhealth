@@ -2,9 +2,8 @@
 
 The figures are SVG drawn with CSS classes rather than baked-in colors, so
 the same markup serves the light theme, the dark theme and the print
-stylesheet. That is what this module exists for: the token tables below are
-emitted as custom properties into the page, and :data:`CHART_CSS` is the one
-set of rules that reads them.
+stylesheet. The token tables below are emitted as custom properties into the
+page, and :data:`CHART_CSS` is the one set of rules that reads them.
 
 Every series color clears 3:1 against its own background and every phase in
 the ramp clears 4.5:1 against white, so the labels drawn inside a phase bar
@@ -13,9 +12,8 @@ stay legible without a second palette for dark mode.
 
 from __future__ import annotations
 
-# Ordered stages, not categories. A green phase would read as "this part was
-# fine" when it may be exactly where the run hung, so the ramp is one hue,
-# dark enough throughout that white lettering on top of it stays readable.
+# Ordered stages, not categories: a green phase would suggest that the phase
+# was fine, so the ramp is one hue, dark enough for white lettering throughout.
 PHASES = ["#3d75b6", "#35669f", "#2d5789", "#264a74", "#1f3d60", "#18314d", "#4b6b8c"]
 
 # Categorical series, in the order they should be used.
@@ -153,11 +151,9 @@ CHART_INTERACTION_CSS = """
 """
 
 
-# What each figure class paints, as plain values. An inline SVG is not
-# always reached by the page stylesheet -- WeasyPrint, and so the PDF output,
-# treats it as its own document -- so every element also carries presentation
-# attributes. A browser's CSS outranks a presentation attribute, which is why
-# the theme still switches while the PDF still comes out in color.
+# What each figure class paints, as plain values: WeasyPrint treats an inline
+# SVG as its own document, so every element also carries presentation
+# attributes, which a browser's own CSS then overrides.
 _PAINT: dict[str, str] = {}
 for _i, _c in enumerate(SERIES_LIGHT):
     _PAINT[f"s{_i}"] = _c

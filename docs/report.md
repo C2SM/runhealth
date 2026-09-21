@@ -3,9 +3,9 @@
 ## The index
 
 One row per run, sortable by any column and filterable by health grade, with
-wall clock, throughput and longest silence side by side. This makes the point
-at which a series of runs began to degrade easy to identify. Above the
-table, every directory the report was built from is listed as `machine:/path`,
+wall clock, throughput and longest silence side by side. This makes it easy to
+identify the point at which a series of runs began to degrade. Above the table,
+every directory the report was built from is listed as `machine:/path`,
 with the machine set apart from the path and a button that copies the complete
 string.
 
@@ -59,9 +59,10 @@ The field in the header searches every run in the report at once, from any of
 its pages. It is reached with `/` or `Ctrl`/`Cmd`+`K`, and two characters are
 enough to start.
 
-The run scripts are the main thing it looks through. Asking for `--nodes=8`,
-for a module name or for an environment variable lists every run whose script
-mentions it, with the matching line and its number under the name of the run.
+The run scripts are the largest part of what it searches. Asking for
+`--nodes=8`, for a module name or for an environment variable lists every run
+whose script mentions it, with the matching line and its number under the name
+of the run.
 Selecting a line opens that run's script at that line, with every other
 occurrence in the same script marked, so a setting can be traced across a
 series of runs without opening each page in turn. The search also covers the
@@ -70,7 +71,7 @@ facts listed under job and build provenance, and the text of every check, so a
 node name or an error message finds the runs it occurred in. Selecting one of
 those results opens the run page at the check, the provenance row or the
 summary it matched rather than at the top of the page, marks the matching text
-there, and unfolds the section first when the row sits under a collapsed one.
+there, and expands the section first when the row sits inside a collapsed one.
 
 Results are grouped by run, newest first, and each run contributes at most a
 dozen lines; the remainder is counted, and selecting that count opens the
@@ -78,9 +79,9 @@ script with all of them marked. The arrow keys move through the results and
 `Enter` follows the selected one.
 
 The index behind this is written once per report, as `search.js` beside
-`index.html`, and a page loads it the first time a reader searches. Both files
-have to travel together: a page copied on its own keeps working, but its search
-field reports that the index is missing.
+`index.html`, and a page loads it the first time a reader searches. The two
+files have to be kept together: a page copied on its own keeps working, but its
+search field then reports that the index is missing.
 
 ## The checks
 
@@ -102,10 +103,10 @@ remaining checks.
 | **Load imbalance** | How much longer the slowest rank spent in each timer than the fastest. This never fails a run on its own; it is a performance observation, and spread on a *wait* timer is the symptom of imbalance created somewhere else. |
 | **Coupling cost** | The share of each component's time spent in the coupler. A coupled run prints one timer report per component, so the shares are comparable: when one component's share is much the larger, that component reaches the exchange first and waits for its partner, which usually means the ranks are split unevenly between them. Like load imbalance, this never fails a run on its own. |
 | **Checkpoint write / Output cost** | Volume and rate of restart writes, and the share of the run spent in output timers. |
-| **Output write cadence / Checkpoint write cadence** | The wall-clock gap between successive output or checkpoint writes. One gap far from the typical one usually means a transient filesystem stall. |
+| **Output write cadence / Checkpoint write cadence** | The wall-clock gap between successive output or checkpoint writes. One gap far from the typical one usually means a transient file system stall. |
 | **Network** | Fabric counters and warnings. A burst of dropped flow-control messages indicates that the network, not the code, was the limiting factor. |
 | **Suspect nodes** | Nodes named in step failures, or carrying a disproportionate share of the warnings. The list can be pasted directly into an `--exclude=` argument. |
-| **Errors** | Error-looking lines collapsed by shape, with digits masked so the same message from a thousand ranks becomes one row. |
+| **Errors** | Lines that look like errors, collapsed by shape, with digits masked so the same message from a thousand ranks becomes one row. |
 
 Checks for which a profile supplies no data do not appear. A completely unknown
 log still yields outcome, silence, wall time and errors. Every

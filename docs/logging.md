@@ -1,7 +1,7 @@
 # Improving log quality
 
-`runhealth` reports what a log contains. Two low-cost changes to a job script
-substantially increase the amount of information available.
+`runhealth` reports what a log contains. Two inexpensive changes to a job
+script substantially increase the amount of information available.
 
 ## 1. Add a wall-clock timestamp to every line
 
@@ -20,7 +20,7 @@ for line in sys.stdin:
 exec > $pipe 2>&1
 ```
 
-ICON ships `utils/timewarp`, which does exactly this.
+ICON provides `utils/timewarp`, which performs exactly this task.
 
 The timestamp is also what allows the report to show the submitted **run
 script**: without a stamp on every line, `runhealth` cannot distinguish the

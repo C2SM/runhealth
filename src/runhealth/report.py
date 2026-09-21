@@ -353,11 +353,9 @@ main > *:first-child { margin-top: 0; }
 }
 
 /* -- page head -- */
-/* The head is the first thing on every page, and the margin below exceeds
-   everything above it in any layout -- the sticky header, the padding, and
-   the horizontal table of contents narrow pages get -- so following the
-   first link scrolls to the very top instead of leaving the title tucked
-   under the header. A scroll offset cannot go negative, so it simply clamps. */
+/* The scroll margin exceeds anything a layout can place above the head, so
+   following the first link scrolls to the top of the page rather than leaving
+   the title under the sticky header. */
 .head { border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 24px;
   scroll-margin-top: calc(var(--nav-h) + 100px); }
 .head h1 { font-size: 30px; margin: 0 0 5px; letter-spacing: -.018em; overflow-wrap: anywhere; }
@@ -709,10 +707,8 @@ JS = r"""
   }
 
   // -- taking the reader to what a search matched ------------------------
-  // Only the run scripts are behind a modal. A hit in the summary, in a
-  // check or among the provenance fields is already on the page, so it is
-  // shown where it sits: the section is unfolded if it is collapsed, the
-  // block is ringed for a moment, and the text that matched is marked.
+  // A hit outside the run script is already on the page, so it is shown where
+  // it sits: expanded if collapsed, outlined, and with the match marked.
   function marked(text, needle, cls) {
     var frag = document.createDocumentFragment();
     if (!needle) {
@@ -795,9 +791,8 @@ JS = r"""
   var scriptModal = wireModal('dialog.script-modal');
   if (scriptModal) {
     var scriptBody = scriptModal.querySelector('.script-body');
-    // Open the script where a search matched: the line itself is marked, and
-    // every other occurrence of the same text with it, so the reader lands on
-    // one hit and can see the rest by scrolling.
+    // Open the script where a search matched: the line and every other
+    // occurrence of the same text are marked, so the rest can be scrolled to.
     jumpToScriptLine = function (number, query) {
       if (!scriptBody) return;
       scriptBody.querySelectorAll('b.hit').forEach(function (b) {
@@ -866,9 +861,9 @@ JS = r"""
   }
 
   // -- global search over every run in the report ------------------------
-  // The index is a script written beside the pages rather than data baked
-  // into each of them: one copy serves the whole report, and a reader who
-  // never searches never loads it.
+  // The index is a script written beside the pages rather than data embedded
+  // in each of them, so one copy serves the whole report and is loaded on
+  // demand.
   var search = document.querySelector('.search');
   if (search) {
     var nav = document.querySelector('.nav');
@@ -1130,10 +1125,9 @@ JS = r"""
   });
 
   // -- table of contents: mark the section being read ------------------
-  // Read from the live geometry on every frame that scrolls, rather than
-  // from remembered intersections: a jump to an anchor can carry a heading
-  // from above the reading line to below it without ever crossing it, which
-  // leaves an observer holding the section the reader has just left.
+  // Read from the live geometry on every frame that scrolls: a jump to an
+  // anchor can move a heading across the reading line without crossing it,
+  // which would leave an observer holding the section already left behind.
   var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
   if (links.length) {
     var targets = links.map(function (l) {
@@ -1885,7 +1879,7 @@ def _diff_label(d: Diff) -> str:
 
 
 def _diff_template(view: RunView, base: RunView) -> tuple[Diff, str]:
-    """``view``'s run script against ``base``'s, parked until it is opened."""
+    """``view``'s run script against ``base``'s, held until it is opened."""
     d = compare(base.log.runscript, view.log.runscript)
     body = d.rows or (
         '<p class="diff-same">The run script is identical to the one the previous run used.</p>'
@@ -1961,8 +1955,8 @@ def render_run(
     if view.log_href:
         detail += _details(
             "Raw log",
-            f'<p><a href="{esc(view.log_href)}">{esc(Path(view.log_href).name)}</a> '
-            f"&mdash; {log.n_lines:,} lines. Clicking a silence in the timeline opens "
+            f'<p><a href="{esc(view.log_href)}">{esc(Path(view.log_href).name)}</a>, '
+            f"{log.n_lines:,} lines. Clicking a silence in the timeline opens "
             "it at the line the run went quiet.</p>",
         )
     if detail:
@@ -2129,9 +2123,9 @@ def to_pdf(html_path: Path, pdf_path: Path) -> str:
         from weasyprint import HTML  # noqa: PLC0415
     except ImportError:
         return (
-            f"PDF needs WeasyPrint, which is not installed. Wrote {html_path} instead - "
-            "open it and use the browser's Print to PDF, or install the extra with "
-            "'uv sync --extra pdf'."
+            f"PDF needs WeasyPrint, which is not installed. Wrote {html_path} "
+            "instead; open it and use the browser's Print to PDF, or install the "
+            "extra with 'uv sync --extra pdf'."
         )
     HTML(filename=str(html_path)).write_pdf(str(pdf_path))
     return f"Wrote {pdf_path}"

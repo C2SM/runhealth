@@ -6,8 +6,8 @@ by a highlighter downloaded at read time. One regular expression walks the
 text once and every match becomes a span; anything unmatched is plain text.
 
 The grammar is deliberately shallow. Heredocs and nested expansions are not
-tracked, because the aim is a script a reader can skim, not a parser: the
-worst a mistake costs is one span with the wrong color.
+tracked, because the aim is a readable script rather than a parser, and a
+mistake costs no more than one span with the wrong color.
 """
 
 from __future__ import annotations

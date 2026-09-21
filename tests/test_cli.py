@@ -33,10 +33,8 @@ def test_is_remote_detects_rsync_style_specs():
 
 
 def _fake_ssh(tmp_path) -> Path:
-    # A colon before the first slash is enough to make sync_remote shell out
-    # over ssh, so tests fake the remote shell rather than needing a real
-    # host: a wrapper that drops the hostname argument and runs the rest
-    # (rsync's own --server invocation) right here.
+    # sync_remote treats a colon before the first slash as remote, so the test
+    # supplies a wrapper that drops the host name and runs rsync locally.
     rsh = tmp_path / "fake-ssh"
     rsh.write_text('#!/bin/sh\nshift\nexec "$@"\n')
     rsh.chmod(0o755)

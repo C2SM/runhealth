@@ -1,7 +1,7 @@
 """Line grammar of a batch job log: timestamps, rank labels, streaming reads.
 
-Batch logs reach us in three shapes, and the difference decides how much a
-health report can say about *when* things happened:
+Batch logs occur in three shapes, and the difference determines how much a
+health report can state about *when* events happened:
 
 ``timestamped``
     Every line carries a wall clock, because the run script pipes its output
@@ -13,8 +13,9 @@ health report can say about *when* things happened:
     Neither.
 
 Only the timestamped shape supports silence detection, which is the single
-most valuable signal in a hung run, so the reader reports which shape it found
-and the rest of the tool degrades honestly rather than inventing timings.
+most informative signal in a hung run, so the reader reports which shape it
+found and the remaining analysis is reduced accordingly rather than estimating
+timings.
 
 Reading is strictly line by line. Real logs here reach 150 MB and 800k lines,
 so nothing may hold a file, or a list of its lines, in memory.
@@ -204,8 +205,8 @@ def read_preamble(path: Path) -> str:
 
     A stamping wrapper only starts once the run script's own output begins,
     so everything before the first stamped line is the script that was
-    submitted -- SLURM's own preamble plus whatever ``#SBATCH`` directives and
-    shell commands the job used to set itself up.
+    submitted: SLURM's own preamble together with the ``#SBATCH`` directives
+    and shell commands the job used to set itself up.
     """
     lines: list[str] = []
     with path.open("rb") as fh:

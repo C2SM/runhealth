@@ -16,7 +16,7 @@
   minimum: outcome, silence, wall time and errors. See
   [Improving log quality](logging.md).
 
-**A rule in a profile never fires**
+**A rule in a profile never matches**
 : There are three common causes: a `contains:` literal that does not appear in
   *every* matching line; a pattern anchored with `^` that is in fact indented
   in the log; or a rule that should have been marked `preamble: true` because
@@ -37,7 +37,7 @@
   instead: given both flags, `--open` directs the browser to the served
   address, and otherwise `http://127.0.0.1:8000/` can be opened manually.
 
-**The wall clock looks implausible**
+**The wall clock is implausible**
 : A file holding several job attempts, resulting from a resubmission that
   appends to the same file name, is analyzed as its **last** attempt, and the
   report states this at the bottom of the page.

@@ -39,7 +39,7 @@ fields: { ... }       # one value per run
 keyvalues: { ... }    # many key/value pairs into one dictionary
 series: { ... }       # repeated events, in order
 markers: { ... }      # phase boundaries on the timeline
-groups: { ... }       # high-cardinality messages, counted not stored
+groups: { ... }       # very frequent messages, counted rather than stored
 tables: { ... }       # structured blocks
 outcome: [ ... ]      # the run's verdict
 ```
@@ -96,7 +96,7 @@ file is still present.
 
 Many run scripts echo a copy of themselves before their output begins to be
 timestamped. That copy contains every string the script can ever print,
-including both its success and its failure message, so rules must not fire
+including both its success and its failure message, so rules must not match
 there. In a timestamped log, `runhealth` treats everything before the first
 timestamp as preamble and applies only rules marked `preamble: true` to it,
 which is how `#SBATCH` directives are read.
@@ -104,7 +104,7 @@ which is how `#SBATCH` directives are read.
 Two consequences for profile authors:
 
 - Anchor an `outcome` pattern with `^` so that it matches the printed line and
-  not the `echo "..."` that produced it.
+  not the `echo "..."` statement that produced it.
 - Mark a rule `preamble: true` when it should match only within the job script.
 
 ## Sections
@@ -167,7 +167,7 @@ line.
   gives the progress rate; if a captured field named by
   `settings.model_time_field` parses as a date, the simulated-time rate is
   computed as well.
-- `io`: output and checkpoint events, ticked on the timeline. The wall-clock
+- `io`: output and checkpoint events, marked on the timeline. The wall-clock
   gap between successive events of the same series is also tracked: an
   outlier gap raises a cadence check, and the "Output cadence" figure plots
   every series over the run.
@@ -326,6 +326,6 @@ runhealth mylog.out --profile mymodel -o /tmp/check --no-plots
 runhealth --list-profiles
 ```
 
-If a rule never fires, the usual causes are a `contains:` literal that does not
-appear in every matching line, a pattern anchored with `^` that is in fact
+If a rule never matches, the usual causes are a `contains:` literal that does
+not appear in every matching line, a pattern anchored with `^` that is in fact
 indented, or a rule that should have been marked `preamble: true`.

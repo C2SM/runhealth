@@ -5,7 +5,7 @@
 | Task | Command |
 | --- | --- |
 | Analyze everything in a directory | `runhealth /path/to/logs -o report/` |
-| Analyze logs on a remote cluster from your laptop | `runhealth santis:/path/to/logs -o report/ --open` |
+| Analyze logs on a remote cluster from a local machine | `runhealth santis:/path/to/logs -o report/ --open` |
 | Analyze a single log and open the report | `runhealth LOG.myjob.12345.o -o report/ --open` |
 | Read it in a browser from a login node | `runhealth /path/to/logs -o report/ --serve` |
 | Only the most recent logs | `runhealth /path/to/logs --last 5 --since 7d -o report/` |
@@ -77,9 +77,9 @@ stopped, so following a growing 100 MB log costs no more than the new lines.
 `--format html`
 : The default. `index.html` plus a page per run, with light and dark themes,
   [interactive figures](report.md#reading-the-figures-in-a-browser) and a real
-  print stylesheet. The browser's **Print to PDF** produces a clean document with
-  sensible page breaks. The figures are written into the pages, so a single
-  `.html` file is a complete report that can be attached to an email.
+  print stylesheet. The browser's **Print to PDF** produces a well-formatted
+  document with sensible page breaks. The figures are written into the pages, so
+  a single `.html` file is a complete report that can be attached to an email.
 
 `--format md`
 : `report.md` in GitHub-flavored Markdown. Markdown cannot hold an inline
@@ -89,7 +89,7 @@ stopped, so following a growing 100 MB log costs no more than the new lines.
 : Uses [WeasyPrint](https://weasyprint.org/) if it is installed
   (`uv sync --extra pdf`). Without it, `runhealth` writes the HTML and asks for
   it to be printed instead of failing. WeasyPrint is not a hard dependency
-  because it is large and the browser route is equally good.
+  because it is large and printing from a browser is equally suitable.
 
 ## Sharing a report
 
@@ -129,7 +129,7 @@ Combined with `--watch`, every refresh is published, so that a running job is
 presented as a page that colleagues can reload as it progresses.
 
 **Serve it directly.** `--serve` starts a small read-only server bound to
-`127.0.0.1`, which is what a login node without a web server can still offer.
+`127.0.0.1`, which is what a login node without a web server can still provide.
 The port is optional and defaults to 8000, and the server runs until it is
 interrupted:
 
@@ -137,7 +137,7 @@ interrupted:
 runhealth /path/to/logs -o report/ --serve 8080 --watch 60
 ```
 
-Then, from your own machine, forward the port and open it:
+Then, from the local machine, forward the port and open it:
 
 ```bash
 ssh -L 8080:localhost:8080 login.cluster.example

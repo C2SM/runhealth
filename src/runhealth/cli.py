@@ -32,8 +32,8 @@ LOG_GLOBS = [DEFAULT_GLOB, "slurm-*.out", "*.log", "*.out", "*.o[0-9]*"]
 SINCE_RE = re.compile(r"^(\d+(?:\.\d+)?)([smhdw])$")
 SINCE_UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
 MAX_EMBED_LOG = 8 << 20  # copy the raw log next to the report below this size
-# Reports are written with the user's umask, which on a shared filesystem is
-# often too tight for a web server to read, so the sync sets the modes it needs.
+# Reports are written with the user's umask, which on a shared file system is
+# often too restrictive for a web server, so the transfer sets the modes needed.
 RSYNC_FLAGS = ["-rlptz", "--chmod=D755,F644"]
 
 
@@ -340,7 +340,7 @@ def publish(outdir: Path, dest: str, url: str) -> bool:
     """Copy the report to a web server with rsync.
 
     ``dest`` is anything rsync understands, so a plain directory on a shared
-    filesystem works as well as ``user@host:/var/www/runs``. Nothing is
+    file system works as well as ``user@host:/var/www/runs``. Nothing is
     deleted at the far end: a report directory is frequently a subdirectory
     of a document root that holds other things too.
     """

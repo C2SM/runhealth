@@ -3,16 +3,17 @@
 Everything a profile declares is applied here, plus three things the core does
 for every log regardless of profile:
 
-* **silence** -- the wall-clock distance between consecutive lines. A hung job
+* **silence**: the wall-clock distance between consecutive lines. A hung job
   looks exactly like a healthy one in every other respect, so the largest gaps
-  are the most valuable single measurement in the file.
-* **error signatures** -- error-looking lines collapsed by shape, so an
-  unfamiliar failure still surfaces without anyone having written a rule.
-* **node attribution** -- which compute nodes appear, and in what company.
+  are the most informative single measurement in the file.
+* **error signatures**: lines that look like errors, collapsed by shape, so
+  that an unfamiliar failure is reported although no rule describes it.
+* **node attribution**: which compute nodes appear, and together with which
+  other nodes.
 
 The extractor is resumable: :meth:`Extractor.state` round-trips through JSON so
 ``--watch`` can continue from where the previous pass stopped instead of
-re-reading a 150 MB file every tick.
+re-reading a 150 MB file on every pass.
 """
 
 from __future__ import annotations
@@ -243,9 +244,8 @@ class Extractor:
         log.n_lines += 1
         log.offset = line.offset
         text = line.text
-        # Many run scripts echo a copy of themselves before output is stamped.
-        # That copy contains every string the script can ever print, so rules
-        # must not fire there -- except the ones that want it (#SBATCH).
+        # A run script often echoes a copy of itself before output is stamped,
+        # so only rules marked for the preamble, such as #SBATCH, apply there.
         in_preamble = log.line_format == "timestamped" and log.first_wall is None
         if self._has_preamble and self._detect_new_attempt(line):
             return

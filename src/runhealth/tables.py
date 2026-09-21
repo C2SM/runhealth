@@ -6,8 +6,8 @@ rather than hard-coded, so a new model needs a YAML entry and no Python:
 ``ruled``
     Columns are delimited by a rule row of dash runs separated by blanks, the
     row above or below it naming them. ICON's timer report is of this kind, and
-    the rule row is a gift: it gives exact column spans, so a name containing
-    spaces or a right-aligned number never has to be guessed at.
+    the rule row is valuable because it defines exact column spans, so a name
+    containing spaces or a right-aligned number never has to be guessed.
 ``trailing-numbers``
     No rules; each row is a label followed by a fixed count of numeric fields.
     Cray MPICH's Slingshot counter summary and its ratio block are of this

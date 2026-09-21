@@ -271,9 +271,8 @@ def test_one_grade_of_check_needs_no_filter():
 
 def test_the_table_of_contents_tracks_live_geometry(parsed, assessed):
     html = report.render_run(views(parsed, assessed, ["icon_success"])[0])
-    # Remembered intersections went stale when a jump to an anchor carried a
-    # heading past the reading line without ever crossing it, which left the
-    # section the reader had just left still marked.
+    # Remembered intersections went stale when a jump to an anchor moved a
+    # heading past the reading line without crossing it.
     assert "getBoundingClientRect().top - LINE" in html
     assert "'scroll', onScroll" in html
 

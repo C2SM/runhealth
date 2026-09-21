@@ -290,9 +290,9 @@ def _status(log: RunLog, now: float, stall_seconds: float, slurm_state: str) -> 
     """SUCCESS, FAILED, QUEUED, RUNNING, STALLED or INCOMPLETE.
 
     STALLED means the scheduler still believes the job is running while its log
-    has gone quiet -- the one case where a live intervention is worth making. A
-    log that simply stops without a verdict and is not in the queue any more is
-    INCOMPLETE: the job is long gone, and the silence check explains what
+    has gone quiet, which is the one case in which intervention can still help.
+    A log that simply stops without a verdict and is no longer in the queue is
+    INCOMPLETE: the job has ended, and the silence check explains what
     happened.
     """
     if slurm_state in {"PENDING", "CONFIGURING"}:
@@ -370,7 +370,7 @@ def _check_outcome(log: RunLog, a: Assessment, slurm_state: str) -> Check:
         "Outcome",
         "warn",
         "The log ends without a final status",
-        "Neither success nor failure was recorded. The job may have been killed "
+        "Neither success nor failure was recorded. The job may have been terminated "
         "before its epilogue ran, or the log may be truncated.",
         ev,
     )
@@ -398,12 +398,12 @@ def _check_stall(log: RunLog, a: Assessment, stall_seconds: float) -> Check:
     ]
     detail = (
         "The longest stretch in which no rank wrote anything. Silence during setup "
-        "is normal -- input is being read and kernels compiled -- so only silence "
-        "inside the main loop is judged against the typical progress interval."
+        "is normal, because input is being read and kernels compiled, so only "
+        "silence inside the main loop is judged against the typical progress "
+        "interval."
     )
-    # Silence before the first progress report is startup: reading input,
-    # compiling kernels, negotiating a coupling. Judge it against a much longer
-    # threshold, unless the run never reached its main loop at all.
+    # Silence before the first progress report is startup, so it is judged
+    # against a longer threshold unless the run never reached its main loop.
     reached_loop = bool(progress_series(log))
     setup_limit = float(log.threshold("setup_stall_seconds", stall_seconds * 4))
     for g in log.gaps:
@@ -471,7 +471,7 @@ def _check_walltime(log: RunLog, a: Assessment) -> Check | None:
             "Wall time",
             "fail",
             "The job hit its wall-clock limit",
-            "SLURM cancelled the job because the requested time ran out.",
+            "SLURM canceled the job because the requested time ran out.",
             ev,
         )
     warn = float(log.threshold("walltime_warn", 0.9))
@@ -481,7 +481,7 @@ def _check_walltime(log: RunLog, a: Assessment) -> Check | None:
             "Wall time",
             "warn",
             f"{frac * 100:.0f}% of the requested limit used",
-            "Little headroom left. A slightly slower run would be cancelled.",
+            "Little margin remains. A slightly slower run would be canceled.",
             ev,
         )
     return Check(
@@ -674,9 +674,8 @@ def _check_coupling(log: RunLog, a: Assessment) -> list[Check]:
 
     measured: list[tuple[float, str, str]] = []
     for g in a.timers:
-        # A coupling timer nested below another one, typically a wait below the
-        # coupling timer itself, is already contained in it and must not be
-        # added a second time.
+        # A coupling timer nested below another one is already contained in it
+        # and must not be added a second time.
         counted: list[TimerRow] = []
         nested: list[TimerRow] = []
         outer: int | None = None
@@ -780,10 +779,9 @@ def _check_io(log: RunLog, a: Assessment) -> list[Check]:
 def _check_io_cadence(log: RunLog, a: Assessment) -> list[Check]:
     """Flag an uneven cadence between the events of an I/O series.
 
-    A single output file that took far longer than its neighbours to appear
-    is usually a transient filesystem stall, not the model itself -- the same
-    reasoning the silence check applies to the log as a whole, but narrowed to
-    one recurring event.
+    A single output file that took far longer than its neighbors to appear is
+    usually a transient file system stall rather than the model itself. This is
+    the reasoning of the silence check, narrowed to one recurring event.
     """
     out = []
     factor = float(log.threshold("io_gap_outlier_factor", 4))
@@ -815,7 +813,7 @@ def _check_io_cadence(log: RunLog, a: Assessment) -> list[Check]:
                     f"{len(slow)} of {len(gaps)} gaps between {label} events took more "
                     f"than {factor:g}x the typical {format_duration(median)}",
                     "An irregular cadence between recurring writes usually points at a "
-                    "transient filesystem stall rather than the model itself.",
+                    "transient file system stall rather than the model itself.",
                     ev,
                 )
             )
@@ -919,7 +917,7 @@ def _check_network(log: RunLog, a: Assessment) -> list[Check]:
 
 
 def _peak_minute(stat) -> tuple[int, int] | None:
-    """Busiest minute of a message family, when it is a burst rather than a hum."""
+    """Busiest minute of a message family, when it is a burst rather than a steady rate."""
     if not stat.bins:
         return None
     minute, count = max(stat.bins.items(), key=lambda kv: kv[1])
@@ -927,7 +925,7 @@ def _peak_minute(stat) -> tuple[int, int] | None:
 
 
 def _node_blame(stat) -> str:
-    """Name a node only when it really stands out; otherwise say it is fabric-wide."""
+    """Name a node only when its share is clearly disproportionate."""
     if not stat.nodes:
         return ""
     counts = sorted(stat.nodes.values(), reverse=True)
@@ -954,8 +952,8 @@ def _check_errors(log: RunLog, a: Assessment) -> Check:
         "Errors",
         level,
         f"{len(ranked)} distinct error signature(s), {_fmt_count(total)} line(s)",
-        "Error-looking lines collapsed by shape; digits are masked so repeats "
-        "from many ranks group together.",
+        "Lines that look like errors, collapsed by shape; digits are masked so "
+        "that repetitions from many ranks group together.",
         [
             f"{e.total}x {e.sample[:150]}"
             + (f"  [{', '.join(sorted(e.nodes)[:4])}]" if e.nodes else "")
