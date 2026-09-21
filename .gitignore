@@ -1,14 +1,21 @@
+# Ignore everything at the top level, then allow what belongs in the repository.
+/*
+!/.github/
+!/.gitignore
+!/.pre-commit-config.yaml
+!/.python-version
+!/LICENSE
+!/README.md
+!/docs/
+!/examples/
+!/pyproject.toml
+!/src/
+!/tests/
+!/uv.lock
+
 __pycache__/
 *.py[cod]
-.venv/
-.pytest_cache/
-.ruff_cache/
 *.egg-info/
-build/
-dist/
-report/
-reports/
-runhealth-report/
 
 ##### Sphinx documentation #####
 docs/_build/
