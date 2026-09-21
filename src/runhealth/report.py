@@ -219,6 +219,34 @@ a:hover { border-bottom-color: currentColor; }
 .nav .up { font-size: 13.5px; color: var(--muted); border: none; flex: 0 0 auto; }
 .nav .up:hover { color: var(--ink); }
 
+/* the run name doubles as a switcher over the other runs */
+.nav .jump { position: relative; min-width: 0; margin: 0; padding: 0; background: none;
+  border: none; border-radius: 0; box-shadow: none; }
+.nav .jump > summary.here { display: inline-flex; align-items: center; gap: 6px;
+  max-width: 100%; padding: 4px 8px; border-radius: 8px; cursor: pointer; list-style: none; }
+.nav .jump > summary.here::after { content: "\\25be"; color: var(--muted); font-size: 12px;
+  font-weight: 400; flex: 0 0 auto; }
+.nav .jump > summary.here:hover, .nav .jump[open] > summary.here { background: var(--panel-2); }
+.nav .jump .menu { position: absolute; top: calc(100% + 6px); left: 0; z-index: 50;
+  min-width: 300px; max-width: min(460px, 86vw); max-height: 70vh; overflow-y: auto;
+  padding: 6px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; box-shadow: var(--shadow); }
+.nav .jump .item { display: flex; align-items: center; gap: 9px; padding: 7px 9px;
+  border: none; border-radius: 8px; color: var(--ink); font-size: 14px; font-weight: 500; }
+.nav .jump .item:hover { background: var(--panel-2); }
+.nav .jump .item.cur { background: var(--panel-2); font-weight: 650; }
+.nav .jump .txt { display: flex; flex-direction: column; min-width: 0; }
+.nav .jump .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav .jump .meta { color: var(--muted); font-size: 12.5px; font-weight: 400; }
+.nav .jump .dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+.nav .jump .dot.g-ok { background: var(--ok); }
+.nav .jump .dot.g-info { background: var(--info); }
+.nav .jump .dot.g-warn { background: var(--warn); }
+.nav .jump .dot.g-fail { background: var(--fail); }
+.nav .jump .all { justify-content: center; margin-top: 4px; padding-top: 9px;
+  border-top: 1px solid var(--line); border-radius: 0 0 8px 8px;
+  color: var(--muted); font-size: 13px; }
+
 .theme { display: inline-flex; gap: 1px; padding: 2px; flex: 0 0 auto;
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; }
 .theme button { display: grid; place-items: center; width: 30px; height: 26px; padding: 0;
@@ -529,6 +557,23 @@ JS = r"""
   document.querySelectorAll('[data-theme-set]').forEach(function (b) {
     b.addEventListener('click', function () { setTheme(b.dataset.themeSet); });
   });
+
+  // -- the run switcher in the header ------------------------------------
+  var jump = document.querySelector('.nav .jump');
+  if (jump) {
+    jump.addEventListener('toggle', function () {
+      var cur = jump.open && jump.querySelector('.item.cur');
+      if (cur) cur.scrollIntoView({ block: 'nearest' });
+    });
+    document.addEventListener('click', function (e) {
+      if (jump.open && !jump.contains(e.target)) jump.open = false;
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape' || !jump.open) return;
+      jump.open = false;
+      jump.querySelector('summary').focus();
+    });
+  }
 
   // -- the run script modal ----------------------------------------------
   var scriptModal = document.querySelector('dialog.script-modal');
@@ -1010,8 +1055,43 @@ def _page(title: str, nav: str, toc: str, body: str) -> str:
     )
 
 
-def _nav(here: str, badge: str = "", up: str = "") -> str:
-    trail = f'<span class="sep">/</span><span class="here">{esc(here)}</span>' if here else ""
+def _run_label(log: RunLog) -> tuple[str, str]:
+    """The run's name and the job and start date that tell two runs apart."""
+    started = format_stamp(log.first_wall)[:10]
+    job_id = log.fields.get("job_id")
+    return log.fields.get("job_name") or log.name, " \u00b7 ".join(
+        x for x in (job_id, started) if x
+    )
+
+
+def _run_menu(views: list[RunView], current: str, index_href: str) -> str:
+    """The other runs of the same report, for the switcher in the header."""
+    if len(views) < 2:
+        return ""
+    items = []
+    for v in sorted(views, key=lambda v: v.log.first_wall or 0, reverse=True):
+        name, meta = _run_label(v.log)
+        here = ' aria-current="page"' if v.page == current else ""
+        meta_html = f'<span class="meta">{esc(meta)}</span>' if meta else ""
+        items.append(
+            f'<a class="item{" cur" if here else ""}" href="{esc(v.page)}"{here}>'
+            f'<span class="dot g-{esc(v.assessment.grade)}" aria-hidden="true"></span>'
+            f'<span class="txt"><span class="nm">{esc(name)}</span>{meta_html}</span></a>'
+        )
+    return (
+        f'<div class="menu">{"".join(items)}'
+        f'<a class="item all" href="{esc(index_href)}">All runs</a></div>'
+    )
+
+
+def _nav(here: str, badge: str = "", up: str = "", menu: str = "") -> str:
+    if here and menu:
+        trail = (
+            '<span class="sep">/</span><details class="jump">'
+            f'<summary class="here">{esc(here)}</summary>{menu}</details>'
+        )
+    else:
+        trail = f'<span class="sep">/</span><span class="here">{esc(here)}</span>' if here else ""
     return (
         '<header class="nav"><div class="nav-in">'
         f'<a class="brand" href="{esc(up or "#main")}">runhealth</a>'
@@ -1268,7 +1348,9 @@ def run_tiles(log: RunLog, a: Assessment) -> str:
     return f'<div class="tiles">{"".join(out)}</div>'
 
 
-def render_run(view: RunView, index_href: str = "index.html") -> str:
+def render_run(
+    view: RunView, index_href: str = "index.html", siblings: list[RunView] | None = None
+) -> str:
     log, a = view.log, view.assessment
     name = log.fields.get("job_name") or log.name
     title = f"{name} - run health"
@@ -1308,12 +1390,10 @@ def render_run(view: RunView, index_href: str = "index.html") -> str:
         body.append("<footer>" + "<br>".join(esc(n) for n in log.notes) + "</footer>")
     body.append(_footer())
     body.append(_script_modal(view))
-    here = name
-    job_id = log.fields.get("job_id")
-    started = format_stamp(log.first_wall)[:10]
-    if job_id or started:
-        here += f" ({' · '.join(x for x in (job_id, started) if x)})"
-    nav = _nav(here, _badge(a.grade), up=index_href)
+    _, meta = _run_label(log)
+    here = f"{name} ({meta})" if meta else name
+    menu = _run_menu(siblings or [], view.page, index_href)
+    nav = _nav(here, _badge(a.grade), up=index_href, menu=menu)
     return _page(title, nav, toc.render(), "\n".join(body))
 
 

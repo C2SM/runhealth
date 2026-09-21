@@ -283,3 +283,13 @@ def test_embedded_log_is_addressable_by_line(tmp_path, parsed, assessed):
     assert href.endswith(".html")
     text = (tmp_path / href).read_text()
     assert '<b id="L1"' in text and 'class="blk"' in text
+
+
+def test_run_page_switches_to_the_other_runs(parsed, assessed):
+    vs = views(parsed, assessed, ["icon_success", "icon_hang"])
+    html = report.render_run(vs[0], siblings=vs)
+    assert '<details class="jump">' in html
+    assert 'href="icon_hang.html"' in html
+    assert 'aria-current="page"' in html
+    # A single run has nothing to switch to, so the name stays plain text.
+    assert '<details class="jump">' not in report.render_run(vs[0], siblings=vs[:1])

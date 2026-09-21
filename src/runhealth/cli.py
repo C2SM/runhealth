@@ -310,7 +310,7 @@ def write_report(args, views: list[RunView], outdir: Path, sources: list[str]) -
         path.write_text(report.render_markdown(views, sources, title))
         return path
     for v in views:
-        (outdir / v.page).write_text(report.render_run(v))
+        (outdir / v.page).write_text(report.render_run(v, siblings=views))
     index = outdir / "index.html"
     index.write_text(report.render_index(views, sources, overview, title))
     if args.format == "pdf":
