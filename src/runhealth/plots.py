@@ -770,7 +770,7 @@ def render_index(
     rates = [a.stats.get("sypd") or 0.0 for _, a, _ in usable]
     has_rate = any(rates)
     panels = 2 if has_rate else 1
-    panel_h, gap, foot = 104, 34, 74
+    panel_h, gap, foot = 104, 34, 92
     ch = svg.Chart(height=panels * (panel_h + gap) + foot, pad=(60, 16, 18, foot), uid="overview")
     rate_label = usable[0][0].setting("throughput_label", "rate")
     width = ch.width - ch.pad_l - ch.pad_r
@@ -818,7 +818,9 @@ def render_index(
     for i, (log, _, _) in enumerate(usable):
         center = ch.pad_l + slot * (i + 0.5)
         unique = ids[i] and ids.count(ids[i]) == 1
-        text = svg.truncate(ids[i] if unique else log.name, 16)
+        base = svg.truncate(ids[i] if unique else log.name, 14)
+        started = format_stamp(log.first_wall)[:10]
+        text = f"{base} · {started}" if started else base
         ch.frame.append(
             ch.text(
                 0,

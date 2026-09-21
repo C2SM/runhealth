@@ -1029,7 +1029,7 @@ def _badge(level: str, text: str = "") -> str:
     return (
         f'<span class="badge g-{level}"><span class="mark" aria-hidden="true">'
         f'{GRADE_MARK.get(level, "?")}</span>'
-        f"{esc(text or GRADE_TEXT.get(level, level))}</span>"
+        f"{esc(text or GRADE_TEXT.get(level, level).capitalize())}</span>"
     )
 
 
@@ -1055,9 +1055,9 @@ def _grade_filters(counts: dict[str, int], target: str, label: str) -> str:
     return (
         f'<div class="filters" data-target="{esc(target)}" role="group" '
         f'aria-label="{esc(label)}">'
-        '<button data-grade="all" aria-pressed="true">all</button>'
+        '<button data-grade="all" aria-pressed="true">All</button>'
         + "".join(
-            f'<button data-grade="{g}">{GRADE_TEXT[g]} ({counts[g]})</button>'
+            f'<button data-grade="{g}">{GRADE_TEXT[g].capitalize()} ({counts[g]})</button>'
             for g in ("fail", "warn", "info", "ok")
             if counts.get(g)
         )
@@ -1311,7 +1311,12 @@ def render_run(view: RunView, index_href: str = "index.html") -> str:
         body.append("<footer>" + "<br>".join(esc(n) for n in log.notes) + "</footer>")
     body.append(_footer())
     body.append(_script_modal(view))
-    nav = _nav(name, _badge(a.grade), up=index_href)
+    here = name
+    job_id = log.fields.get("job_id")
+    started = format_stamp(log.first_wall)[:10]
+    if job_id or started:
+        here += f" ({' · '.join(x for x in (job_id, started) if x)})"
+    nav = _nav(here, _badge(a.grade), up=index_href)
     return _page(title, nav, toc.render(), "\n".join(body))
 
 
@@ -1388,7 +1393,7 @@ def render_index(
         '<th class="sortable">run</th>'
         '<th class="sortable">job</th><th class="sortable">started</th>'
         '<th class="sortable">wall</th><th class="sortable">nodes</th>'
-        '<th class="sortable">progress</th><th class="sortable">rate</th>'
+        '<th class="sortable">time steps</th><th class="sortable">rate</th>'
         '<th class="sortable">longest silence</th>'
         f"</tr></thead><tbody>{''.join(rows)}</tbody></table></div>",
         _footer(),
@@ -1402,7 +1407,7 @@ def render_index(
 def render_markdown(views: list[RunView], sources: list[str], title: str) -> str:
     out = [f"# {title}", "", f"Sources: {', '.join(sources)}", ""]
     out += [
-        "| status | health | run | job | started | wall | progress | rate | longest silence |",
+        "| status | health | run | job | started | wall | time steps | rate | longest silence |",
         "| --- | --- | --- | --- | --- | ---: | ---: | ---: | ---: |",
     ]
     for v in sorted(views, key=lambda v: v.log.first_wall or 0, reverse=True):
