@@ -198,7 +198,8 @@ def test_a_path_chip_separates_the_machine_from_the_path():
     chip = report.path_chip("santis:/scratch/e1000/LOG.demo.1.o")
     assert '<span class="host">santis</span>' in chip
     assert '<span class="p">/scratch/e1000/LOG.demo.1.o</span>' in chip
-    assert 'data-copy="santis:/scratch/e1000/LOG.demo.1.o"' in chip
+    # Only the path is copied, without the machine in front of it.
+    assert 'data-copy="/scratch/e1000/LOG.demo.1.o"' in chip
 
 
 def test_a_path_chip_leaves_a_plain_path_whole():
@@ -214,7 +215,7 @@ def test_paths_can_be_copied(tmp_path, parsed, assessed):
     html = report.render_run(view)
     # The header path, and the one in the provenance table.
     assert html.count('class="copy"') >= 2
-    assert 'data-copy="santis:/scratch/run/LOG.demo.1.o"' in html
+    assert 'data-copy="/scratch/run/LOG.demo.1.o"' in html
     assert 'aria-label="Copy the path"' in html
 
 
@@ -227,7 +228,7 @@ def test_the_index_formats_each_source_it_read(parsed, assessed):
     )
     assert '<span class="host">santis</span>' in html
     assert '<span class="p">/scratch/e1000/run</span>' in html
-    assert 'data-copy="santis:/scratch/e1000/run"' in html
+    assert 'data-copy="/scratch/e1000/run"' in html
 
 
 def test_the_run_script_modal_can_be_saved_and_is_highlighted(parsed, assessed):

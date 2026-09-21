@@ -142,7 +142,7 @@ def path_chip(spec: str) -> str:
     )
     return (
         f'<span class="src-path" title="{esc(spec)}">{ICONS["host"]}'
-        f'{named}<span class="p">{esc(path)}</span>{_copy_button(spec)}</span>'
+        f'{named}<span class="p">{esc(path)}</span>{_copy_button(path)}</span>'
     )
 
 
