@@ -413,6 +413,16 @@ tbody tr:hover { background: var(--panel-2); }
 th.sortable { cursor: pointer; } th.sortable:hover { color: var(--ink); }
 th.sortable[data-dir="asc"]::after { content: " \\2191"; }
 th.sortable[data-dir="desc"]::after { content: " \\2193"; }
+/* The index carries eleven columns, so it is given a tighter setting than
+   the tables on a run page: headings wrap, the gutters and the badges are
+   narrower, and a start is stacked as a date over a clock. The table should
+   fit the page rather than scroll. */
+table.runs th { white-space: normal; }
+table.runs th, table.runs td { padding-left: 8px; padding-right: 8px; }
+table.runs td.n { font-size: 13px; }
+table.runs .badge { gap: 4px; padding: 2px 9px 2px 4px; font-size: 12.5px; }
+table.runs .badge .mark { min-width: 17px; height: 17px; font-size: 11px; }
+td.stamp .clock { display: block; color: var(--muted); }
 
 details { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   padding: 0 16px; margin-bottom: 9px; box-shadow: var(--shadow); }
@@ -1561,7 +1571,7 @@ def render_index(
                 f'title="Compare the run script with {esc(Path(base.log.path).name)}">'
                 f"{_diff_label(d)}</button></td>"
             )
-        started = format_stamp(log.first_wall)
+        started, _, clock = format_stamp(log.first_wall).partition(" ")
         outcome = log.outcome.text if log.outcome else ""
         rows.append(
             f'<tr data-grade="{a.grade}">'
@@ -1578,7 +1588,9 @@ def render_index(
             + "</td>"
             f'<td class="n" data-v="{esc(log.fields.get("job_id") or "")}">'
             f'{esc(log.fields.get("job_id")) or "&ndash;"}</td>'
-            f'<td class="n" data-v="{log.first_wall or 0}">{esc(started)}</td>'
+            f'<td class="n stamp" data-v="{log.first_wall or 0}">{esc(started)}'
+            + (f'<span class="clock">{esc(clock)}</span>' if clock else "")
+            + "</td>"
             f'<td class="n" data-v="{s.get("wall_seconds") or 0}">'
             f'{format_duration(s.get("wall_seconds")) or "&ndash;"}</td>'
             f'<td class="n" data-v="{s.get("nodes") or 0}">{_num(s.get("nodes"))}</td>'
@@ -1606,7 +1618,7 @@ def render_index(
     body += [
         f'<h2 class="sec" id="{toc.add("runs", "Runs")}">Runs</h2>',
         filters,
-        '<div class="scroll"><table><thead><tr>'
+        '<div class="scroll"><table class="runs"><thead><tr>'
         '<th class="sortable">status</th><th class="sortable">health</th>'
         '<th class="sortable">run</th>'
         '<th class="sortable">job</th><th class="sortable">started</th>'

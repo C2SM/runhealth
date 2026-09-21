@@ -333,3 +333,17 @@ def test_index_table_carries_a_diff_per_run(parsed, assessed):
     # One run of the pair has a predecessor; the other shows a dash.
     assert html.count("data-open-diff=") == 1
     assert '<td class="n" data-v="-1">&ndash;</td>' in html
+
+
+def test_index_stacks_the_start_date_over_its_clock(parsed, assessed):
+    html = report.render_index(views(parsed, assessed, ["icon_hang"]), ["/tmp"], None, "Test")
+    # The cell still sorts on the raw stamp, but reads as two short lines.
+    assert '<td class="n stamp" data-v="1767690000.1">2026-01-06' in html
+    assert '<span class="clock">09:00:00</span>' in html
+    assert "2026-01-06 09:00:00" not in html
+
+
+def test_index_table_is_set_tighter_than_the_tables_on_a_run_page(parsed, assessed):
+    html = report.render_index(views(parsed, assessed, ["icon_hang"]), ["/tmp"], None, "Test")
+    assert '<table class="runs">' in html
+    assert "table.runs th { white-space: normal; }" in html
