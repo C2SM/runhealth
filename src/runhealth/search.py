@@ -18,7 +18,7 @@ import json
 from pathlib import Path
 
 from .logfile import format_stamp
-from .report import RunView, provenance_pairs
+from .report import RunView, field_anchor, provenance_pairs
 
 INDEX_FILE = "search.js"
 
@@ -46,7 +46,9 @@ def entry(view: RunView) -> dict:
         "source": view.source or log.path,
         "script": log.runscript,
         "checks": _checks(view),
-        "fields": [[k, v] for k, v in job + model if v],
+        # The anchor is the row the field is shown in, so a result on it
+        # takes the reader to that row and not merely to the page.
+        "fields": [[k, v, field_anchor(k)] for k, v in job + model if v],
     }
 
 

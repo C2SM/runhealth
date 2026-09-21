@@ -33,10 +33,12 @@ def test_the_index_carries_every_run_script(tmp_path, parsed, assessed):
 def test_a_run_is_described_by_more_than_its_name(tmp_path, parsed, assessed):
     search.write(views(parsed, assessed, ["icon_success"]), tmp_path)
     run = loaded((tmp_path / "search.js").read_text())["runs"][0]
-    fields = dict(run["fields"])
+    fields = {f[0]: f[1] for f in run["fields"]}
     assert fields["Node list"] == "nid[000001-000002]"
     assert fields["Revision"].startswith("icon-")
     assert any(c[1] == "Outcome" for c in run["checks"])
+    # Each field says where on the page it is shown.
+    assert [f[2] for f in run["fields"] if f[0] == "Node list"] == ["f-node-list"]
 
 
 def test_a_closing_tag_cannot_end_the_element_that_loads_the_index(tmp_path, assessed, parsed):
@@ -60,7 +62,26 @@ def test_the_header_searches_the_whole_report(parsed, assessed):
 def test_a_script_line_can_be_linked_to(parsed, assessed):
     html = report.render_run(views(parsed, assessed, ["icon_success"])[0])
     assert '<b id="SL1" data-n="1">' in html
-    assert "#script-L" in html  # the page opens the script where a search matched
+    assert "script-L" in html  # the page opens the script where a search matched
+
+
+def test_a_hit_in_a_check_or_a_field_is_marked_where_it_sits(parsed, assessed):
+    html = report.render_run(views(parsed, assessed, ["icon_success"])[0])
+    assert "function jumpToAnchor(id, query)" in html
+    assert "mark.q" in html  # the matching text is marked, not only scrolled to
+
+
+def test_every_anchor_a_result_offers_exists_on_the_page(tmp_path, parsed, assessed):
+    """A result is only worth following if the block it names is really there."""
+    view = views(parsed, assessed, ["icon_hang"])[0]
+    search.write([view], tmp_path)
+    run = loaded((tmp_path / "search.js").read_text())["runs"][0]
+    html = report.render_run(view)
+    wanted = ["summary", "status"]
+    wanted += [f"check-{i}" for i in range(len(run["checks"]))]
+    wanted += [f[2] for f in run["fields"]]
+    for anchor in wanted:
+        assert f'id="{anchor}"' in html, anchor
 
 
 def test_the_raw_log_page_looks_for_the_index_one_level_up(tmp_path, parsed, assessed):

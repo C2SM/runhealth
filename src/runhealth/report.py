@@ -442,6 +442,19 @@ h2.sec { font-size: 14px; text-transform: uppercase; letter-spacing: .1em;
   overflow-wrap: anywhere; }
 .check li::before { content: "\\2014"; position: absolute; left: 0; opacity: .5; }
 
+/* -- where a search hit sits on the page -- */
+/* A hit outside a run script is already somewhere on the page, so it is
+   shown there: the block is ringed for a moment and the text that matched
+   stays marked until the next search. */
+.check, .tile, dl.kv dt, dl.kv dd, .head, .tiles {
+  scroll-margin-top: calc(var(--nav-h) + 16px); }
+.found { border-radius: 9px; animation: found 2s ease-out; }
+mark.q { background: color-mix(in srgb, var(--warn) 38%, transparent);
+  color: inherit; border-radius: 3px; padding: 0 1px; }
+@keyframes found {
+  from { box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 65%, transparent); }
+  to { box-shadow: 0 0 0 3px transparent; } }
+
 /* -- figures -- */
 figure.fig { margin: 0 0 22px; background: var(--panel); border: 1px solid var(--line);
   border-radius: 10px; padding: 16px; box-shadow: var(--shadow);
@@ -695,6 +708,74 @@ JS = r"""
     });
   }
 
+  // -- taking the reader to what a search matched ------------------------
+  // Only the run scripts are behind a modal. A hit in the summary, in a
+  // check or among the provenance fields is already on the page, so it is
+  // shown where it sits: the section is unfolded if it is collapsed, the
+  // block is ringed for a moment, and the text that matched is marked.
+  function marked(text, needle, cls) {
+    var frag = document.createDocumentFragment();
+    if (!needle) {
+      frag.appendChild(document.createTextNode(text));
+      return frag;
+    }
+    var low = text.toLowerCase(), at = 0, i;
+    while ((i = low.indexOf(needle, at)) !== -1) {
+      if (i > at) frag.appendChild(document.createTextNode(text.slice(at, i)));
+      var m = document.createElement('mark');
+      if (cls) m.className = cls;
+      m.textContent = text.slice(i, i + needle.length);
+      frag.appendChild(m);
+      at = i + needle.length;
+    }
+    frag.appendChild(document.createTextNode(text.slice(at)));
+    return frag;
+  }
+
+  var lit = [];
+  function unmark() {
+    lit.forEach(function (el) {
+      el.classList.remove('found');
+      el.querySelectorAll('mark.q').forEach(function (m) {
+        m.parentNode.replaceChild(document.createTextNode(m.textContent), m);
+      });
+      el.normalize();
+    });
+    lit = [];
+  }
+  function markInside(el, needle) {
+    var walk = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+    var nodes = [], node;
+    while ((node = walk.nextNode())) nodes.push(node);
+    nodes.forEach(function (n) {
+      if (n.nodeValue.toLowerCase().indexOf(needle) === -1) return;
+      n.parentNode.replaceChild(marked(n.nodeValue, needle, 'q'), n);
+    });
+  }
+  function jumpToAnchor(id, query) {
+    unmark();
+    var el = document.getElementById(id);
+    if (!el) return;
+    var box = el.closest('details');
+    while (box) {
+      box.open = true;
+      box = box.parentElement && box.parentElement.closest('details');
+    }
+    // A grade filter may have put the block away since the search ran.
+    if (el.hidden) {
+      document.querySelectorAll('.filters button[data-grade="all"]').forEach(function (b) {
+        b.click();
+      });
+    }
+    // A field is a term and the value beside it, which are siblings.
+    lit = el.tagName === 'DT' && el.nextElementSibling ? [el, el.nextElementSibling] : [el];
+    lit.forEach(function (t) {
+      t.classList.add('found');
+      if (query) markInside(t, query.toLowerCase());
+    });
+    el.scrollIntoView({ block: 'center' });
+  }
+
   // -- modals: the run script, and the diff against the previous run ------
   function wireModal(selector) {
     var modal = document.querySelector(selector);
@@ -830,8 +911,11 @@ JS = r"""
         index.runs.forEach(function (r) {
           r.lines = (r.script || '').split('\n');
           r.low = r.lines.map(function (line) { return line.toLowerCase(); });
-          r.about = [r.name, r.file, r.job, r.status, r.source].concat(
-            (r.fields || []).map(function (f) { return f[0] + ' ' + f[1]; }));
+          // Each of these is somewhere on the run's page; the anchor is
+          // where the reader is taken when the result is followed.
+          r.about = [[r.name, 'summary'], [r.file, 'summary'], [r.job, 'summary'],
+                     [r.status, 'status'], [r.source, 'summary']].concat(
+            (r.fields || []).map(function (f) { return [f[0] + ' ' + f[1], f[2]]; }));
         });
         then();
       };
@@ -842,23 +926,6 @@ JS = r"""
       document.head.appendChild(tag);
     }
 
-    function marked(text, needle) {
-      var frag = document.createDocumentFragment();
-      if (!needle) {
-        frag.appendChild(document.createTextNode(text));
-        return frag;
-      }
-      var low = text.toLowerCase(), at = 0, i;
-      while ((i = low.indexOf(needle, at)) !== -1) {
-        if (i > at) frag.appendChild(document.createTextNode(text.slice(at, i)));
-        var m = document.createElement('mark');
-        m.textContent = text.slice(i, i + needle.length);
-        frag.appendChild(m);
-        at = i + needle.length;
-      }
-      frag.appendChild(document.createTextNode(text.slice(at)));
-      return frag;
-    }
     // A directive can sit a long way into a line, so a long line is shown
     // around its hit rather than from the start.
     function around(text, at) {
@@ -866,13 +933,14 @@ JS = r"""
       var from = Math.max(0, at - 40);
       return (from ? '…' : '') + text.slice(from, from + WINDOW);
     }
-    function row(href, lead, text, needle, mono, run, line) {
+    function row(run, anchor, lead, text, needle, mono, query) {
       var a = document.createElement('a');
       a.className = 'hit';
-      a.href = href;
+      a.href = base + run.page + '?q=' + encodeURIComponent(query) + '#' + anchor;
       a.setAttribute('role', 'option');
       a.setAttribute('aria-selected', 'false');
-      if (line) { a.dataset.page = run.page; a.dataset.line = line; }
+      a.dataset.page = run.page;
+      a.dataset.anchor = anchor;
       var n = document.createElement('span');
       n.className = 'ln';
       n.textContent = lead;
@@ -882,9 +950,6 @@ JS = r"""
       a.appendChild(n);
       a.appendChild(t);
       return a;
-    }
-    function scriptHref(run, number, query) {
-      return base + run.page + '?q=' + encodeURIComponent(query) + '#script-L' + number;
     }
     function group(run) {
       var head = document.createElement('div');
@@ -904,15 +969,15 @@ JS = r"""
 
     function rowsFor(run, query, needle) {
       var rows = [];
-      run.about.forEach(function (text) {
-        if (rows.length < 3 && text && text.toLowerCase().indexOf(needle) !== -1) {
-          rows.push(row(base + run.page, 'run', text, needle, false, run, ''));
+      run.about.forEach(function (about) {
+        if (rows.length < 3 && about[0] && about[0].toLowerCase().indexOf(needle) !== -1) {
+          rows.push(row(run, about[1], 'run', about[0], needle, false, query));
         }
       });
-      (run.checks || []).forEach(function (c) {
+      (run.checks || []).forEach(function (c, i) {
         var text = c[1] + ': ' + c[2];
         if ((text + ' ' + c[3]).toLowerCase().indexOf(needle) === -1) return;
-        rows.push(row(base + run.page + '#checks', c[0], text, needle, false, run, ''));
+        rows.push(row(run, 'check-' + i, c[0], text, needle, false, query));
       });
       var first = 0, more = 0;
       for (var i = 0; i < run.low.length; i++) {
@@ -920,12 +985,12 @@ JS = r"""
         if (at === -1) continue;
         if (!first) first = i + 1;
         if (more || rows.length >= PER_RUN) { more++; continue; }
-        rows.push(row(scriptHref(run, i + 1, query), 'L' + (i + 1),
-                      around(run.lines[i], at), needle, true, run, String(i + 1)));
+        rows.push(row(run, 'script-L' + (i + 1), 'L' + (i + 1),
+                      around(run.lines[i], at), needle, true, query));
       }
       if (more) {
-        rows.push(row(scriptHref(run, first, query), '',
-                      '+' + more + ' more in this run script', '', false, run, String(first)));
+        rows.push(row(run, 'script-L' + first, '',
+                      '+' + more + ' more in this run script', '', false, query));
       }
       return rows;
     }
@@ -981,15 +1046,18 @@ JS = r"""
         items[cursor < 0 ? 0 : cursor].click();
       }
     });
-    // A hit in this page's own script is shown straight away; following the
-    // link would reload the page to arrive where the reader already is.
+    // A hit on this page is shown straight away; following the link would
+    // reload the page to arrive where the reader already is.
     panel.addEventListener('click', function (e) {
       var a = e.target.closest && e.target.closest('a.hit');
-      if (!a || !a.dataset.line || !jumpToScriptLine) return;
-      if (a.dataset.page !== herePage) return;
+      if (!a || a.dataset.page !== herePage) return;
+      var line = /^script-L(\d+)$/.exec(a.dataset.anchor || '');
+      if (line && !jumpToScriptLine) return;
       e.preventDefault();
       show(false);
-      jumpToScriptLine(a.dataset.line, field.value.trim());
+      var query = field.value.trim();
+      if (line) jumpToScriptLine(line[1], query);
+      else jumpToAnchor(a.dataset.anchor, query);
     });
     document.addEventListener('click', function (e) {
       if (!search.contains(e.target)) show(false);
@@ -1009,13 +1077,16 @@ JS = r"""
       field.select();
     });
 
-    // Arriving from a result found on another page: open the script there.
-    var deep = /^#script-L(\d+)$/.exec(location.hash || '');
-    if (deep && jumpToScriptLine) {
-      var asked = '';
-      try { asked = new URLSearchParams(location.search).get('q') || ''; } catch (e) {}
+    // Arriving from a result found on another page: land on what matched,
+    // which is a line of the run script or a block of the page itself.
+    var asked = '';
+    try { asked = new URLSearchParams(location.search).get('q') || ''; } catch (e) {}
+    var anchor = (location.hash || '').slice(1);
+    if (asked && anchor) {
       field.value = asked;
-      jumpToScriptLine(deep[1], asked);
+      var deep = /^script-L(\d+)$/.exec(anchor);
+      if (!deep) jumpToAnchor(anchor, asked);
+      else if (jumpToScriptLine) jumpToScriptLine(deep[1], asked);
     }
   }
 
@@ -1530,14 +1601,20 @@ def _badge(level: str, text: str = "") -> str:
     )
 
 
-def _tile(value: str, label: str) -> str:
-    return f'<div class="tile"><div class="v">{value}</div><div class="l">{esc(label)}</div></div>'
+def _tile(value: str, label: str, anchor: str = "") -> str:
+    at = f' id="{esc(anchor)}"' if anchor else ""
+    return (
+        f'<div class="tile"{at}><div class="v">{value}</div>'
+        f'<div class="l">{esc(label)}</div></div>'
+    )
 
 
-def _check_card(c: Check) -> str:
+def _check_card(c: Check, n: int) -> str:
+    """One check, carrying the id a search result on it links to."""
     ev = "".join(f"<li>{esc(e)}</li>" for e in c.evidence)
     return (
-        f'<div class="check l-{c.level}" data-grade="{c.level}"><div class="hd">'
+        f'<div class="check l-{c.level}" id="check-{n}" data-grade="{c.level}">'
+        '<div class="hd">'
         f'<span class="t">{esc(c.title)}</span><span class="h">{esc(c.headline)}</span></div>'
         + (f'<div class="d">{esc(c.detail)}</div>' if c.detail else "")
         + (f"<ul>{ev}</ul>" if ev else "")
@@ -1579,9 +1656,15 @@ def _figure(f: Figure, log_href: str = "") -> str:
     )
 
 
+def field_anchor(key: str) -> str:
+    """The id of the row a field is shown in, and what a search links to."""
+    return "f-" + re.sub(r"[^a-z0-9]+", "-", key.lower()).strip("-")
+
+
 def _kv(pairs: list[tuple[str, str]], copy: tuple[str, ...] = ()) -> str:
     rows = "".join(
-        f"<dt>{esc(k)}</dt><dd>{esc(v)}{_copy_button(v) if k in copy else ''}</dd>"
+        f'<dt id="{field_anchor(k)}">{esc(k)}</dt>'
+        f"<dd>{esc(v)}{_copy_button(v) if k in copy else ''}</dd>"
         for k, v in pairs
         if v not in (None, "")
     )
@@ -1829,7 +1912,7 @@ def _diff_modal() -> str:
 def run_tiles(log: RunLog, a: Assessment) -> str:
     s = a.stats
     out = [
-        _tile(_badge(STATUS_LEVEL.get(a.status, "info"), a.status.title()), "status"),
+        _tile(_badge(STATUS_LEVEL.get(a.status, "info"), a.status.title()), "status", "status"),
         _tile(format_duration(s.get("wall_seconds")) or "&ndash;", "wall clock"),
     ]
     if s.get("sypd"):
@@ -1867,7 +1950,7 @@ def render_run(
         run_tiles(log, a),
         f'<h2 class="sec" id="{toc.add("checks", "Checks")}">Checks</h2>',
         _grade_filters(counts, ".check", "Filter checks by grade"),
-        "".join(_check_card(c) for c in a.checks),
+        "".join(_check_card(c, i) for i, c in enumerate(a.checks)),
     ]
     if view.figures:
         body.append(f'<h2 class="sec" id="{toc.add("figures", "Figures")}">Figures</h2>')

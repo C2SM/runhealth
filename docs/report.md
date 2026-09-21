@@ -67,7 +67,10 @@ occurrence in the same script marked, so a setting can be traced across a
 series of runs without opening each page in turn. The search also covers the
 names of the runs, their job ids, the paths their logs were read from, the
 facts listed under job and build provenance, and the text of every check, so a
-node name or an error message finds the runs it occurred in.
+node name or an error message finds the runs it occurred in. Selecting one of
+those results opens the run page at the check, the provenance row or the
+summary it matched rather than at the top of the page, marks the matching text
+there, and unfolds the section first when the row sits under a collapsed one.
 
 Results are grouped by run, newest first, and each run contributes at most a
 dozen lines; the remainder is counted, and selecting that count opens the

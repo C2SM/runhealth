@@ -1,3 +1,4 @@
+import re
 from dataclasses import replace
 from pathlib import Path
 
@@ -251,7 +252,14 @@ def test_a_log_without_a_run_script_offers_no_modal(parsed, assessed):
 def test_checks_can_be_filtered_by_grade(parsed, assessed):
     html = report.render_run(views(parsed, assessed, ["icon_hang"])[0])
     assert '<div class="filters" data-target=".check"' in html
-    assert 'class="check l-fail" data-grade="fail"' in html
+    assert re.search(r'class="check l-fail" id="check-\d+" data-grade="fail"', html)
+
+
+def test_a_hit_outside_the_script_has_something_to_land_on(parsed, assessed):
+    html = report.render_run(views(parsed, assessed, ["icon_success"])[0])
+    assert 'id="check-0"' in html
+    assert '<div class="tile" id="status">' in html
+    assert f'<dt id="{report.field_anchor("Node list")}">Node list</dt>' in html
 
 
 def test_one_grade_of_check_needs_no_filter():
