@@ -106,10 +106,10 @@ def phase_timeline(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     t0 = log.first_wall
     total = log.wall_seconds or 1.0
     unit, fmt = _time_fmt(total)
-    ch = svg.Chart(height=188, pad=(64, 20, 20, 46), uid=uid)
+    ch = svg.Chart(height=192, pad=(66, 20, 20, 52), uid=uid)
     p = ch.plot
     x = svg.Scale(0, total, p.x, p.right)
-    lanes = {"silence": (p.y + 2, 13), "phase": (p.y + 32, 38), "output": (p.y + 86, 12)}
+    lanes = {"silence": (p.y + 2, 15), "phase": (p.y + 34, 40), "output": (p.y + 90, 12)}
     used = {"phase"}
 
     y_ph, h_ph = lanes["phase"]
@@ -123,19 +123,19 @@ def phase_timeline(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         ch.geometry.append(
             ch.rect(x0, y_ph, w, h_ph, rx=2.0, **_mark(f"p{i % len(style.PHASES)} fill", tip))
         )
-        if w > 56:
+        if w > 64:
             middle = x0 + w / 2
             ch.labels.append(
                 ch.text(
                     middle,
                     y_ph + 16,
-                    svg.truncate(ph.name, int(w / 4.9)),
+                    svg.truncate(ph.name, int(w / 6.0)),
                     cls="in-bar",
                     text_anchor="middle",
                 )
             )
             ch.labels.append(
-                ch.text(middle, y_ph + 28, _dur(ph.seconds), cls="in-bar dim", text_anchor="middle")
+                ch.text(middle, y_ph + 30, _dur(ph.seconds), cls="in-bar dim", text_anchor="middle")
             )
 
     stall = float(log.threshold("stall_seconds", 300))
@@ -156,9 +156,9 @@ def phase_timeline(log: RunLog, a: Assessment, uid: str) -> Figure | None:
                 x0, y_gap, w, h_gap, rx=1.5, **_mark("lv-fail fill", tip, data_line=g.line or None)
             )
         )
-        if w > 34:
+        if w > 42:
             ch.labels.append(
-                ch.text(x0 + w / 2, y_gap + 10, _dur(g.seconds), cls="in-bar", text_anchor="middle")
+                ch.text(x0 + w / 2, y_gap + 11, _dur(g.seconds), cls="in-bar", text_anchor="middle")
             )
         used.add("silence")
         shown += 1
@@ -181,7 +181,7 @@ def phase_timeline(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     for name, (y, h) in lanes.items():
         if name in used:
             ch.frame.append(
-                ch.text(p.x - 8, y + h / 2 + 3, name, cls="row-label", text_anchor="end")
+                ch.text(p.x - 10, y + h / 2 + 3.7, name, cls="row-label", text_anchor="end")
             )
 
     ch.x_axis(
@@ -213,7 +213,7 @@ def progress_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     seconds = [record["seconds"] for record in a.intervals]
     median = a.stats.get("interval_median") or 0.0
     factor = float(log.threshold("outlier_factor", 3))
-    ch = svg.Chart(height=268, pad=(60, 24, 20, 52), uid=uid)
+    ch = svg.Chart(height=274, pad=(68, 24, 20, 58), uid=uid)
     p = ch.plot
     x = svg.Scale(min(steps), max(steps), p.x, p.right)
     # One slow first step (kernel compilation, cache warm-up) would otherwise
@@ -243,7 +243,7 @@ def progress_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         ch.frame.append(
             ch.text(
                 p.right - 3,
-                y_median - 5,
+                y_median - 6,
                 f"median {_dur(median)}",
                 cls="ref-label",
                 text_anchor="end",
@@ -314,7 +314,7 @@ def top_gaps(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         return None
     stall = float(log.threshold("stall_seconds", 300))
     row = 26
-    ch = svg.Chart(height=row * len(gaps) + 66, pad=(300, 14, 70, 46), uid=uid)
+    ch = svg.Chart(height=row * len(gaps) + 72, pad=(300, 14, 78, 52), uid=uid)
     p = ch.plot
     x = svg.Scale(0, max(g.seconds for g in gaps), p.x, p.right)
     labels = []
@@ -339,10 +339,16 @@ def top_gaps(log: RunLog, a: Assessment, uid: str) -> Figure | None:
             )
         )
         ch.frame.append(
-            ch.text(p.right + 6, y + row / 2 - 1, _dur(g.seconds), cls="val", text_anchor="start")
+            ch.text(
+                p.right + 7,
+                y + (row - 9) / 2 + 3.7,
+                _dur(g.seconds),
+                cls="val",
+                text_anchor="start",
+            )
         )
         labels.append((y + (row - 9) / 2, g.before or "(start of log)"))
-    ch.y_categories(labels, chars=48)
+    ch.y_categories(labels, chars=46)
     unit, fmt = _time_fmt(max(g.seconds for g in gaps))
     ch.x_axis(x, svg.nice_ticks(0, x.d1, 6), fmt, f"silence ({unit})")
     return Figure(
@@ -368,7 +374,7 @@ def io_cadence(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     factor = float(log.threshold("io_gap_outlier_factor", 4))
     all_seconds = [g["seconds"] for n in names for g in live[n]]
 
-    ch = svg.Chart(height=258, pad=(60, 24, 20, 52), uid=uid)
+    ch = svg.Chart(height=266, pad=(68, 26, 20, 58), uid=uid)
     p = ch.plot
     x = svg.Scale(0, total, p.x, p.right)
     overall_median = statistics.median(all_seconds)
@@ -451,9 +457,9 @@ def timer_breakdown(log: RunLog, a: Assessment, uid: str) -> Figure | None:
             picks.append((group, rows))
     if not picks:
         return None
-    row, head, foot = 24, 28, 50
+    row, head, foot = 25, 30, 56
     heights = [head + row * len(rows) + foot for _, rows in picks]
-    ch = svg.Chart(height=sum(heights) + 6, pad=(232, 6, 62, 6), uid=uid)
+    ch = svg.Chart(height=sum(heights) + 6, pad=(238, 6, 68, 6), uid=uid)
     top = 6
     for (group, rows), height in zip(picks, heights):
         box = svg.Box(ch.pad_l, top + head, ch.width - ch.pad_l - ch.pad_r, row * len(rows))
@@ -462,7 +468,7 @@ def timer_breakdown(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         ch.frame.append(
             ch.text(
                 8,
-                top + 16,
+                top + 17,
                 f"{group.title}   {group.root} = {_dur(group.root_seconds)}",
                 cls="panel-title",
             )
@@ -487,15 +493,15 @@ def timer_breakdown(log: RunLog, a: Assessment, uid: str) -> Figure | None:
                 ch.geometry.append(ch.line(x(edge), middle - 4, x(edge), middle + 4, cls="whisker"))
             ch.frame.append(
                 ch.text(
-                    box.right + 6,
-                    middle + 3,
+                    box.right + 7,
+                    middle + 3.7,
                     f"{r.share * 100:.0f}%",
                     cls="val",
                     text_anchor="start",
                 )
             )
             labels.append((middle, r.label))
-        ch.y_categories(labels, chars=38)
+        ch.y_categories(labels, chars=36)
         unit, fmt = _time_fmt(biggest)
         ch.x_axis(x, svg.nice_ticks(0, x.d1, 5), fmt, f"average across ranks ({unit})", box=box)
         top += height
@@ -526,7 +532,7 @@ def imbalance(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     warn = float(log.threshold("imbalance_warn", 1.25))
     fail = float(log.threshold("imbalance_fail", 2.0))
     row = 25
-    ch = svg.Chart(height=row * len(rows) + 62, pad=(214, 14, 76, 44), uid=uid)
+    ch = svg.Chart(height=row * len(rows) + 70, pad=(218, 14, 94, 52), uid=uid)
     p = ch.plot
     worst = max(r.imbalance for r, _ in rows)
     x = svg.Scale(0, worst * 1.06, p.x, p.right)
@@ -547,15 +553,15 @@ def imbalance(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         )
         ch.frame.append(
             ch.text(
-                p.right + 6,
-                y + row / 2 - 1,
+                p.right + 7,
+                y + (row - 9) / 2 + 3.7,
                 f"{ratio:.1f}x{rank.replace(', on ', ' ')}",
                 cls="val",
                 text_anchor="start",
             )
         )
         labels.append((y + (row - 9) / 2, r.label))
-    ch.y_categories(labels, chars=34)
+    ch.y_categories(labels, chars=32)
     ch.frame.append(ch.line(x(1.0), p.y, x(1.0), p.bottom, cls="ref"))
     ch.x_axis(x, svg.nice_ticks(0, x.d1, 6), lambda v: f"{v:.1f}x", "slowest rank / fastest rank")
     return Figure(
@@ -578,9 +584,9 @@ def warning_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         return None
     families = sorted(live.items(), key=lambda kv: -kv[1].total)[:5]
     span = int((log.wall_seconds or 60.0) // 60) + 1
-    ch = svg.Chart(height=258, pad=(52, 40, 18, 50), uid=uid)
-    left = svg.Box(52, 40, 488, 258 - 40 - 50)
-    right = svg.Box(626, 40, 256, left.h)
+    ch = svg.Chart(height=274, pad=(58, 44, 18, 56), uid=uid)
+    left = svg.Box(58, 44, 482, 274 - 44 - 56)
+    right = svg.Box(628, 44, 254, left.h)
 
     peak = max(max(g.bins.get(str(m), 0) for m in range(span)) for _, g in families) or 1
     x = svg.Scale(0, max(span - 1, 1), left.x, left.right)
@@ -603,7 +609,7 @@ def warning_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
             svg.tag("g", body, cls="series", data_series=str(i), aria_label=group.label)
         )
     ch.legend(
-        [(f"s{i % 7}", f"{g.label} ({g.total:,})") for i, (_, g) in enumerate(families)], y=22
+        [(f"s{i % 7}", f"{g.label} ({g.total:,})") for i, (_, g) in enumerate(families)], y=24
     )
     ch.y_axis(y, y.ticks(), svg.si, "lines per minute", box=left)
     ch.x_axis(
@@ -630,7 +636,7 @@ def warning_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         row = min(right.h / max(len(nodes), 1), 22.0)
         nx = svg.Scale(0, max(c for _, c in nodes) * 1.04, right.x, right.right)
         ch.frame.append(
-            ch.text(right.x - 66, right.y - 8, f"nodes: {busiest.label}", cls="panel-title")
+            ch.text(right.x - 74, right.y - 10, f"nodes: {busiest.label}", cls="panel-title")
         )
         labels = []
         for i, (node, count) in enumerate(nodes):
@@ -646,11 +652,15 @@ def warning_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
                     **_mark("s0 fill", tip),
                 )
             )
-            labels.append((y_node + row / 2 - 3, node))
+            labels.append((y_node + row / 2 - 3.7, node))
         for y_label, text in labels:
             ch.frame.append(
                 ch.text(
-                    right.x - 7, y_label + 3, svg.truncate(text, 13), cls="tick", text_anchor="end"
+                    right.x - 9,
+                    y_label + 3.7,
+                    svg.truncate(text, 12),
+                    cls="tick",
+                    text_anchor="end",
                 )
             )
         ch.x_axis(nx, svg.nice_ticks(0, nx.d1, 3), svg.si, "lines", box=right)
@@ -689,7 +699,7 @@ def counter_spread(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         return None
     rows = sorted(rows, key=lambda r: -(r.values[c_max] / max(r.values[c_min], 1.0)))[:14]
     row = 25
-    ch = svg.Chart(height=row * len(rows) + 64, pad=(268, 14, 66, 48), uid=uid)
+    ch = svg.Chart(height=row * len(rows) + 72, pad=(272, 14, 72, 56), uid=uid)
     p = ch.plot
     lows = [max(r.values.get(c_min, 0.0), 0.5) for r in rows]
     highs = [max(r.values.get(c_max, 0.0), lo) for r, lo in zip(rows, lows)]
@@ -710,10 +720,10 @@ def counter_spread(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         )
         ch.geometry.append(ch.circle(x(mean), y, 3.0, cls="ink fill"))
         ch.frame.append(
-            ch.text(p.right + 6, y + 3, f"{spread:.0f}x", cls="val", text_anchor="start")
+            ch.text(p.right + 7, y + 3.7, f"{spread:.0f}x", cls="val", text_anchor="start")
         )
         labels.append((y, r.label))
-    ch.y_categories(labels, chars=44)
+    ch.y_categories(labels, chars=42)
     ch.x_axis(x, svg.log_ticks(x.d0, x.d1), svg.si, "counter value, log scale")
     return Figure(
         key="counters",
@@ -770,14 +780,14 @@ def render_index(
     rates = [a.stats.get("sypd") or 0.0 for _, a, _ in usable]
     has_rate = any(rates)
     panels = 2 if has_rate else 1
-    panel_h, gap, foot = 104, 34, 92
-    ch = svg.Chart(height=panels * (panel_h + gap) + foot, pad=(60, 16, 18, foot), uid="overview")
+    panel_h, gap, foot = 112, 38, 92
+    ch = svg.Chart(height=panels * (panel_h + gap) + foot, pad=(68, 16, 18, foot), uid="overview")
     rate_label = usable[0][0].setting("throughput_label", "rate")
     width = ch.width - ch.pad_l - ch.pad_r
     slot = width / len(usable)
     bar = min(slot * 0.62, 46.0)
 
-    def draw(box: svg.Box, values: list[float], axis_label: str, fmt) -> None:
+    def draw(box: svg.Box, values: list[float], axis_label: str, fmt, names: bool = False) -> None:
         top = max(values) * 1.14 or 1.0
         y = svg.Scale(0, top, box.bottom, box.y)
         ch.y_axis(y, svg.nice_ticks(0, top, 4), fmt, axis_label, box=box)
@@ -802,6 +812,17 @@ def render_index(
                     **_mark(f"lv-{a.grade} fill", tip, data_href=href),
                 )
             )
+            if names:
+                title = log.fields.get("job_name") or log.name
+                ch.labels.append(
+                    ch.text(
+                        center,
+                        y(value) - 5,
+                        svg.truncate(title, max(4, int(slot / 5.9))),
+                        cls="val",
+                        text_anchor="middle",
+                    )
+                )
 
     boxes = [svg.Box(ch.pad_l, 16 + i * (panel_h + gap), width, panel_h) for i in range(panels)]
     draw(
@@ -809,6 +830,7 @@ def render_index(
         [(log.wall_seconds or 0) / 60.0 for log, _, _ in usable],
         "wall clock (min)",
         svg.si,
+        names=True,
     )
     if has_rate:
         draw(boxes[1], rates, rate_label, lambda v: f"{v:.2g}")
@@ -820,15 +842,18 @@ def render_index(
         unique = ids[i] and ids.count(ids[i]) == 1
         base = svg.truncate(ids[i] if unique else log.name, 14)
         started = format_stamp(log.first_wall)[:10]
-        text = f"{base} · {started}" if started else base
+        lines = svg.tag("tspan", svg.esc(base), x=0.0, dy=0.0)
+        if started:
+            lines += svg.tag("tspan", svg.esc(started), x=0.0, dy=13.0)
         ch.frame.append(
-            ch.text(
-                0,
-                0,
-                text,
+            svg.tag(
+                "text",
+                lines,
+                x=0.0,
+                y=0.0,
                 cls="tick",
                 text_anchor="end",
-                transform=f"translate({svg.num(center + 3)},{svg.num(baseline + 12)}) rotate(-42)",
+                transform=f"translate({svg.num(center + 3)},{svg.num(baseline + 14)}) rotate(-42)",
             )
         )
     figure = Figure(

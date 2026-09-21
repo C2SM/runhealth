@@ -225,7 +225,7 @@ def truncate(text: str, chars: int) -> str:
     return text if len(text) <= chars else text[: chars - 1] + "…"
 
 
-def label_width(text: str, size: float = 8.0) -> float:
+def label_width(text: str, size: float = 10.5) -> float:
     """Estimated rendered width. Used only to reserve axis room."""
     return len(str(text)) * size * 0.55
 
@@ -355,13 +355,13 @@ class Chart:
             if grid:
                 parts.append(self.line(x, p.y, x, p.bottom, cls="grid"))
             parts.append(self.line(x, p.bottom, x, p.bottom + 4, cls="ax-line"))
-            parts.append(self.text(x, p.bottom + 15, fmt(t), cls="tick", text_anchor="middle"))
+            parts.append(self.text(x, p.bottom + 17, fmt(t), cls="tick", text_anchor="middle"))
         self.frame.append(tag("g", "".join(parts), cls="rh-xticks"))
         if label:
             self.frame.append(
                 self.text(
                     p.x + p.w / 2,
-                    p.bottom + 31,
+                    p.bottom + 37,
                     label,
                     cls="ax-label",
                     text_anchor="middle",
@@ -384,7 +384,7 @@ class Chart:
                 continue
             if grid:
                 self.frame.append(self.line(p.x, y, p.right, y, cls="grid"))
-            self.frame.append(self.text(p.x - 7, y + 3, fmt(t), cls="tick", text_anchor="end"))
+            self.frame.append(self.text(p.x - 9, y + 3.7, fmt(t), cls="tick", text_anchor="end"))
         if label:
             self.frame.append(
                 self.text(
@@ -393,7 +393,7 @@ class Chart:
                     label,
                     cls="ax-label",
                     text_anchor="middle",
-                    transform=f"translate(11,{num(p.y + p.h / 2)}) rotate(-90)",
+                    transform=f"translate(13,{num(p.y + p.h / 2)}) rotate(-90)",
                 )
             )
 
@@ -402,8 +402,8 @@ class Chart:
         for y, text in rows:
             self.frame.append(
                 self.text(
-                    self.plot.x - 8,
-                    y + 3,
+                    self.plot.x - 10,
+                    y + 3.7,
                     truncate(text, chars),
                     cls="tick",
                     text_anchor="end",
@@ -414,18 +414,23 @@ class Chart:
         """Clickable legend. Each entry is ``(css class, text)``."""
         p = self.plot
         x = p.x
-        y = self.pad_t - 5 if y is None else y
+        y = self.pad_t - 4 if y is None else y
         for i, (cls, text) in enumerate(entries):
             self.frame.append(
                 tag(
                     "g",
                     tag(
-                        "rect", x=float(x), y=float(y - 7), width=9.0, height=9.0, cls=f"{cls} fill"
+                        "rect",
+                        x=float(x),
+                        y=float(y - 8),
+                        width=10.0,
+                        height=10.0,
+                        cls=f"{cls} fill",
                     )
                     + tag(
                         "text",
                         esc(text),
-                        x=float(x + 13),
+                        x=float(x + 15),
                         y=float(y + 1),
                         cls="legend-text",
                     ),
@@ -437,7 +442,7 @@ class Chart:
                     aria_label=f"toggle {text}",
                 )
             )
-            x += 26 + label_width(text, 9.5)
+            x += 30 + label_width(text, 11.0)
 
     # -- output --
 

@@ -137,9 +137,7 @@ def path_chip(spec: str) -> str:
     host, sep, path = spec.partition(":")
     if not sep or "/" in host:
         host, path = "", spec
-    named = (
-        f'<span class="host">{esc(host)}</span><span class="sep">:</span>' if host else ""
-    )
+    named = f'<span class="host">{esc(host)}</span><span class="sep">:</span>' if host else ""
     return (
         f'<span class="src-path" title="{esc(spec)}">{ICONS["host"]}'
         f'{named}<span class="p">{esc(path)}</span>{_copy_button(path)}</span>'
@@ -194,7 +192,7 @@ html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 body {
   margin: 0; background: var(--bg); color: var(--ink);
-  font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 code, .mono, td.n, .kv dd { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
@@ -212,13 +210,13 @@ a:hover { border-bottom-color: currentColor; }
 @supports not (backdrop-filter: blur(1px)) { .nav { background: var(--bg); } }
 .nav-in { max-width: 1420px; margin: 0 auto; height: var(--nav-h); padding: 0 20px;
   display: flex; align-items: center; gap: 10px; }
-.nav .brand { font-weight: 650; font-size: 13.5px; letter-spacing: -.01em; border: none;
+.nav .brand { font-weight: 700; font-size: 15px; letter-spacing: -.01em; border: none;
   flex: 0 0 auto; }
 .nav .sep { color: var(--line-2); }
-.nav .here { font-size: 13.5px; font-weight: 550; overflow: hidden; text-overflow: ellipsis;
+.nav .here { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; min-width: 0; }
 .nav .spacer { flex: 1 1 auto; }
-.nav .up { font-size: 12.5px; color: var(--muted); border: none; flex: 0 0 auto; }
+.nav .up { font-size: 13.5px; color: var(--muted); border: none; flex: 0 0 auto; }
 .nav .up:hover { color: var(--ink); }
 
 .theme { display: inline-flex; gap: 1px; padding: 2px; flex: 0 0 auto;
@@ -234,14 +232,14 @@ a:hover { border-bottom-color: currentColor; }
 .shell { max-width: 1420px; margin: 0 auto; padding: 0 20px 90px;
   display: grid; grid-template-columns: 216px minmax(0, 1fr); gap: 34px; align-items: start; }
 .toc { position: sticky; top: calc(var(--nav-h) + 20px); padding-top: 30px; }
-.toc-h { margin: 0 0 9px; font-size: 11px; text-transform: uppercase; letter-spacing: .09em;
+.toc-h { margin: 0 0 9px; font-size: 12px; text-transform: uppercase; letter-spacing: .09em;
   color: var(--muted); font-weight: 650; }
 .toc nav { display: flex; flex-direction: column; gap: 1px;
   border-left: 1px solid var(--line); }
-.toc a { border: none; font-size: 13px; color: var(--muted); padding: 4px 0 4px 13px;
+.toc a { border: none; font-size: 14px; color: var(--muted); padding: 4px 0 4px 13px;
   margin-left: -1px; border-left: 2px solid transparent; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
-.toc a.lv2 { padding-left: 25px; font-size: 12.5px; }
+.toc a.lv2 { padding-left: 25px; font-size: 13.5px; }
 .toc a:hover { color: var(--ink); }
 .toc a[aria-current="true"] { color: var(--ink); font-weight: 600;
   border-left-color: var(--info); }
@@ -270,23 +268,23 @@ main > *:first-child { margin-top: 0; }
    under the header. A scroll offset cannot go negative, so it simply clamps. */
 .head { border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 24px;
   scroll-margin-top: calc(var(--nav-h) + 100px); }
-.head h1 { font-size: 25px; margin: 0 0 5px; letter-spacing: -.018em; overflow-wrap: anywhere; }
-.head .sub { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
-.crumb { font-size: 12px; color: var(--muted); text-transform: uppercase;
+.head h1 { font-size: 30px; margin: 0 0 5px; letter-spacing: -.018em; overflow-wrap: anywhere; }
+.head .sub { color: var(--muted); font-size: 14.5px; overflow-wrap: anywhere; }
+.crumb { font-size: 12.5px; font-weight: 600; color: var(--muted); text-transform: uppercase;
   letter-spacing: .09em; margin-bottom: 7px; }
 
 /* -- where the log came from, and what can be opened from it -- */
 .source { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 13px; }
 .src-path, .src-btn { display: inline-flex; align-items: center; gap: 7px;
   background: var(--panel); border: 1px solid var(--line-2); border-radius: 8px;
-  padding: 6px 11px; font-size: 12.5px; color: var(--ink); box-shadow: var(--shadow);
+  padding: 7px 12px; font-size: 13.5px; color: var(--ink); box-shadow: var(--shadow);
   min-width: 0; }
 .src-path { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   overflow-wrap: anywhere; gap: 0; }
 /* Only the chip's own icon, so the copy button keeps its own color. */
 .src-path > .ico { flex: 0 0 auto; color: var(--muted); margin-right: 8px; }
 .src-btn .ico { flex: 0 0 auto; color: var(--muted); }
-.src-path .host { font-weight: 650; }
+.src-path .host { font-weight: 650; white-space: nowrap; }
 .src-path .sep { color: var(--muted); margin: 0 1px; }
 .src-path .p { color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
 .copy { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0;
@@ -298,7 +296,7 @@ main > *:first-child { margin-top: 0; }
 .copy.copied { color: var(--ok); }
 .copy.copied .ico { display: none; }
 .copy.copied .ico + .ico { display: block; }
-.src-btn { font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer;
+.src-btn { font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer;
   white-space: nowrap; }
 .src-btn:hover { border-color: var(--info); color: var(--info); }
 .src-btn:hover .ico { color: var(--info); }
@@ -308,15 +306,15 @@ main > *:first-child { margin-top: 0; }
 .src-btn.key:hover { background: color-mix(in srgb, var(--info) 10%, var(--panel)); }
 
 .badge { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
-  padding: 2px 11px 2px 6px; font-size: 12px; font-weight: 600; white-space: nowrap;
+  padding: 3px 12px 3px 6px; font-size: 13px; font-weight: 650; white-space: nowrap;
   border: 1px solid currentColor; }
 /* The dot is filled with the grade's color and the letter is knocked out of
    it. The fill cannot be currentColor: on this element that resolves to this
    element's own color, which is the knockout color, so the letter and the
    dot come out the same and the letter disappears. */
-.badge .mark { display: inline-grid; place-items: center; min-width: 17px; height: 17px;
+.badge .mark { display: inline-grid; place-items: center; min-width: 19px; height: 19px;
   padding: 0 3px; border-radius: 999px; color: var(--panel);
-  font-size: 10px; font-weight: 700; }
+  font-size: 11.5px; font-weight: 700; }
 .g-ok { color: var(--ok); } .g-info { color: var(--info); }
 .g-warn { color: var(--warn); } .g-fail { color: var(--fail); }
 .badge.g-ok .mark { background: var(--ok); }
@@ -324,16 +322,16 @@ main > *:first-child { margin-top: 0; }
 .badge.g-warn .mark { background: var(--warn); }
 .badge.g-fail .mark { background: var(--fail); }
 
-.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px; margin: 0 0 26px; }
 .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   padding: 12px 14px; box-shadow: var(--shadow); }
-.tile .v { font-size: 20px; font-weight: 650; letter-spacing: -.02em; line-height: 1.2; }
-.tile .l { font-size: 11.5px; color: var(--muted); margin-top: 3px;
+.tile .v { font-size: 26px; font-weight: 700; letter-spacing: -.02em; line-height: 1.2; }
+.tile .l { font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 4px;
   text-transform: uppercase; letter-spacing: .06em; }
 
-h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .1em;
-  color: var(--muted); font-weight: 650; margin: 34px 0 12px;
+h2.sec { font-size: 14px; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--muted); font-weight: 700; margin: 34px 0 12px;
   border-top: 1px solid var(--line); padding-top: 16px;
   scroll-margin-top: calc(var(--nav-h) + 16px); }
 
@@ -342,13 +340,13 @@ h2.sec { font-size: 13px; text-transform: uppercase; letter-spacing: .1em;
 .check.l-ok { border-left-color: var(--ok); } .check.l-info { border-left-color: var(--info); }
 .check.l-warn { border-left-color: var(--warn); } .check.l-fail { border-left-color: var(--fail); }
 .check .hd { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
-.check .t { font-size: 12px; text-transform: uppercase; letter-spacing: .07em;
-  color: var(--muted); font-weight: 650; min-width: 132px; }
-.check .h { font-weight: 600; }
-.check .d { color: var(--muted); font-size: 13.5px; margin-top: 5px; }
+.check .t { font-size: 12.5px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--muted); font-weight: 700; min-width: 140px; }
+.check .h { font-weight: 650; }
+.check .d { color: var(--muted); font-size: 14.5px; margin-top: 5px; }
 .check ul { margin: 8px 0 0; padding-left: 0; list-style: none; }
 .check li { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px; color: var(--muted); padding: 2px 0 2px 13px; position: relative;
+  font-size: 13px; color: var(--muted); padding: 2px 0 2px 13px; position: relative;
   overflow-wrap: anywhere; }
 .check li::before { content: "\\2014"; position: absolute; left: 0; opacity: .5; }
 
@@ -357,26 +355,27 @@ figure.fig { margin: 0 0 22px; background: var(--panel); border: 1px solid var(-
   border-radius: 10px; padding: 16px; box-shadow: var(--shadow);
   scroll-margin-top: calc(var(--nav-h) + 16px); }
 figure.fig .fh { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-figure.fig h3 { margin: 0; font-size: 15px; }
-figure.fig .note { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-figure.fig .zoomed { margin-left: auto; font-size: 12px; color: var(--muted);
+figure.fig h3 { margin: 0; font-size: 18px; letter-spacing: -.01em; }
+figure.fig .note { font-size: 13px; font-weight: 600; color: var(--muted);
+  font-variant-numeric: tabular-nums; }
+figure.fig .zoomed { margin-left: auto; font-size: 13px; color: var(--muted);
   background: none; border: 1px solid var(--line-2); border-radius: 999px;
   padding: 2px 10px; cursor: pointer; }
-figure.fig .cap { color: var(--muted); font-size: 13px; margin: 4px 0 12px; }
+figure.fig .cap { color: var(--muted); font-size: 14.5px; margin: 4px 0 12px; }
 .chart { position: relative; }
 .chart .tip { position: absolute; z-index: 20; pointer-events: none; max-width: 340px;
   background: var(--panel); color: var(--ink); border: 1px solid var(--line-2);
   border-radius: 8px; padding: 7px 10px; box-shadow: 0 4px 18px rgba(0,0,0,.16);
-  font-size: 12px; line-height: 1.45; }
-.chart .tip b { display: block; font-size: 12.5px; margin-bottom: 2px; }
+  font-size: 13px; line-height: 1.45; }
+.chart .tip b { display: block; font-size: 13.5px; margin-bottom: 2px; }
 .chart .tip span { display: block; color: var(--muted); overflow-wrap: anywhere; }
 
-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
-th { text-align: left; font-size: 11.5px; text-transform: uppercase; letter-spacing: .06em;
-  color: var(--muted); font-weight: 650; padding: 7px 10px; border-bottom: 1px solid var(--line-2);
+table { width: 100%; border-collapse: collapse; font-size: 14.5px; }
+th { text-align: left; font-size: 12.5px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); font-weight: 700; padding: 7px 10px; border-bottom: 1px solid var(--line-2);
   white-space: nowrap; }
 td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-td.n { text-align: right; white-space: nowrap; font-size: 12.5px;
+td.n { text-align: right; white-space: nowrap; font-size: 13.5px;
   font-variant-numeric: tabular-nums; }
 tbody tr:hover { background: var(--panel-2); }
 .scroll { overflow-x: auto; background: var(--panel); border: 1px solid var(--line);
@@ -387,7 +386,7 @@ th.sortable[data-dir="desc"]::after { content: " \\2193"; }
 
 details { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   padding: 0 16px; margin-bottom: 9px; box-shadow: var(--shadow); }
-details > summary { cursor: pointer; padding: 12px 0; font-weight: 600; font-size: 14px;
+details > summary { cursor: pointer; padding: 13px 0; font-weight: 650; font-size: 16px;
   list-style: none; display: flex; justify-content: space-between; gap: 12px; }
 details > summary::-webkit-details-marker { display: none; }
 details > summary::after { content: "+"; color: var(--muted); font-weight: 400; }
@@ -398,21 +397,21 @@ details .body { padding-bottom: 16px; }
 .depth-3 { padding-left: 48px; } .depth-4 { padding-left: 64px; }
 
 dl.kv { display: grid; grid-template-columns: minmax(120px, max-content) 1fr;
-  gap: 3px 18px; margin: 0; font-size: 13px; }
+  gap: 4px 18px; margin: 0; font-size: 14.5px; }
 dl.kv dt { color: var(--muted); } dl.kv dd { margin: 0; overflow-wrap: anywhere; }
 
 .filters { display: flex; gap: 7px; flex-wrap: wrap; margin-bottom: 14px; }
 .filters button { background: var(--panel); border: 1px solid var(--line-2); color: var(--muted);
-  border-radius: 999px; padding: 4px 13px; font-size: 12px; cursor: pointer; }
+  border-radius: 999px; padding: 5px 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
 .filters button[aria-pressed="true"] { background: var(--ink); color: var(--bg);
   border-color: var(--ink); }
-footer { color: var(--muted); font-size: 12px; margin-top: 46px;
+footer { color: var(--muted); font-size: 13px; margin-top: 46px;
   border-top: 1px solid var(--line); padding-top: 14px; }
 
 /* -- embedded log -- */
 .logview { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   overflow-x: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px; line-height: 1.55; }
+  font-size: 13px; line-height: 1.6; }
 .logview .blk { content-visibility: auto; contain-intrinsic-size: auto 340px; }
 .logview b { display: block; padding: 0 14px 0 66px; text-indent: -52px;
   font-weight: 400; white-space: pre-wrap; overflow-wrap: anywhere;
@@ -433,8 +432,8 @@ dialog.script-modal[open] { display: flex; flex-direction: column; }
 dialog.script-modal::backdrop { background: rgba(10,10,8,.55); }
 .script-hd { flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
   padding: 11px 13px; border-bottom: 1px solid var(--line); background: var(--panel-2); }
-.script-hd h2 { margin: 0; font-size: 14px; flex: 0 0 auto; }
-.script-hd .name { font-size: 12px; color: var(--muted); overflow: hidden; min-width: 0;
+.script-hd h2 { margin: 0; font-size: 16px; flex: 0 0 auto; }
+.script-hd .name { font-size: 13px; color: var(--muted); overflow: hidden; min-width: 0;
   text-overflow: ellipsis; white-space: nowrap;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .script-acts { flex: 0 0 auto; margin-left: auto; display: flex; align-items: center; gap: 8px; }
@@ -444,7 +443,7 @@ dialog.script-modal::backdrop { background: rgba(10,10,8,.55); }
 .script-close:hover { background: var(--panel); border-color: var(--line-2); color: var(--ink); }
 .script-body { flex: 1 1 auto; min-height: 0; overflow: auto; margin: 0; padding: 14px 16px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+  font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .script-body code { font: inherit; }
 .sy-cmt { color: var(--syn-cmt); font-style: italic; }
 .sy-dir { color: var(--syn-dir); font-weight: 600; }
@@ -459,7 +458,7 @@ dialog.script-modal::backdrop { background: rgba(10,10,8,.55); }
 @media print {
   :root { --bg: #fff; --panel: #fff; --panel-2: #fff; --ink: #000; --muted: #444;
     --line: #ccc; --line-2: #999; --shadow: none; }
-  body { font-size: 10.5pt; }
+  body { font-size: 11pt; }
   .nav, .toc, .filters, .skip, figure.fig .zoomed, .chart .tip, dialog,
   .src-btn, .copy { display: none !important; }
   .src-path { box-shadow: none; }
@@ -467,7 +466,7 @@ dialog.script-modal::backdrop { background: rgba(10,10,8,.55); }
   main { padding-top: 0; }
   /* auto-fit grids are not universal in print engines; flex is. */
   .tiles { display: flex; flex-wrap: wrap; gap: 8px; }
-  .tile { flex: 1 1 132px; }
+  .tile { flex: 1 1 150px; }
   .badge { display: inline-block; }
   .check, figure.fig, details, .scroll { break-inside: avoid; page-break-inside: avoid;
     box-shadow: none; }
@@ -952,7 +951,7 @@ JS = r"""
             'class': 'ax-line', x1: x, y1: base, x2: x, y2: base + 4
           }));
           var label = el('text', {
-            'class': 'tick', x: x, y: base + 15, 'text-anchor': 'middle'
+            'class': 'tick', x: x, y: base + 17, 'text-anchor': 'middle'
           });
           label.textContent = fmt(t);
           xticks.appendChild(label);
@@ -1227,9 +1226,7 @@ def _source_bar(view: RunView) -> str:
             f'{ICONS["script"]}run script</button>'
         )
     if view.log_href:
-        parts.append(
-            f'<a class="src-btn" href="{esc(view.log_href)}">{ICONS["log"]}raw log</a>'
-        )
+        parts.append(f'<a class="src-btn" href="{esc(view.log_href)}">{ICONS["log"]}raw log</a>')
     return f'<div class="source">{"".join(parts)}</div>' if parts else ""
 
 
@@ -1353,7 +1350,7 @@ def render_index(
             f'<td data-v="{esc(log.name)}"><a href="{esc(v.page)}">'
             f'{esc(log.fields.get("job_name") or log.name)}</a>'
             + (
-                f'<br><span style="color:var(--muted);font-size:12px">{esc(outcome[:70])}</span>'
+                f'<br><span style="color:var(--muted);font-size:13px">{esc(outcome[:70])}</span>'
                 if outcome
                 else ""
             )

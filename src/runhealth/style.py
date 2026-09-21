@@ -92,22 +92,23 @@ def token_block(selector: str, dark: bool = False) -> str:
 # identical in the page, in a standalone .svg file and on paper.
 CHART_CSS = """
 .rh-svg { width: 100%; height: auto; display: block; overflow: visible;
-  font: 9px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  font: 11px ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 .rh-svg .grid { stroke: var(--grid); stroke-width: 1; }
 .rh-svg .ax-line { stroke: var(--axis); stroke-width: 1; }
-.rh-svg .tick { fill: var(--tick); font-size: 8.5px; }
-.rh-svg .ax-label { fill: var(--muted); font-size: 9px; }
-.rh-svg .panel-title { fill: var(--ink); font-size: 10px; font-weight: 650; }
-.rh-svg .row-label { fill: var(--muted); font-size: 8.5px; }
-.rh-svg .val { fill: var(--tick); font-size: 8.5px; }
-.rh-svg .in-bar { fill: #fff; font-size: 8.5px; font-weight: 650; }
-.rh-svg .in-bar.dim { font-weight: 400; opacity: .85; }
+.rh-svg .tick { fill: var(--tick); font-size: 10.5px; font-weight: 500; }
+.rh-svg .ax-label { fill: var(--ink); font-size: 11px; font-weight: 700;
+  letter-spacing: .01em; }
+.rh-svg .panel-title { fill: var(--ink); font-size: 12.5px; font-weight: 700; }
+.rh-svg .row-label { fill: var(--tick); font-size: 10.5px; font-weight: 600; }
+.rh-svg .val { fill: var(--ink); font-size: 10.5px; font-weight: 600; }
+.rh-svg .in-bar { fill: #fff; font-size: 10.5px; font-weight: 700; }
+.rh-svg .in-bar.dim { font-weight: 500; opacity: .9; }
 .rh-svg .ref { stroke: var(--muted); stroke-width: 1; }
 .rh-svg .dash { stroke-dasharray: 4 3; }
-.rh-svg .ref-label { fill: var(--muted); font-size: 8.5px; }
+.rh-svg .ref-label { fill: var(--tick); font-size: 10.5px; font-weight: 600; }
 .rh-svg .whisker { stroke: var(--whisker); stroke-width: 1.1; opacity: .75; }
 .rh-svg .io-tick { stroke: var(--muted); stroke-width: 1.2; opacity: .7; }
-.rh-svg .legend-text { fill: var(--muted); font-size: 9px; }
+.rh-svg .legend-text { fill: var(--ink); font-size: 11px; font-weight: 600; }
 
 /* Paint modes. A class sets --c; these three decide what is done with it. */
 .rh-svg .fill { fill: var(--c); stroke: none; }
@@ -180,16 +181,16 @@ _PLAIN: dict[str, dict[str, str]] = {
     "whisker": {"stroke": LIGHT["whisker"], "fill": "none"},
     "io-tick": {"stroke": LIGHT["muted"], "fill": "none"},
     "cross": {"stroke": LIGHT["ink"], "fill": "none"},
-    "tick": {"fill": LIGHT["tick"], "font-size": "8.5px"},
-    "val": {"fill": LIGHT["tick"], "font-size": "8.5px"},
-    "row-label": {"fill": LIGHT["muted"], "font-size": "8.5px"},
-    "ref-label": {"fill": LIGHT["muted"], "font-size": "8.5px"},
-    "ax-label": {"fill": LIGHT["muted"], "font-size": "9px"},
-    "legend-text": {"fill": LIGHT["muted"], "font-size": "9px"},
-    "panel-title": {"fill": LIGHT["ink"], "font-size": "10px", "font-weight": "650"},
-    "in-bar": {"fill": "#ffffff", "font-size": "8.5px", "font-weight": "650"},
+    "tick": {"fill": LIGHT["tick"], "font-size": "10.5px", "font-weight": "500"},
+    "val": {"fill": LIGHT["ink"], "font-size": "10.5px", "font-weight": "600"},
+    "row-label": {"fill": LIGHT["tick"], "font-size": "10.5px", "font-weight": "600"},
+    "ref-label": {"fill": LIGHT["tick"], "font-size": "10.5px", "font-weight": "600"},
+    "ax-label": {"fill": LIGHT["ink"], "font-size": "11px", "font-weight": "700"},
+    "legend-text": {"fill": LIGHT["ink"], "font-size": "11px", "font-weight": "600"},
+    "panel-title": {"fill": LIGHT["ink"], "font-size": "12.5px", "font-weight": "700"},
+    "in-bar": {"fill": "#ffffff", "font-size": "10.5px", "font-weight": "700"},
     "rh-svg": {
-        "font-size": "9px",
+        "font-size": "11px",
         "font-family": "system-ui, -apple-system, Segoe UI, Roboto, sans-serif",
     },
 }
@@ -248,7 +249,8 @@ def print_overrides() -> str:
     rules.append(".rh-svg .stroke { fill: none; } .rh-svg .area { opacity: .13; }")
     rules.append(f".rh-svg .grid {{ stroke: {LIGHT['grid']}; }}")
     rules.append(f".rh-svg .ax-line {{ stroke: {LIGHT['axis']}; }}")
-    rules.append(f".rh-svg .tick, .rh-svg .val {{ fill: {LIGHT['tick']}; }}")
+    rules.append(f".rh-svg .tick, .rh-svg .row-label {{ fill: {LIGHT['tick']}; }}")
+    rules.append(f".rh-svg .val, .rh-svg .ax-label {{ fill: {LIGHT['ink']}; }}")
     rules.append(f".rh-svg .whisker {{ stroke: {LIGHT['whisker']}; }}")
     return "\n".join(rules)
 
