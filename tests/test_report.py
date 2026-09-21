@@ -109,6 +109,58 @@ def test_io_cadence_figure_marks_the_outlier_gap():
     assert figure.key == "io_cadence"
     assert figure.svg.startswith("<svg") and figure.svg.endswith("</svg>")
     assert "lv-warn" in figure.svg
+    # The chart can be brushed, so the outlier markers go into the layer that
+    # is moved rather than stretched, and stay round at any zoom.
+    assert 'data-zoom="1"' in figure.svg and 'data-xdomain="' in figure.svg
+    assert re.search(r'<g class="rh-points"><g class="series" data-series="0">', figure.svg)
+
+
+def test_wall_clock_ticks_stay_distinct_at_every_span():
+    from runhealth import svg
+
+    for span in (45, 150, 300, 900, 3600, 7500, 18000, 86400):
+        unit, fmt = plots._time_fmt(span)
+        labels = [fmt(t) for t in svg.time_ticks(span)]
+        assert len(set(labels)) == len(labels), (span, unit, labels)
+    # Half-minute ticks need the decimal that whole minutes would swallow.
+    assert plots._time_fmt(150)[1](30.0) == "0.5"
+
+
+def test_a_compact_axis_label_gives_way_when_it_cannot_separate_two_ticks():
+    from runhealth import svg
+
+    wide = svg.nice_ticks(0, 4975, 7)
+    assert [svg.si_ticks(wide)(t) for t in wide] == [svg.si(t) for t in wide]
+    narrow = svg.nice_ticks(1000, 1150, 7)
+    labels = [svg.si_ticks(narrow)(t) for t in narrow]
+    assert labels[0] == "1,000"
+    assert len(set(labels)) == len(labels)
+
+
+def test_a_zoomable_axis_can_be_relabelled_with_another_unit(parsed, assessed):
+    figs = {
+        f.key: f
+        for f in plots.render_run(parsed["icon_hang"], assessed["icon_hang"], Path("."), "h")
+    }
+    timeline = figs["timeline"]
+    # The script puts the unit of the zoomed span back into this wording, so
+    # the title cannot state hours while the ticks count minutes.
+    assert 'data-label="wall clock since the first stamped line"' in timeline.svg
+    assert ">wall clock since the first stamped line (" in timeline.svg
+
+
+def test_a_zoomed_layer_is_clipped_by_a_group_above_it(parsed, assessed):
+    figs = {
+        f.key: f
+        for f in plots.render_run(parsed["icon_hang"], assessed["icon_hang"], Path("."), "h")
+    }
+    timeline = figs["timeline"]
+    assert 'data-zoom="1"' in timeline.svg
+    # The script writes the zoom transform onto rh-geometry, and an element is
+    # clipped in its own coordinate system, so the clip has to sit above it or
+    # the marks would be stretched out of the plot area.
+    assert re.search(r'clip-path="url\(#clip-[^"]+\)"><g class="rh-geometry"', timeline.svg)
+    assert 'class="rh-geometry" clip-path=' not in timeline.svg
 
 
 def test_figure_marks_carry_their_own_tooltip(parsed, assessed):

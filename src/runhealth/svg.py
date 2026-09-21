@@ -192,10 +192,15 @@ def log_ticks(lo: float, hi: float) -> list[float]:
     return [10.0**d for d in decades[::stride]]
 
 
+def time_step(span: float, target: int = 7) -> float:
+    """The spacing between ticks on a wall-clock axis covering ``span``."""
+    want = span / max(target, 1)
+    return next((s for s in NICE_STEPS if s >= want), NICE_STEPS[-1])
+
+
 def time_ticks(span: float, target: int = 7) -> list[float]:
     """Tick positions on a wall-clock axis running from zero to ``span``."""
-    want = span / max(target, 1)
-    step = next((s for s in NICE_STEPS if s >= want), NICE_STEPS[-1])
+    step = time_step(span, target)
     return [t for t in (i * step for i in range(int(span // step) + 2)) if t <= span]
 
 
@@ -217,6 +222,22 @@ def si(value: float) -> str:
     if value and abs(value) < 1:
         return f"{value:.2g}"
     return f"{value:,.0f}"
+
+
+def si_ticks(ticks: list[float]):
+    """A formatter for ``ticks``: compact where that still tells them apart.
+
+    ``1.2k`` cannot separate two ticks twenty apart, which is what a short run
+    or a zoomed axis asks for, and the value is then written out in full.
+    """
+    labels = [si(t) for t in ticks]
+    if len(set(labels)) == len(labels):
+        return si
+    step = abs(ticks[1] - ticks[0]) if len(ticks) > 1 else 1.0
+    decimals = 0
+    while decimals < 3 and step < 10**-decimals:
+        decimals += 1
+    return lambda v: f"{v:,.{decimals}f}"
 
 
 def truncate(text: str, chars: int) -> str:
@@ -343,6 +364,7 @@ class Chart:
         label: str = "",
         grid: bool = True,
         box: Box | None = None,
+        unit: str = "",
     ) -> None:
         p = box or self.plot
         self.frame.append(self.line(p.x, p.bottom, p.right, p.bottom, cls="ax-line"))
@@ -357,13 +379,16 @@ class Chart:
             parts.append(self.text(x, p.bottom + 17, fmt(t), cls="tick", text_anchor="middle"))
         self.frame.append(tag("g", "".join(parts), cls="rh-xticks"))
         if label:
+            # A unit given apart from the label is one a zoom may change, so the
+            # script is left the wording it has to put the new unit back into.
             self.frame.append(
                 self.text(
                     p.x + p.w / 2,
                     p.bottom + 37,
-                    label,
+                    f"{label} ({unit})" if unit else label,
                     cls="ax-label",
                     text_anchor="middle",
+                    **({"data_label": label} if unit else {}),
                 )
             )
 
@@ -459,15 +484,23 @@ class Chart:
             self.rect(p.x, p.y - 4, p.w, p.h + 8),
             id=f"clip-{self.uid}",
         )
-        layers = [
-            ("rh-geometry", self.geometry),
-            ("rh-points", self.points),
-            ("rh-labels", self.labels),
-        ]
-        inner = "".join(
-            tag("g", "\n".join(content), cls=name, clip_path=f"url(#clip-{self.uid})")
-            for name, content in layers
-            if content
+
+        def layer(content: list[str], name: str) -> str:
+            # The clip sits on an outer group: an element is clipped in its own
+            # coordinate system, so a clip on the layer the report zooms would
+            # be stretched by that same transform and let the marks run out.
+            if not content:
+                return ""
+            return tag(
+                "g",
+                tag("g", "\n".join(content), cls=name),
+                clip_path=f"url(#clip-{self.uid})",
+            )
+
+        inner = (
+            layer(self.geometry, "rh-geometry")
+            + layer(self.points, "rh-points")
+            + layer(self.labels, "rh-labels")
         )
         body = (
             tag("title", esc(aria))

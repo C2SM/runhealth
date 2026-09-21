@@ -1221,10 +1221,32 @@ JS = r"""
     for (; v <= hi; v += step) out.push(v);
     return out.length ? out : [lo, hi];
   }
-  function fmtDuration(span) {
-    var size = span >= 7200 ? 3600 : span >= 120 ? 60 : 1;
-    var dec = span >= 7200 ? 1 : 0;
+  function timeUnit(span) {
+    if (span >= 7200) return ['h', 3600, 1];
+    if (span >= 120) return ['min', 60, 0];
+    return ['s', 1, 0];
+  }
+  function fmtDuration(span, step) {
+    // The unit and the decimals both follow the span on screen: ticks closer
+    // together than the unit resolves would otherwise repeat a label.
+    var u = timeUnit(span), size = u[1], dec = u[2];
+    while (dec < 3 && step / size < Math.pow(10, -dec)) dec++;
     return function (v) { return (v / size).toFixed(dec); };
+  }
+  function fmtNumber(ticks) {
+    // The compact form cannot separate ticks a few units apart, so it is kept
+    // only while it still tells every neighboring pair apart.
+    if (ticks.every(function (t, i) { return !i || fmtSi(t) !== fmtSi(ticks[i - 1]); })) {
+      return fmtSi;
+    }
+    var step = ticks.length > 1 ? Math.abs(ticks[1] - ticks[0]) : 1;
+    var dec = 0;
+    while (dec < 3 && step < Math.pow(10, -dec)) dec++;
+    return function (v) {
+      return v.toLocaleString(undefined, {
+        minimumFractionDigits: dec, maximumFractionDigits: dec
+      });
+    };
   }
   function fmtSi(v) {
     var a = Math.abs(v);
@@ -1249,6 +1271,11 @@ JS = r"""
     var overlay = document.createElementNS(SVGNS, 'g');
     overlay.setAttribute('class', 'rh-overlay');
     svg.appendChild(overlay);
+    // x' = zk * x + zdx, rewritten by the zoom below; the crosshair and the
+    // shared marker go through it so they stay on the mark they point at.
+    var zk = 1, zdx = 0;
+    function zx(x) { return zk * x + zdx; }
+    function unzx(ux) { return (ux - zdx) / zk; }
 
     function el(name, attrs) {
       var n = document.createElementNS(SVGNS, name);
@@ -1329,8 +1356,8 @@ JS = r"""
       function toggle() {
         var on = item.getAttribute('aria-pressed') !== 'false';
         item.setAttribute('aria-pressed', on ? 'false' : 'true');
-        var series = svg.querySelector('.series[data-series="' + item.dataset.series + '"]');
-        if (series) series.hidden = on;
+        svg.querySelectorAll('.series[data-series="' + item.dataset.series + '"]')
+          .forEach(function (series) { series.hidden = on; });
       }
       item.addEventListener('click', toggle);
       item.addEventListener('keydown', function (e) {
@@ -1354,16 +1381,18 @@ JS = r"""
         if (dragging) return;
         var ux = userX(e.clientX);
         if (ux < timeBox[0] - 2 || ux > timeBox[0] + timeBox[2] + 2) { clearCross(); return; }
-        var s = nearest(ux);
+        var s = nearest(unzx(ux));
         if (!s) return;
+        var sx = zx(s[0]);
+        if (sx < timeBox[0] - 2 || sx > timeBox[0] + timeBox[2] + 2) { clearCross(); return; }
         clearCross();
         cross = el('g', {});
         cross.appendChild(el('line', {
-          'class': 'cross', x1: s[0], y1: timeBox[1], x2: s[0], y2: timeBox[1] + timeBox[3]
+          'class': 'cross', x1: sx, y1: timeBox[1], x2: sx, y2: timeBox[1] + timeBox[3]
         }));
-        cross.appendChild(el('circle', { 'class': 'cross-dot', cx: s[0], cy: s[1], r: 3 }));
+        cross.appendChild(el('circle', { 'class': 'cross-dot', cx: sx, cy: s[1], r: 3 }));
         overlay.appendChild(cross);
-        var at = pageXY(s[0], s[1]);
+        var at = pageXY(sx, s[1]);
         showTip(s[3], at[0], at[1]);
         tell(s[2]);
       });
@@ -1377,7 +1406,7 @@ JS = r"""
       if (domain && svg.dataset.xfmt === 'duration') {
         var span = domain[1] - domain[0];
         if (!span) return null;
-        return timeBox[0] + (t - domain[0]) / span * timeBox[2];
+        return zx(timeBox[0] + (t - domain[0]) / span * timeBox[2]);
       }
       if (samples && samples.length) {
         var best = null, gap = Infinity;
@@ -1385,7 +1414,7 @@ JS = r"""
           var d = Math.abs(samples[i][2] - t);
           if (d < gap) { gap = d; best = samples[i]; }
         }
-        return best ? best[0] : null;
+        return best ? zx(best[0]) : null;
       }
       return null;
     }
@@ -1410,7 +1439,7 @@ JS = r"""
           var ux = userX(e.clientX);
           if (ux < timeBox[0] || ux > timeBox[0] + timeBox[2]) { tell(null); return; }
           var span = domain[1] - domain[0];
-          tell(domain[0] + (ux - timeBox[0]) / timeBox[2] * span);
+          tell(domain[0] + (unzx(ux) - timeBox[0]) / timeBox[2] * span);
         });
       }
     }
@@ -1423,6 +1452,7 @@ JS = r"""
       var floating = Array.prototype.slice.call(
         svg.querySelectorAll('.rh-labels [x], .rh-points [cx]'));
       var xticks = svg.querySelector('.rh-xticks');
+      var xtitle = svg.querySelector('.ax-label[data-label]');
       var button = host.parentNode.querySelector('.zoomed');
       var view = domain.slice();
       var start = null, band = null;
@@ -1432,7 +1462,9 @@ JS = r"""
       });
 
       function toData(ux) {
-        return domain[0] + (ux - plot[0]) / plot[2] * (domain[1] - domain[0]);
+        // Read against the window on screen, so a second brush zooms into the
+        // first one rather than back into the full domain.
+        return view[0] + (ux - plot[0]) / plot[2] * (view[1] - view[0]);
       }
       function toPixel(value) {
         return plot[0] + (value - view[0]) / (view[1] - view[0]) * plot[2];
@@ -1442,6 +1474,8 @@ JS = r"""
         var k = (domain[1] - domain[0]) / (view[1] - view[0]);
         var left = plot[0] + (view[0] - domain[0]) / (domain[1] - domain[0]) * plot[2];
         var shift = plot[0] - k * left;
+        zk = k;
+        zdx = shift;
         if (geometry) {
           geometry.setAttribute('transform', 'matrix(' + k + ',0,0,1,' + shift + ',0)');
         }
@@ -1458,8 +1492,13 @@ JS = r"""
         if (!xticks) return;
         while (xticks.firstChild) xticks.removeChild(xticks.firstChild);
         var duration = svg.dataset.xfmt === 'duration';
+        var span = view[1] - view[0];
         var ticks = duration ? timeTicks(view[0], view[1]) : niceTicks(view[0], view[1], 7);
-        var fmt = duration ? fmtDuration(view[1] - view[0]) : fmtSi;
+        var step = ticks.length > 1 ? ticks[1] - ticks[0] : span;
+        var fmt = duration ? fmtDuration(span, step) : fmtNumber(ticks);
+        if (duration && xtitle) {
+          xtitle.textContent = xtitle.dataset.label + ' (' + timeUnit(span)[0] + ')';
+        }
         var base = plot[1] + plot[3];
         ticks.forEach(function (t) {
           var x = toPixel(t);

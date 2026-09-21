@@ -160,8 +160,9 @@ interactive without anything being downloaded:
   slowest in a timer, how many lines a node contributed. Everything a tooltip
   states is also the mark's accessible name, so a screen reader and the
   keyboard reach the same information.
-- **Drag across the timeline or the progress rate** to zoom into a section of
-  the run; the axis relabels itself and *reset zoom* restores the full view.
+- **Drag across the timeline, the progress rate or the output cadence** to zoom
+  into a section of the run; the axis relabels itself and *reset zoom* restores
+  the full view. Brushing again zooms further into the section on screen.
   Double-clicking also resets.
 - **Hovering over one time-based chart marks the same instant in the others**,
   which is how a burst of network messages is aligned with a slow section of

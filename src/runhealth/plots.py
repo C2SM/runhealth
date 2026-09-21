@@ -47,6 +47,11 @@ def _dur(seconds: float) -> str:
 def _time_fmt(span: float):
     """A tick formatter for a wall-clock axis, plus the unit it labels."""
     unit, size, decimals = svg.time_unit(span)
+    step = svg.time_step(span)
+    # A step shorter than the last printed place would put the same label on
+    # neighboring ticks, so the formatter keeps the decimals that separate them.
+    while decimals < 3 and step / size < 10**-decimals:
+        decimals += 1
     return unit, lambda t: f"{t / size:.{decimals}f}"
 
 
@@ -176,7 +181,16 @@ def phase_timeline(log: RunLog, a: Assessment, uid: str) -> Figure | None:
                 continue
             seen.add(column)
             used.add("output")
-            ch.geometry.append(ch.line(column, y_io - 5, column, y_io + 5, cls="io-tick"))
+            ch.geometry.append(
+                ch.line(
+                    column,
+                    y_io - 5,
+                    column,
+                    y_io + 5,
+                    cls="io-tick",
+                    vector_effect="non-scaling-stroke",
+                )
+            )
 
     for name, (y, h) in lanes.items():
         if name in used:
@@ -188,7 +202,8 @@ def phase_timeline(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         x,
         svg.time_ticks(total),
         fmt,
-        f"wall clock since the first stamped line ({unit})",
+        "wall clock since the first stamped line",
+        unit=unit,
     )
     aria = f"Timeline of {len(a.phases)} phase(s) over {_dur(total)}" + (
         f", with {shown} stretch(es) of silence marked above" if shown else ""
@@ -281,7 +296,8 @@ def progress_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         )
         samples.append([round(px, 1), round(py, 1), round(record["wall"] - t0, 1), tip])
 
-    ch.x_axis(x, svg.nice_ticks(min(steps), max(steps), 7), lambda v: svg.si(v), label)
+    x_ticks = svg.nice_ticks(min(steps), max(steps), 7)
+    ch.x_axis(x, x_ticks, svg.si_ticks(x_ticks), label)
     ch.y_axis(y, y_ticks, y_fmt, "wall time per report")
     rate = a.stats.get("sypd")
     return Figure(
@@ -397,6 +413,7 @@ def io_cadence(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         cls = f"s{i % 7}"
         drawn = _decimate([(x(g["wall"] - t0), y(g["seconds"])) for g in gaps], p.w)
         body = ch.path(drawn, cls=f"{cls} stroke", vector_effect="non-scaling-stroke")
+        dots = ""
         for g, v in zip(gaps, seconds):
             if not median or v <= factor * median:
                 continue
@@ -405,10 +422,12 @@ def io_cadence(log: RunLog, a: Assessment, uid: str) -> Figure | None:
                 f"{_dur(v)} since the previous one, {v / median:.1f}x the median",
                 f"at {format_stamp(g['wall'])}",
             )
-            body += ch.circle(x(g["wall"] - t0), y(v), 3.4, **_mark("lv-warn fill", tip))
+            dots += ch.circle(x(g["wall"] - t0), y(v), 3.4, **_mark("lv-warn fill", tip))
         ch.geometry.append(
             svg.tag("g", body, cls="series", data_series=str(i), aria_label=f"{label} cadence")
         )
+        if dots:
+            ch.points.append(svg.tag("g", dots, cls="series", data_series=str(i)))
         legend_entries.append((cls, f"{label} ({len(gaps) + 1} events)"))
         for g, v in _thin(list(zip(gaps, seconds)), MAX_HOVER_SAMPLES):
             tip = _tip(
@@ -423,7 +442,7 @@ def io_cadence(log: RunLog, a: Assessment, uid: str) -> Figure | None:
 
     ch.legend(legend_entries)
     unit, fmt = _time_fmt(total)
-    ch.x_axis(x, svg.time_ticks(total), fmt, f"wall clock since the first stamped line ({unit})")
+    ch.x_axis(x, svg.time_ticks(total), fmt, "wall clock since the first stamped line", unit=unit)
     ch.y_axis(y, y_ticks, _dur, "gap since the previous event")
     return Figure(
         key="io_cadence",
@@ -433,10 +452,11 @@ def io_cadence(log: RunLog, a: Assessment, uid: str) -> Figure | None:
             "Wall time between successive output or checkpoint writes. A flat line is "
             "a steady cadence; a spike is a single write that took much longer than its "
             "neighbors, usually a transient file system stall rather than the model "
-            "itself. Click a legend entry to hide that series."
+            "itself. Click a legend entry to hide that series, drag across the chart to zoom."
         ),
         svg=ch.render(
             f"Wall-time gaps between {len(names)} kind(s) of recurring write",
+            zoom=True,
             xdomain=f"0,{svg.num(total)}",
             xfmt="duration",
             samples=svg.pack(samples),
@@ -611,10 +631,10 @@ def warning_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     ch.legend(
         [(f"s{i % 7}", f"{g.label} ({g.total:,})") for i, (_, g) in enumerate(families)], y=24
     )
-    ch.y_axis(y, y.ticks(), svg.si, "lines per minute", box=left)
-    ch.x_axis(
-        x, svg.nice_ticks(0, span - 1, 7), svg.si, "minutes since the first stamped line", box=left
-    )
+    y_ticks = y.ticks()
+    ch.y_axis(y, y_ticks, svg.si_ticks(y_ticks), "lines per minute", box=left)
+    x_ticks = svg.nice_ticks(0, span - 1, 7)
+    ch.x_axis(x, x_ticks, svg.si_ticks(x_ticks), "minutes since the first stamped line", box=left)
 
     samples = []
     busiest = families[0][1]
@@ -663,7 +683,8 @@ def warning_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
                     text_anchor="end",
                 )
             )
-        ch.x_axis(nx, svg.nice_ticks(0, nx.d1, 3), svg.si, "lines", box=right)
+        n_ticks = svg.nice_ticks(0, nx.d1, 3)
+        ch.x_axis(nx, n_ticks, svg.si_ticks(n_ticks), "lines", box=right)
 
     return Figure(
         key="warnings",
@@ -724,7 +745,8 @@ def counter_spread(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         )
         labels.append((y, r.label))
     ch.y_categories(labels, chars=42)
-    ch.x_axis(x, svg.log_ticks(x.d0, x.d1), svg.si, "counter value, log scale")
+    x_ticks = svg.log_ticks(x.d0, x.d1)
+    ch.x_axis(x, x_ticks, svg.si_ticks(x_ticks), "counter value, log scale")
     return Figure(
         key="counters",
         title="Network counters",
@@ -787,10 +809,13 @@ def render_index(
     slot = width / len(usable)
     bar = min(slot * 0.62, 46.0)
 
-    def draw(box: svg.Box, values: list[float], axis_label: str, fmt, names: bool = False) -> None:
+    def draw(
+        box: svg.Box, values: list[float], axis_label: str, fmt=None, names: bool = False
+    ) -> None:
         top = max(values) * 1.14 or 1.0
         y = svg.Scale(0, top, box.bottom, box.y)
-        ch.y_axis(y, svg.nice_ticks(0, top, 4), fmt, axis_label, box=box)
+        ticks = svg.nice_ticks(0, top, 4)
+        ch.y_axis(y, ticks, fmt or svg.si_ticks(ticks), axis_label, box=box)
         ch.frame.append(ch.line(box.x, box.bottom, box.right, box.bottom, cls="ax-line"))
         for i, ((log, a, href), value) in enumerate(zip(usable, values)):
             center = box.x + slot * (i + 0.5)
@@ -829,7 +854,6 @@ def render_index(
         boxes[0],
         [(log.wall_seconds or 0) / 60.0 for log, _, _ in usable],
         "wall clock (min)",
-        svg.si,
         names=True,
     )
     if has_rate:
