@@ -26,8 +26,9 @@ address to return to on the cluster; the button beside it copies the complete
 `machine:/path` for pasting into a terminal.
 
 **Run script** appears when the scheduler echoed the job script at the top of
-the log. It opens the script that was submitted, shell-highlighted, with
-`#SBATCH` directives picked out, and **download** saves it as a `.sh` file.
+the log. It opens the script that was submitted, shell-highlighted and
+numbered, with `#SBATCH` directives picked out, and **download** saves it as a
+`.sh` file.
 **Script diff** appears when an earlier run of the same kind is part of the
 same report. **Raw log** appears when the report was built with
 `--embed-logs`.
@@ -51,6 +52,32 @@ around each of them, and the line numbers on both sides. Removed lines are
 marked `-` and added lines `+`. Scripts that are identical are reported as
 such, which is itself an answer when a run behaved differently for no visible
 reason.
+
+## Searching the report
+
+The field in the header searches every run in the report at once, from any of
+its pages. It is reached with `/` or `Ctrl`/`Cmd`+`K`, and two characters are
+enough to start.
+
+The run scripts are the main thing it looks through. Asking for `--nodes=8`,
+for a module name or for an environment variable lists every run whose script
+mentions it, with the matching line and its number under the name of the run.
+Selecting a line opens that run's script at that line, with every other
+occurrence in the same script marked, so a setting can be traced across a
+series of runs without opening each page in turn. The search also covers the
+names of the runs, their job ids, the paths their logs were read from, the
+facts listed under job and build provenance, and the text of every check, so a
+node name or an error message finds the runs it occurred in.
+
+Results are grouped by run, newest first, and each run contributes at most a
+dozen lines; the remainder is counted, and selecting that count opens the
+script with all of them marked. The arrow keys move through the results and
+`Enter` follows the selected one.
+
+The index behind this is written once per report, as `search.js` beside
+`index.html`, and a page loads it the first time a reader searches. Both files
+have to travel together: a page copied on its own keeps working, but its search
+field reports that the index is missing.
 
 ## The checks
 
@@ -151,3 +178,6 @@ run's name and grade beside a link back to the index. The table of contents
 marks the section being read and follows the scroll position; its first entry
 returns to the top of the page. On a narrow screen it becomes a row of chips
 below the header and scrolls to keep the current section in view.
+
+The header also carries the field that
+[searches the whole report](#searching-the-report).

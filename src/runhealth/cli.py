@@ -20,7 +20,7 @@ import webbrowser
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
-from . import __version__, plots, profile, report
+from . import __version__, plots, profile, report, search
 from .extract import RunLog, parse
 from .health import assess
 from .logfile import format_duration
@@ -309,6 +309,7 @@ def write_report(args, views: list[RunView], outdir: Path, sources: list[str]) -
         path = outdir / "report.md"
         path.write_text(report.render_markdown(views, sources, title))
         return path
+    search.write(views, outdir)
     for v in views:
         (outdir / v.page).write_text(report.render_run(v, siblings=views))
     index = outdir / "index.html"

@@ -112,6 +112,7 @@ ICONS = {
     ),
     "check": _ICON.format('<path d="M20 6 9 17l-5-5"/>'),
     "diff": _ICON.format('<path d="M12 3v14M5 10h14M5 21h14"/>'),
+    "search": _ICON.format('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>'),
 }
 THEME_LABEL = {
     "system": "Follow the system theme",
@@ -154,6 +155,23 @@ def theme_switch() -> str:
         for mode in ("system", "light", "dark")
     )
     return f'<div class="theme" role="group" aria-label="Color theme">{buttons}</div>'
+
+
+def search_box() -> str:
+    """The field every page searches the whole report from.
+
+    The results are built by the script from the index written beside the
+    pages, so the markup here is the field and the empty panel it fills.
+    """
+    label = "Search runs and run scripts"
+    return (
+        f'<div class="search">{ICONS["search"]}'
+        f'<input type="search" placeholder="{esc(label)}" aria-label="{esc(label)}" '
+        'autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" '
+        'aria-controls="search-results" aria-autocomplete="list">'
+        '<kbd aria-hidden="true">/</kbd>'
+        '<div class="results" id="search-results" role="listbox" hidden></div></div>'
+    )
 
 
 # -- table of contents ----------------------------------------------------
@@ -257,6 +275,50 @@ a:hover { border-bottom-color: currentColor; }
 .theme button[aria-pressed="true"] { background: var(--panel); color: var(--ink);
   box-shadow: var(--shadow); }
 .ico { width: 15px; height: 15px; }
+
+/* -- global search over every run in the report -- */
+.search { position: relative; flex: 0 1 300px; min-width: 140px; height: 32px;
+  display: flex; align-items: center; gap: 7px; padding: 0 9px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 9px; }
+.search:focus-within { border-color: var(--info);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--info) 28%, transparent); }
+.search > .ico { flex: 0 0 auto; color: var(--muted); }
+.search input { flex: 1 1 auto; min-width: 0; padding: 0; background: none; border: none;
+  outline: none; color: var(--ink); font: inherit; font-size: 13.5px; }
+.search input::-webkit-search-cancel-button { display: none; }
+.search kbd { flex: 0 0 auto; padding: 0 5px; font: inherit; font-size: 11px;
+  color: var(--muted); border: 1px solid var(--line-2); border-radius: 5px; }
+.search:focus-within kbd { display: none; }
+/* Anchored to the right edge: the field sits at the end of the header, and a
+   panel wider than the field would otherwise run off the page. */
+.results { position: absolute; top: calc(100% + 7px); right: 0; z-index: 50;
+  width: min(620px, calc(100vw - 32px)); max-height: min(70vh, 560px); overflow-y: auto;
+  padding: 6px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; box-shadow: var(--shadow); }
+.results .grp { display: flex; align-items: center; gap: 8px; padding: 10px 9px 5px;
+  font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--muted); }
+.results .grp:first-child { padding-top: 5px; }
+.results .grp .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.results .grp .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--ink); text-transform: none; letter-spacing: 0; font-size: 13.5px; }
+.results .grp .dot.g-ok { background: var(--ok); }
+.results .grp .dot.g-info { background: var(--info); }
+.results .grp .dot.g-warn { background: var(--warn); }
+.results .grp .dot.g-fail { background: var(--fail); }
+.results a.hit { display: flex; align-items: baseline; gap: 10px; padding: 4px 9px;
+  border: none; border-radius: 7px; }
+.results a.hit:hover, .results a.hit.on { background: var(--panel-2); }
+.results a.hit .ln { flex: 0 0 auto; width: 44px; text-align: right; color: var(--muted);
+  font-size: 12px; font-variant-numeric: tabular-nums; }
+.results a.hit .tx { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap;
+  text-overflow: ellipsis; font-size: 13px; }
+.results a.hit .tx.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12.5px; }
+.results mark { background: color-mix(in srgb, var(--warn) 38%, transparent);
+  color: inherit; border-radius: 3px; padding: 0 1px; }
+.results .note { padding: 11px 10px; color: var(--muted); font-size: 13px; }
+@media (max-width: 720px) { .search { flex: 1 1 120px; min-width: 40px; } }
 
 /* -- shell and table of contents -- */
 .shell { max-width: 1420px; margin: 0 auto; padding: 0 20px 90px;
@@ -485,6 +547,14 @@ dialog.script-modal::backdrop { background: rgba(10,10,8,.55); }
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 13.5px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
 .script-body code { font: inherit; }
+/* One element per line, numbered the way the raw log view is: a search hit
+   is linked to by its number, and marked when the page opens on it. */
+.script-body b { display: block; padding: 0 2px 0 56px; text-indent: -48px;
+  font-weight: 400; scroll-margin-block: 40px; }
+.script-body b::before { content: attr(data-n); display: inline-block; width: 40px;
+  margin-right: 8px; text-align: right; color: var(--muted); user-select: none; }
+.script-body b.hit { background: color-mix(in srgb, var(--warn) 20%, transparent); }
+.script-body b.now { background: color-mix(in srgb, var(--warn) 45%, transparent); }
 .sy-cmt { color: var(--syn-cmt); font-style: italic; }
 .sy-dir { color: var(--syn-dir); font-weight: 600; }
 .sy-str { color: var(--syn-str); }
@@ -640,9 +710,32 @@ JS = r"""
     return modal;
   }
 
+  var jumpToScriptLine = null;
   var scriptModal = wireModal('dialog.script-modal');
   if (scriptModal) {
     var scriptBody = scriptModal.querySelector('.script-body');
+    // Open the script where a search matched: the line itself is marked, and
+    // every other occurrence of the same text with it, so the reader lands on
+    // one hit and can see the rest by scrolling.
+    jumpToScriptLine = function (number, query) {
+      if (!scriptBody) return;
+      scriptBody.querySelectorAll('b.hit').forEach(function (b) {
+        b.classList.remove('hit', 'now');
+      });
+      if (query) {
+        var needle = query.toLowerCase();
+        scriptBody.querySelectorAll('b').forEach(function (b) {
+          if (b.textContent.toLowerCase().indexOf(needle) !== -1) b.classList.add('hit');
+        });
+      }
+      if (!scriptModal.open) scriptModal.showModal();
+      var line = document.getElementById('SL' + number);
+      if (line) {
+        line.classList.add('hit', 'now');
+        line.scrollIntoView({ block: 'center' });
+      }
+      scriptBody.focus();
+    };
     document.querySelectorAll('[data-open-script]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         scriptModal.showModal();
@@ -652,7 +745,11 @@ JS = r"""
     var save = scriptModal.querySelector('[data-download-script]');
     if (save && scriptBody) {
       save.addEventListener('click', function () {
-        var blob = new Blob([scriptBody.textContent], { type: 'text/x-shellscript' });
+        // Each line is its own element, so the text has to be put back
+        // together rather than read off the container as one run.
+        var text = Array.prototype.map.call(
+          scriptBody.querySelectorAll('b'), function (b) { return b.textContent; }).join('\n');
+        var blob = new Blob([text + '\n'], { type: 'text/x-shellscript' });
         var url = URL.createObjectURL(blob);
         var a = document.createElement('a');
         a.href = url;
@@ -685,6 +782,241 @@ JS = r"""
         diffBody.focus();
       });
     });
+  }
+
+  // -- global search over every run in the report ------------------------
+  // The index is a script written beside the pages rather than data baked
+  // into each of them: one copy serves the whole report, and a reader who
+  // never searches never loads it.
+  var search = document.querySelector('.search');
+  if (search) {
+    var nav = document.querySelector('.nav');
+    var base = (nav && nav.dataset.base) || '';
+    var herePage = (nav && nav.dataset.page) || '';
+    var field = search.querySelector('input');
+    var panel = search.querySelector('.results');
+    var MIN = 2;          // a single character matches most of every script
+    var PER_RUN = 12;     // rows listed per run before the rest are counted
+    var WINDOW = 180;     // characters of a long line shown around the hit
+    var state = 'cold';
+    var index = null, timer = null, cursor = -1;
+
+    function show(on) {
+      panel.hidden = !on;
+      field.setAttribute('aria-expanded', on ? 'true' : 'false');
+      if (!on) {
+        cursor = -1;
+        field.removeAttribute('aria-activedescendant');
+      }
+    }
+    function say(text) {
+      panel.textContent = '';
+      var p = document.createElement('p');
+      p.className = 'note';
+      p.textContent = text;
+      panel.appendChild(p);
+      show(true);
+    }
+    function ready(then) {
+      if (state === 'ready') { then(); return; }
+      if (state === 'loading') return;
+      if (state === 'missing') { say('The search index is not beside this page.'); return; }
+      state = 'loading';
+      var tag = document.createElement('script');
+      tag.src = base + 'search.js';
+      tag.onload = function () {
+        state = 'ready';
+        index = window.RUNHEALTH_SEARCH || { runs: [] };
+        index.runs.forEach(function (r) {
+          r.lines = (r.script || '').split('\n');
+          r.low = r.lines.map(function (line) { return line.toLowerCase(); });
+          r.about = [r.name, r.file, r.job, r.status, r.source].concat(
+            (r.fields || []).map(function (f) { return f[0] + ' ' + f[1]; }));
+        });
+        then();
+      };
+      tag.onerror = function () {
+        state = 'missing';
+        say('The search index is not beside this page.');
+      };
+      document.head.appendChild(tag);
+    }
+
+    function marked(text, needle) {
+      var frag = document.createDocumentFragment();
+      if (!needle) {
+        frag.appendChild(document.createTextNode(text));
+        return frag;
+      }
+      var low = text.toLowerCase(), at = 0, i;
+      while ((i = low.indexOf(needle, at)) !== -1) {
+        if (i > at) frag.appendChild(document.createTextNode(text.slice(at, i)));
+        var m = document.createElement('mark');
+        m.textContent = text.slice(i, i + needle.length);
+        frag.appendChild(m);
+        at = i + needle.length;
+      }
+      frag.appendChild(document.createTextNode(text.slice(at)));
+      return frag;
+    }
+    // A directive can sit a long way into a line, so a long line is shown
+    // around its hit rather than from the start.
+    function around(text, at) {
+      if (text.length <= WINDOW) return text;
+      var from = Math.max(0, at - 40);
+      return (from ? '…' : '') + text.slice(from, from + WINDOW);
+    }
+    function row(href, lead, text, needle, mono, run, line) {
+      var a = document.createElement('a');
+      a.className = 'hit';
+      a.href = href;
+      a.setAttribute('role', 'option');
+      a.setAttribute('aria-selected', 'false');
+      if (line) { a.dataset.page = run.page; a.dataset.line = line; }
+      var n = document.createElement('span');
+      n.className = 'ln';
+      n.textContent = lead;
+      var t = document.createElement('span');
+      t.className = mono ? 'tx mono' : 'tx';
+      t.appendChild(marked(text, needle));
+      a.appendChild(n);
+      a.appendChild(t);
+      return a;
+    }
+    function scriptHref(run, number, query) {
+      return base + run.page + '?q=' + encodeURIComponent(query) + '#script-L' + number;
+    }
+    function group(run) {
+      var head = document.createElement('div');
+      head.className = 'grp';
+      var dot = document.createElement('span');
+      dot.className = 'dot g-' + run.grade;
+      var name = document.createElement('span');
+      name.className = 'nm';
+      name.textContent = run.name;
+      var meta = document.createElement('span');
+      meta.textContent = [run.job, run.started].filter(Boolean).join(' · ');
+      head.appendChild(dot);
+      head.appendChild(name);
+      head.appendChild(meta);
+      return head;
+    }
+
+    function rowsFor(run, query, needle) {
+      var rows = [];
+      run.about.forEach(function (text) {
+        if (rows.length < 3 && text && text.toLowerCase().indexOf(needle) !== -1) {
+          rows.push(row(base + run.page, 'run', text, needle, false, run, ''));
+        }
+      });
+      (run.checks || []).forEach(function (c) {
+        var text = c[1] + ': ' + c[2];
+        if ((text + ' ' + c[3]).toLowerCase().indexOf(needle) === -1) return;
+        rows.push(row(base + run.page + '#checks', c[0], text, needle, false, run, ''));
+      });
+      var first = 0, more = 0;
+      for (var i = 0; i < run.low.length; i++) {
+        var at = run.low[i].indexOf(needle);
+        if (at === -1) continue;
+        if (!first) first = i + 1;
+        if (more || rows.length >= PER_RUN) { more++; continue; }
+        rows.push(row(scriptHref(run, i + 1, query), 'L' + (i + 1),
+                      around(run.lines[i], at), needle, true, run, String(i + 1)));
+      }
+      if (more) {
+        rows.push(row(scriptHref(run, first, query), '',
+                      '+' + more + ' more in this run script', '', false, run, String(first)));
+      }
+      return rows;
+    }
+
+    function update() {
+      var query = field.value.trim();
+      cursor = -1;
+      if (query.length < MIN) { show(false); return; }
+      if (state !== 'ready') {
+        ready(update);
+        if (state === 'loading') say('Reading the run scripts…');
+        return;
+      }
+      var needle = query.toLowerCase();
+      var frag = document.createDocumentFragment();
+      var found = 0;
+      index.runs.forEach(function (r) {
+        var rows = rowsFor(r, query, needle);
+        if (!rows.length) return;
+        found += rows.length;
+        frag.appendChild(group(r));
+        rows.forEach(function (a) { frag.appendChild(a); });
+      });
+      if (!found) { say('Nothing matches “' + query + '”.'); return; }
+      panel.textContent = '';
+      panel.appendChild(frag);
+      panel.querySelectorAll('a.hit').forEach(function (a, i) { a.id = 'sr' + i; });
+      show(true);
+    }
+
+    field.addEventListener('input', function () {
+      clearTimeout(timer);
+      timer = setTimeout(update, 90);
+    });
+    field.addEventListener('focus', function () { if (field.value.trim()) update(); });
+    field.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { show(false); field.blur(); return; }
+      var items = panel.hidden ? [] : panel.querySelectorAll('a.hit');
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        if (!items.length) return;
+        e.preventDefault();
+        cursor += e.key === 'ArrowDown' ? 1 : -1;
+        if (cursor < 0) cursor = items.length - 1;
+        if (cursor >= items.length) cursor = 0;
+        items.forEach(function (a, i) {
+          a.classList.toggle('on', i === cursor);
+          a.setAttribute('aria-selected', i === cursor ? 'true' : 'false');
+        });
+        items[cursor].scrollIntoView({ block: 'nearest' });
+        field.setAttribute('aria-activedescendant', items[cursor].id);
+      } else if (e.key === 'Enter' && items.length) {
+        e.preventDefault();
+        items[cursor < 0 ? 0 : cursor].click();
+      }
+    });
+    // A hit in this page's own script is shown straight away; following the
+    // link would reload the page to arrive where the reader already is.
+    panel.addEventListener('click', function (e) {
+      var a = e.target.closest && e.target.closest('a.hit');
+      if (!a || !a.dataset.line || !jumpToScriptLine) return;
+      if (a.dataset.page !== herePage) return;
+      e.preventDefault();
+      show(false);
+      jumpToScriptLine(a.dataset.line, field.value.trim());
+    });
+    document.addEventListener('click', function (e) {
+      if (!search.contains(e.target)) show(false);
+    });
+    document.addEventListener('keydown', function (e) {
+      var node = e.target || {};
+      var typing = node.tagName === 'INPUT' || node.tagName === 'TEXTAREA' ||
+                   node.isContentEditable;
+      if ((e.key === 'k' || e.key === 'K') && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+      } else if (e.key !== '/' || typing || e.ctrlKey || e.metaKey || e.altKey) {
+        return;
+      } else {
+        e.preventDefault();
+      }
+      field.focus();
+      field.select();
+    });
+
+    // Arriving from a result found on another page: open the script there.
+    var deep = /^#script-L(\d+)$/.exec(location.hash || '');
+    if (deep && jumpToScriptLine) {
+      var asked = '';
+      try { asked = new URLSearchParams(location.search).get('q') || ''; } catch (e) {}
+      field.value = asked;
+      jumpToScriptLine(deep[1], asked);
+    }
   }
 
   // -- copy a path to the clipboard --------------------------------------
@@ -1162,7 +1494,14 @@ def _run_menu(views: list[RunView], current: str, index_href: str) -> str:
     )
 
 
-def _nav(here: str, badge: str = "", up: str = "", menu: str = "") -> str:
+def _nav(
+    here: str,
+    badge: str = "",
+    up: str = "",
+    menu: str = "",
+    base: str = "",
+    page: str = "",
+) -> str:
     if here and menu:
         trail = (
             '<span class="sep">/</span><details class="jump">'
@@ -1171,11 +1510,12 @@ def _nav(here: str, badge: str = "", up: str = "", menu: str = "") -> str:
     else:
         trail = f'<span class="sep">/</span><span class="here">{esc(here)}</span>' if here else ""
     return (
-        '<header class="nav"><div class="nav-in">'
+        f'<header class="nav" data-base="{esc(base)}" data-page="{esc(page)}">'
+        '<div class="nav-in">'
         f'<a class="brand" href="{esc(up or "#main")}">runhealth</a>'
         f"{trail}{badge}"
         '<div class="spacer"></div>'
-        f"{theme_switch()}"
+        f"{search_box()}{theme_switch()}"
         "</div></header>"
     )
 
@@ -1314,7 +1654,12 @@ def _counter_table(log: RunLog) -> str:
     return "".join(out)
 
 
-def _provenance(log: RunLog) -> str:
+def provenance_pairs(log: RunLog) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    """The job's own facts, and the build it was run from.
+
+    Also what the search index describes a run by, so a reader can find a run
+    by its partition or its model revision and not only by its name.
+    """
     f = log.fields
     sb = log.keyvalues.get("sbatch", {})
     pairs = [
@@ -1346,6 +1691,11 @@ def _provenance(log: RunLog) -> str:
             ),
         ),
     ]
+    return pairs, model
+
+
+def _provenance(log: RunLog) -> str:
+    pairs, model = provenance_pairs(log)
     body = _kv(pairs, copy=("Log file",))
     if any(v for _, v in model):
         body += '<div style="height:14px"></div>' + _kv(model)
@@ -1393,6 +1743,19 @@ def _source_bar(view: RunView, diff: Diff | None = None) -> str:
     return f'<div class="source">{"".join(parts)}</div>' if parts else ""
 
 
+def script_lines(text: str) -> str:
+    """The script with one element per line, numbered.
+
+    A line has to be an element of its own for a search hit to be linked to
+    and marked, and the number is what a reader quotes when asking a
+    colleague to look at the same place.
+    """
+    return "".join(
+        f'<b id="SL{n}" data-n="{n}">{bash_html(line)}</b>'
+        for n, line in enumerate(text.splitlines(), 1)
+    )
+
+
 def _script_modal(view: RunView) -> str:
     """The run script itself, highlighted and ready to be saved."""
     log = view.log
@@ -1409,7 +1772,7 @@ def _script_modal(view: RunView) -> str:
         '<button type="button" class="script-close" data-close-modal '
         'aria-label="Close">&times;</button></div></div>'
         '<pre class="script-body" tabindex="0"><code>'
-        f"{bash_html(log.runscript)}</code></pre></dialog>"
+        f"{script_lines(log.runscript)}</code></pre></dialog>"
     )
 
 
@@ -1530,7 +1893,7 @@ def render_run(
     _, meta = _run_label(log)
     here = f"{name} ({meta})" if meta else name
     menu = _run_menu(siblings or [], view.page, index_href)
-    nav = _nav(here, _badge(a.grade), up=index_href, menu=menu)
+    nav = _nav(here, _badge(a.grade), up=index_href, menu=menu, page=view.page)
     return _page(title, nav, toc.render(), "\n".join(body))
 
 
@@ -1631,7 +1994,7 @@ def render_index(
     ]
     if templates:
         body.append("".join(templates) + _diff_modal())
-    return _page(title, _nav("", ""), toc.render(), "\n".join(body))
+    return _page(title, _nav("", "", page="index.html"), toc.render(), "\n".join(body))
 
 
 # -- Markdown -------------------------------------------------------------
@@ -1725,7 +2088,7 @@ def copy_log(log: RunLog, outdir: Path, max_bytes: int) -> str:
         f'<div class="sub">{log.n_lines:,} lines, {src.stat().st_size / 1e6:.1f} MB</div></div>'
         f'<div class="logview">{"".join(blocks)}</div>'
     )
-    nav = _nav(src.name, "", up=f"../{page_name(log)}")
+    nav = _nav(src.name, "", up=f"../{page_name(log)}", base="../")
     dest.write_text(_page(f"{name} - raw log", nav, "", body))
     return f"logs/{dest.name}"
 

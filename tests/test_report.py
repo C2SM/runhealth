@@ -145,7 +145,7 @@ def test_pages_carry_a_sticky_nav_and_a_table_of_contents(tmp_path, parsed, asse
     view = views(parsed, assessed, ["icon_success"])[0]
     view.figures = plots.render_run(view.log, view.assessment, tmp_path, "s")
     html = report.render_run(view)
-    assert '<header class="nav">' in html
+    assert '<header class="nav"' in html
     assert "position: sticky" in html
     assert '<nav id="toc">' in html
     assert 'href="#checks"' in html and 'href="#figures"' in html
