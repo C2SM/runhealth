@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 from runhealth import plots, report
@@ -293,3 +294,42 @@ def test_run_page_switches_to_the_other_runs(parsed, assessed):
     assert 'aria-current="page"' in html
     # A single run has nothing to switch to, so the name stays plain text.
     assert '<details class="jump">' not in report.render_run(vs[0], siblings=vs[:1])
+
+
+def changed_scripts(parsed, assessed):
+    """Two runs of the same experiment whose run scripts differ."""
+    vs = views(parsed, assessed, ["icon_success", "icon_hang"])
+    script = vs[0].log.runscript.replace("--nodes=2", "--nodes=8")
+    vs[1].log = replace(vs[1].log, runscript=script)
+    return vs
+
+
+def test_a_run_pairs_with_the_previous_run_of_its_kind(parsed, assessed):
+    vs = views(parsed, assessed, ["icon_success", "icon_hang", "slurm_generic"])
+    before = report.previous_runs(vs)
+    # icon_hang started after icon_success and carries the same job name.
+    assert before["icon_hang.html"] is vs[0]
+    # The first run of a kind, and a kind of its own, have nothing to compare.
+    assert "icon_success.html" not in before and "slurm_generic.html" not in before
+
+
+def test_run_page_offers_the_diff_against_the_previous_run(parsed, assessed):
+    vs = changed_scripts(parsed, assessed)
+    html = report.render_run(vs[1], siblings=vs)
+    assert 'data-open-diff="icon_hang.html"' in html
+    assert '<dialog class="diff-modal"' in html
+    assert '<template data-diff="icon_hang.html"' in html
+    assert "--nodes=8" in html and 'data-stat="+1 &minus;1"'.replace("&minus;", "−") in html
+    # The earliest run of its kind has nothing behind it.
+    assert "data-open-diff=" not in report.render_run(vs[0], siblings=vs)
+
+
+def test_index_table_carries_a_diff_per_run(parsed, assessed):
+    vs = changed_scripts(parsed, assessed)
+    html = report.render_index(vs, ["/tmp"], None, "Test")
+    assert '<th class="sortable">script diff</th>' in html
+    assert 'class="difflink" data-open-diff="icon_hang.html"' in html
+    assert '<dialog class="diff-modal"' in html
+    # One run of the pair has a predecessor; the other shows a dash.
+    assert html.count("data-open-diff=") == 1
+    assert '<td class="n" data-v="-1">&ndash;</td>' in html

@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import style
+from .diff import Diff, compare, run_kind
 from .extract import RunLog
 from .health import Assessment, Check, counter_rows
 from .highlight import bash_html
@@ -110,6 +111,7 @@ ICONS = {
         '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'
     ),
     "check": _ICON.format('<path d="M20 6 9 17l-5-5"/>'),
+    "diff": _ICON.format('<path d="M12 3v14M5 10h14M5 21h14"/>'),
 }
 THEME_LABEL = {
     "system": "Follow the system theme",
@@ -480,6 +482,43 @@ dialog.script-modal::backdrop { background: rgba(10,10,8,.55); }
 .sy-kw { color: var(--syn-kw); font-weight: 600; }
 .sy-cmd { color: var(--syn-cmd); }
 
+/* -- the diff against the previous run, in a modal -- */
+/* Wider than the script modal: a diff carries two line numbers before the
+   text, and wrapping a directive would hide what changed in it. */
+dialog.diff-modal { width: min(1100px, calc(100vw - 28px)); max-height: min(82vh, 820px);
+  padding: 0; overflow: hidden; border: 1px solid var(--line-2); border-radius: 12px;
+  background: var(--panel); color: var(--ink); box-shadow: 0 18px 50px rgba(0,0,0,.3); }
+dialog.diff-modal[open] { display: flex; flex-direction: column; }
+dialog.diff-modal::backdrop { background: rgba(10,10,8,.55); }
+.diff-stat { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--muted); }
+.diff-body { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.diff-same { margin: 0; padding: 24px 18px; color: var(--muted); }
+table.diff { width: 100%; border-collapse: collapse;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px; line-height: 1.6; }
+table.diff td { padding: 0 8px; border: 0; vertical-align: top; }
+table.diff .ln { width: 1%; text-align: right; white-space: nowrap; color: var(--muted);
+  font-variant-numeric: tabular-nums; user-select: none; }
+/* The sign is drawn rather than written, so selecting a line copies the
+   script back out without a marker glued to the front of it. */
+table.diff .tx { position: relative; padding-left: 20px; white-space: pre-wrap;
+  overflow-wrap: anywhere; }
+table.diff .tx:empty::after { content: " "; }
+table.diff .add .tx::before, table.diff .del .tx::before { position: absolute; left: 7px; }
+table.diff .add .tx::before { content: "+"; color: var(--ok); }
+table.diff .del .tx::before { content: "\\2212"; color: var(--fail); }
+table.diff .add { background: color-mix(in srgb, var(--ok) 15%, transparent); }
+table.diff .del { background: color-mix(in srgb, var(--fail) 15%, transparent); }
+table.diff .hunk td { padding: 12px 8px 3px 20px; color: var(--muted);
+  border-top: 1px solid var(--line); }
+table.diff tr.hunk:first-child td { border-top: 0; }
+.difflink { font: inherit; font-size: 12.5px; font-weight: 650; white-space: nowrap;
+  font-variant-numeric: tabular-nums; background: var(--panel); color: var(--muted);
+  border: 1px solid var(--line-2); border-radius: 999px; padding: 2px 10px; cursor: pointer; }
+.difflink:hover { border-color: var(--info); color: var(--info); }
+.up { color: var(--ok); } .dn { color: var(--fail); }
+
 /*CHART*/
 /*INTERACTION*/
 
@@ -489,6 +528,7 @@ dialog.script-modal::backdrop { background: rgba(10,10,8,.55); }
   body { font-size: 11pt; }
   .nav, .toc, .filters, .skip, figure.fig .zoomed, .chart .tip, dialog,
   .src-btn, .copy { display: none !important; }
+  .difflink { border: none; background: none; padding: 0; }
   .src-path { box-shadow: none; }
   .shell { display: block; max-width: none; padding: 0; }
   main { padding-top: 0; }
@@ -575,23 +615,29 @@ JS = r"""
     });
   }
 
-  // -- the run script modal ----------------------------------------------
-  var scriptModal = document.querySelector('dialog.script-modal');
-  if (scriptModal && scriptModal.showModal) {
+  // -- modals: the run script, and the diff against the previous run ------
+  function wireModal(selector) {
+    var modal = document.querySelector(selector);
+    if (!modal || !modal.showModal) return null;
+    modal.querySelectorAll('[data-close-modal]').forEach(function (b) {
+      b.addEventListener('click', function () { modal.close(); });
+    });
+    // The backdrop belongs to the dialog element, so a click that reaches it
+    // rather than the panel is a click outside.
+    modal.addEventListener('click', function (e) {
+      if (e.target === modal) modal.close();
+    });
+    return modal;
+  }
+
+  var scriptModal = wireModal('dialog.script-modal');
+  if (scriptModal) {
     var scriptBody = scriptModal.querySelector('.script-body');
     document.querySelectorAll('[data-open-script]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         scriptModal.showModal();
         if (scriptBody) { scriptBody.scrollTop = 0; scriptBody.focus(); }
       });
-    });
-    scriptModal.querySelectorAll('[data-close-script]').forEach(function (b) {
-      b.addEventListener('click', function () { scriptModal.close(); });
-    });
-    // The backdrop belongs to the dialog element, so a click that reaches it
-    // rather than the panel is a click outside.
-    scriptModal.addEventListener('click', function (e) {
-      if (e.target === scriptModal) scriptModal.close();
     });
     var save = scriptModal.querySelector('[data-download-script]');
     if (save && scriptBody) {
@@ -607,6 +653,28 @@ JS = r"""
         setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
       });
     }
+  }
+
+  // One shell serves every diff on the page: the index has one per run, so
+  // the bodies wait in templates and the button says which one to show.
+  var diffModal = wireModal('dialog.diff-modal');
+  if (diffModal) {
+    var diffBody = diffModal.querySelector('.diff-body');
+    var diffName = diffModal.querySelector('.name');
+    var diffStat = diffModal.querySelector('.diff-stat');
+    document.querySelectorAll('[data-open-diff]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var tpl = document.querySelector('template[data-diff="' + btn.dataset.openDiff + '"]');
+        if (!tpl) return;
+        diffBody.textContent = '';
+        diffBody.appendChild(tpl.content.cloneNode(true));
+        diffName.textContent = tpl.dataset.sub || '';
+        diffStat.textContent = tpl.dataset.stat || '';
+        diffModal.showModal();
+        diffBody.scrollTop = 0;
+        diffBody.focus();
+      });
+    });
   }
 
   // -- copy a path to the clipboard --------------------------------------
@@ -1290,7 +1358,7 @@ def _node_table(log: RunLog) -> str:
     )
 
 
-def _source_bar(view: RunView) -> str:
+def _source_bar(view: RunView, diff: Diff | None = None) -> str:
     """Where the log is, and what can be opened from it.
 
     Given its own row under the title rather than a clause in the subtitle:
@@ -1304,6 +1372,11 @@ def _source_bar(view: RunView) -> str:
         parts.append(
             '<button type="button" class="src-btn key" data-open-script>'
             f'{ICONS["script"]}run script</button>'
+        )
+    if diff is not None:
+        parts.append(
+            f'<button type="button" class="src-btn" data-open-diff="{esc(view.page)}">'
+            f'{ICONS["diff"]}script diff <span class="mono">{_diff_label(diff)}</span></button>'
         )
     if view.log_href:
         parts.append(f'<a class="src-btn" href="{esc(view.log_href)}">{ICONS["log"]}raw log</a>')
@@ -1323,10 +1396,60 @@ def _script_modal(view: RunView) -> str:
         '<div class="script-acts">'
         f'<button type="button" class="src-btn" data-download-script="{esc(stem)}.run.sh">'
         f'{ICONS["download"]}download</button>'
-        '<button type="button" class="script-close" data-close-script '
+        '<button type="button" class="script-close" data-close-modal '
         'aria-label="Close">&times;</button></div></div>'
         '<pre class="script-body" tabindex="0"><code>'
         f"{bash_html(log.runscript)}</code></pre></dialog>"
+    )
+
+
+def previous_runs(views: list[RunView]) -> dict[str, RunView]:
+    """For every run, the run of the same kind that came before it.
+
+    Same kind means the same run script name; the order is the start of the
+    run. A log that carries no copy of its script is passed over rather than
+    hiding the run before it, so the comparison always has two scripts.
+    """
+    latest: dict[str, RunView] = {}
+    before: dict[str, RunView] = {}
+    for v in sorted(views, key=lambda v: (v.log.first_wall or 0.0, v.log.name)):
+        if not v.log.runscript:
+            continue
+        kind = run_kind(v.log)
+        if kind in latest:
+            before[v.page] = latest[kind]
+        latest[kind] = v
+    return before
+
+
+def _diff_label(d: Diff) -> str:
+    if not d.changed:
+        return "no change"
+    return f'<span class="up">+{d.added}</span> <span class="dn">\u2212{d.removed}</span>'
+
+
+def _diff_template(view: RunView, base: RunView) -> tuple[Diff, str]:
+    """``view``'s run script against ``base``'s, parked until it is opened."""
+    d = compare(base.log.runscript, view.log.runscript)
+    body = d.rows or (
+        '<p class="diff-same">The run script is identical to the one the previous run used.</p>'
+    )
+    trail = f"{Path(base.log.path).name} \u2192 {Path(view.log.path).name}"
+    return d, (
+        f'<template data-diff="{esc(view.page)}" data-sub="{esc(trail)}" '
+        f'data-stat="{esc(d.summary)}">{body}</template>'
+    )
+
+
+def _diff_modal() -> str:
+    """The shell every diff on the page is shown in; the script fills it."""
+    return (
+        '<dialog class="diff-modal" aria-label="Run script diff">'
+        '<div class="script-hd"><h2>Script diff</h2><span class="name"></span>'
+        '<div class="script-acts"><span class="diff-stat"></span>'
+        '<button type="button" class="script-close" data-close-modal '
+        'aria-label="Close">&times;</button></div></div>'
+        '<div class="diff-body" tabindex="0"></div></dialog>'
     )
 
 
@@ -1354,6 +1477,8 @@ def render_run(
     log, a = view.log, view.assessment
     name = log.fields.get("job_name") or log.name
     title = f"{name} - run health"
+    base = previous_runs(siblings or []).get(view.page)
+    diff, template = _diff_template(view, base) if base else (None, "")
     toc = Toc()
     counts: dict[str, int] = {}
     for c in a.checks:
@@ -1365,7 +1490,7 @@ def render_run(
         f'<div class="sub">job {esc(log.fields.get("job_id") or "?")} &middot; '
         f'{esc(format_stamp(log.first_wall) or "unknown start")} &rarr; '
         f'{esc(format_stamp(log.last_wall) or "unknown end")}</div>'
-        f"{_source_bar(view)}</div>",
+        f"{_source_bar(view, diff)}</div>",
         run_tiles(log, a),
         f'<h2 class="sec" id="{toc.add("checks", "Checks")}">Checks</h2>',
         _grade_filters(counts, ".check", "Filter checks by grade"),
@@ -1390,6 +1515,8 @@ def render_run(
         body.append("<footer>" + "<br>".join(esc(n) for n in log.notes) + "</footer>")
     body.append(_footer())
     body.append(_script_modal(view))
+    if template:
+        body.append(template + _diff_modal())
     _, meta = _run_label(log)
     here = f"{name} ({meta})" if meta else name
     menu = _run_menu(siblings or [], view.page, index_href)
@@ -1416,10 +1543,24 @@ def render_index(
         for g in ("fail", "warn", "info", "ok")
         if counts.get(g)
     ]
+    before = previous_runs(views)
+    templates = []
     rows = []
     for v in sorted(views, key=lambda v: v.log.first_wall or 0, reverse=True):
         log, a = v.log, v.assessment
         s = a.stats
+        base = before.get(v.page)
+        if base is None:
+            cell = '<td class="n" data-v="-1">&ndash;</td>'
+        else:
+            d, template = _diff_template(v, base)
+            templates.append(template)
+            cell = (
+                f'<td class="n" data-v="{d.added + d.removed}">'
+                f'<button type="button" class="difflink" data-open-diff="{esc(v.page)}" '
+                f'title="Compare the run script with {esc(Path(base.log.path).name)}">'
+                f"{_diff_label(d)}</button></td>"
+            )
         started = format_stamp(log.first_wall)
         outcome = log.outcome.text if log.outcome else ""
         rows.append(
@@ -1447,7 +1588,7 @@ def render_index(
             f'{_rate(s) or "&ndash;"}</td>'
             f'<td class="n" data-v="{s.get("max_gap") or 0}">'
             f'{format_duration(s.get("max_gap")) or "&ndash;"}</td>'
-            "</tr>"
+            f"{cell}</tr>"
         )
     filters = _grade_filters(counts, "tbody tr[data-grade]", "Filter runs by grade")
     toc = Toc()
@@ -1472,9 +1613,12 @@ def render_index(
         '<th class="sortable">wall</th><th class="sortable">nodes</th>'
         '<th class="sortable">time steps</th><th class="sortable">rate</th>'
         '<th class="sortable">longest silence</th>'
+        '<th class="sortable">script diff</th>'
         f"</tr></thead><tbody>{''.join(rows)}</tbody></table></div>",
         _footer(),
     ]
+    if templates:
+        body.append("".join(templates) + _diff_modal())
     return _page(title, _nav("", ""), toc.render(), "\n".join(body))
 
 

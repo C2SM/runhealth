@@ -12,6 +12,10 @@ string.
 The grades are `healthy`, `worth a look`, `warning` and `problem`. The grade of
 a run is the worst grade among its checks.
 
+The last column, **script diff**, states how many lines of the run script were
+added and removed relative to the previous run of the same kind, and opens the
+comparison itself. See [Comparing run scripts](#comparing-run-scripts).
+
 ## The run page header
 
 Below the run's name and its job id, a row names the `machine:/path` the log
@@ -24,7 +28,29 @@ address to return to on the cluster; the button beside it copies the complete
 **Run script** appears when the scheduler echoed the job script at the top of
 the log. It opens the script that was submitted, shell-highlighted, with
 `#SBATCH` directives picked out, and **download** saves it as a `.sh` file.
-**Raw log** appears when the report was built with `--embed-logs`.
+**Script diff** appears when an earlier run of the same kind is part of the
+same report. **Raw log** appears when the report was built with
+`--embed-logs`.
+
+## Comparing run scripts
+
+A run that slowed down, or stopped finishing at all, is often explained by a
+change to the script that submitted it. Both the index and a run page can
+therefore open the run script beside the one the previous run used.
+
+Two runs are the same kind of simulation when the name of their run script
+matches, which is the name the script gives itself in `--job-name`; when the
+log holds no SLURM metadata, the log file name without its job id is used
+instead. The previous run is the most recent run of that kind that started
+earlier and whose log contains a copy of its script. Only the runs in the same
+report are considered, so the comparison reaches exactly as far back as the
+directory that was read.
+
+The comparison is a unified diff: the changed lines, a few lines of context
+around each of them, and the line numbers on both sides. Removed lines are
+marked `-` and added lines `+`. Scripts that are identical are reported as
+such, which is itself an answer when a run behaved differently for no visible
+reason.
 
 ## The checks
 
