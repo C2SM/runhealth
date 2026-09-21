@@ -208,3 +208,23 @@ def test_serve_binds_to_the_loopback_interface_only(tmp_path):
         assert server.server_address[0] == "127.0.0.1"
     finally:
         server.server_close()
+
+
+def test_parse_all_reports_every_byte_of_every_log(tmp_path):
+    for i in range(3):
+        (tmp_path / f"a{i}.log").write_text("2026-03-17 10:00:00 start\n" * 200)
+    files = cli.discover([tmp_path], "*.log")
+    read, done = [], []
+    cli.parse_all(files, [], [], None, 1, read.append, done.append)
+    assert sum(read) == sum(f.stat().st_size for f in files)
+    assert done == files
+
+
+def test_a_cached_log_is_still_counted_in_full(tmp_path):
+    log = tmp_path / "a.log"
+    log.write_text("2026-03-17 10:00:00 start\n" * 200)
+    cache = tmp_path / "cache"
+    read = []
+    for _ in range(2):
+        cli.parse_all([log], [], [], cache, 1, read.append)
+    assert sum(read) == 2 * log.stat().st_size

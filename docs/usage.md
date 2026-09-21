@@ -167,3 +167,20 @@ with a peak resident memory in the tens of megabytes.
 Results are cached under `<outdir>/.cache/`, keyed on file size and
 modification time, so a second pass over the same directory takes well under a
 second. `--no-cache` disables the cache.
+
+## Following a long report
+
+A pass over several hundred megabytes takes a while, so every stage reports
+what it is doing. On a terminal the three stages that run once per log draw a
+bar; parsing counts the megabytes read, and therefore advances within a single
+large file rather than only when the file is finished:
+
+```text
+runhealth: scanning /scratch/e1000/run
+runhealth: 11 log(s) to read, 443.2 MB in total
+runhealth: parsing on 8 core(s) ━━━━━━━━━━━━╸──────────── 194/443 MB  13s, 17s left  LOG.831673.o
+```
+
+When the output is not a terminal, for example in a job script or a pipe, the
+bars are left out and each stage prints one line as it finishes, so the log
+stays readable.

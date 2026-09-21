@@ -36,7 +36,13 @@ runhealth examples/ --glob '*.log' -o /tmp/demo --open
 ```
 
 ```text
+runhealth: scanning examples/
+runhealth: 2 log(s) to read, 0.2 MB in total
 runhealth: parsed 2 log(s) in 0.2s
+runhealth: analyzed 2 run(s) in 0.1s
+runhealth: drawing the overview
+runhealth: writing the search index
+runhealth: rendered 2 page(s) in 0.1s
   WARN  SUCCESS      26m 18s  demo.log       - 8 of 199 intervals took more than 3x the median
   FAIL  FAILED    1h 44m 10s  demo_hang.log  - CANCELLED AT 2026-03-17T22:48:18 DUE TO TIME LIMIT
 runhealth: wrote /tmp/demo/index.html

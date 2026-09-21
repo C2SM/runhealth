@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import heapq
 import re
+from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,8 @@ from typing import Any
 from .logfile import Line, iter_lines, parse_walltime, read_preamble, sniff
 from .profile import Profile
 from .tables import Table, TableReader
+
+REPORT_EVERY = 4 << 20  # bytes between two progress callbacks
 
 # Error-looking lines that no profile claimed. Deliberately broad: a false
 # positive costs one row in a collapsed table, a false negative hides a crash.
@@ -553,8 +556,13 @@ def parse(
     profiles: list[Profile],
     start: int = 0,
     state: dict | None = None,
+    on_read: Callable[[int], None] | None = None,
 ) -> RunLog:
-    """Read ``path`` from ``start`` and return the accumulated :class:`RunLog`."""
+    """Read ``path`` from ``start`` and return the accumulated :class:`RunLog`.
+
+    ``on_read`` is called now and then with the number of bytes consumed since
+    the previous call, which lets a caller follow a long file as it is read.
+    """
     ex = Extractor.resume(profiles, state) if state else Extractor(profiles)
     log = ex.log
     st = path.stat()
@@ -567,8 +575,14 @@ def parse(
         if log.line_format == "timestamped":
             log.runscript = read_preamble(path)
     ex._has_preamble = log.line_format == "timestamped"
+    reported = start
     for line in iter_lines(path, start):
         ex.feed(line)
+        if on_read is not None and line.offset - reported >= REPORT_EVERY:
+            on_read(line.offset - reported)
+            reported = line.offset
+    if on_read is not None:
+        on_read(max(0, st.st_size - reported))  # the tail, so the count comes out whole
     ex.log.offset = st.st_size
     if ex.log.attempts > 1:
         ex.log.notes.append(

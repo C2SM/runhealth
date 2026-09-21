@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import multiprocessing
 import os
+import queue
 import re
 import shutil
 import socket
@@ -17,10 +19,11 @@ import sys
 import threading
 import time
 import webbrowser
-from concurrent.futures import ProcessPoolExecutor
+from collections.abc import Callable
+from concurrent.futures import ProcessPoolExecutor, wait
 from pathlib import Path
 
-from . import __version__, plots, profile, report, search
+from . import __version__, plots, profile, progress, report, search
 from .extract import RunLog, parse
 from .health import assess
 from .logfile import format_duration
@@ -32,12 +35,14 @@ LOG_GLOBS = [DEFAULT_GLOB, "slurm-*.out", "*.log", "*.out", "*.o[0-9]*"]
 SINCE_RE = re.compile(r"^(\d+(?:\.\d+)?)([smhdw])$")
 SINCE_UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
 MAX_EMBED_LOG = 8 << 20  # copy the raw log next to the report below this size
+POLL_SECONDS = 0.2  # how often a parse in progress is redrawn
 # Reports are written with the user's umask, which on a shared file system is
 # often too restrictive for a web server, so the transfer sets the modes needed.
 RSYNC_FLAGS = ["-rlptz", "--chmod=D755,F644"]
 
 
 def log(msg: str) -> None:
+    progress.clear_active()
     print(msg, file=sys.stderr, flush=True)
 
 
@@ -82,6 +87,7 @@ def sync_remote(spec: str, pattern: str | None, staging: Path) -> Path | None:
     globs = [pattern] if pattern else LOG_GLOBS
     filters = [f"--include={g}" for g in globs] + ["--exclude=*/", "--exclude=*"]
     command = ["rsync", "-rlptz", *filters, f"{spec}/", f"{local}/"]
+    log(f"runhealth: syncing {spec}")
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=1800)
     except (OSError, subprocess.SubprocessError) as exc:
@@ -198,11 +204,19 @@ def _cache_file(cache_dir: Path, path: Path) -> Path:
     return cache_dir / f"{slug(path.name)}.json"
 
 
-def parse_cached(path: Path, names: list[str], dirs: list[str], cache_dir: str | None) -> dict:
-    """Parse one log, reusing and updating an on-disk cache. Runs in a worker."""
+def parse_cached(
+    path: Path, names: list[str], dirs: list[str], cache_dir: str | None, reports=None
+) -> dict:
+    """Parse one log, reusing and updating an on-disk cache. Runs in a worker.
+
+    ``reports`` is a queue that receives the number of bytes read every few
+    megabytes, which is how the parent process follows a file it is not
+    reading itself.
+    """
     profiles = profile.load_all([Path(d) for d in dirs])
     picked = profile.select(names, profiles) if names else profile.detect(path, profiles)
     cache = Path(cache_dir) / f"{slug(path.name)}.json" if cache_dir else None
+    report = reports.put if reports is not None else None
     state, start = None, 0
     stat = path.stat()
     if cache and cache.is_file():
@@ -216,11 +230,15 @@ def parse_cached(path: Path, names: list[str], dirs: list[str], cache_dir: str |
             and blob.get("size", -1) <= stat.st_size
         )
         if same and blob.get("size") == stat.st_size and blob.get("mtime") == stat.st_mtime:
+            if report:
+                report(stat.st_size)  # nothing to read, but the file is accounted for
             return blob["state"]
         if same and blob.get("offset"):
             # Job logs only ever grow, so continue where the last pass stopped.
             state, start = blob["state"], int(blob["offset"])
-    result = parse(path, picked, start=start, state=state)
+    if report and start:
+        report(start)
+    result = parse(path, picked, start=start, state=state, on_read=report)
     payload = RunLog.to_dict(result)
     if cache:
         cache.parent.mkdir(parents=True, exist_ok=True)
@@ -240,17 +258,64 @@ def parse_cached(path: Path, names: list[str], dirs: list[str], cache_dir: str |
 
 
 def parse_all(
-    files: list[Path], names: list[str], dirs: list[Path], cache_dir: Path | None, jobs: int
+    files: list[Path],
+    names: list[str],
+    dirs: list[Path],
+    cache_dir: Path | None,
+    jobs: int,
+    on_read: Callable[[int], None] | None = None,
+    on_done: Callable[[Path], None] | None = None,
 ) -> list[RunLog]:
+    """Parse every log, following the bytes read and the files finished.
+
+    ``on_read`` is called with a number of bytes as the logs are read, and
+    ``on_done`` with each file once its result is in.
+    """
     args = [
         (f, names, [str(d) for d in dirs], str(cache_dir) if cache_dir else None) for f in files
     ]
+    blobs: list[dict] = [{} for _ in files]
     if len(files) == 1 or jobs == 1:
-        blobs = [parse_cached(*a) for a in args]
-    else:
-        with ProcessPoolExecutor(max_workers=jobs) as pool:
-            blobs = list(pool.map(_worker, args))
+        for i, a in enumerate(args):
+            blobs[i] = parse_cached(*a, _Sink(on_read) if on_read else None)
+            if on_done:
+                on_done(files[i])
+        return [RunLog.from_dict(b) for b in blobs]
+    with multiprocessing.Manager() as manager, ProcessPoolExecutor(max_workers=jobs) as pool:
+        # A queue the workers can reach, since the parent cannot see how far
+        # into a file another process has read.
+        reports = manager.Queue() if on_read else None
+        pending = {pool.submit(_worker, (*a, reports)): i for i, a in enumerate(args)}
+        waiting = set(pending)
+        while waiting:
+            finished, waiting = wait(waiting, timeout=POLL_SECONDS)
+            if on_read:
+                on_read(_drain(reports))
+            for future in finished:
+                i = pending[future]
+                blobs[i] = future.result()
+                if on_done:
+                    on_done(files[i])
     return [RunLog.from_dict(b) for b in blobs]
+
+
+class _Sink:
+    """Stands in for the worker queue when the logs are parsed in this process."""
+
+    def __init__(self, on_read: Callable[[int], None]):
+        self.put = on_read
+
+
+def _drain(reports) -> int:
+    """Every byte count the workers have posted since the last look."""
+    total = 0
+    if reports is None:
+        return 0
+    while True:
+        try:
+            total += reports.get_nowait()
+        except queue.Empty:
+            return total
 
 
 def _worker(args) -> dict:
@@ -271,12 +336,20 @@ def build(
     names = [n.strip() for n in (args.profile or "").split(",") if n.strip()]
     cache = None if args.no_cache else outdir / ".cache"
     jobs = max(1, min(len(files), args.jobs or (os.cpu_count() or 4), 16))
-    t0 = time.time()
-    logs = parse_all(files, names, profile_dirs, cache, jobs)
-    log(f"runhealth: parsed {len(logs)} log(s) in {time.time() - t0:.1f}s")
+    label = f"parsing on {jobs} core(s)" if jobs > 1 else "parsing"
+    size = sum(f.stat().st_size for f in files)
+    with progress.Progress(
+        label, size, f"parsed {len(files)} log(s) in {{t}}", progress.megabytes
+    ) as bar:
+        # Following the bytes costs a queue between the processes, so it is
+        # only set up when there is a bar to show for it.
+        follow = (lambda n: bar.advance(n=n)) if bar.enabled else None
+        named = (lambda f: bar.advance(f.name, n=0)) if bar.enabled else None
+        logs = parse_all(files, names, profile_dirs, cache, jobs, follow, named)
 
     views: list[RunView] = []
-    for rl in logs:
+    step = progress.Progress("analyzing", len(logs), "analyzed {n} run(s) in {t}")
+    for rl in step.wrap(logs, lambda rl: rl.name):
         if args.stall_seconds:
             rl.thresholds["stall_seconds"] = args.stall_seconds
         state = states.get(str(rl.fields.get("job_id") or ""), "")
@@ -299,6 +372,7 @@ def write_report(args, views: list[RunView], outdir: Path, sources: list[str]) -
     outdir.mkdir(parents=True, exist_ok=True)
     overview = None
     if not args.no_plots:
+        log("runhealth: drawing the overview")
         overview = plots.render_index(
             [(v.log, v.assessment, v.page) for v in views],
             outdir,
@@ -309,8 +383,10 @@ def write_report(args, views: list[RunView], outdir: Path, sources: list[str]) -
         path = outdir / "report.md"
         path.write_text(report.render_markdown(views, sources, title))
         return path
+    log("runhealth: writing the search index")
     search.write(views, outdir)
-    for v in views:
+    step = progress.Progress("rendering", len(views), "rendered {n} page(s) in {t}")
+    for v in step.wrap(views, lambda v: v.log.name):
         (outdir / v.page).write_text(report.render_run(v, siblings=views))
     index = outdir / "index.html"
     index.write_text(report.render_index(views, sources, overview, title))
@@ -467,11 +543,17 @@ def _publish_dest(args) -> str:
 
 
 def _once(args, outdir: Path) -> Path | None:
+    log(f"runhealth: scanning {', '.join(args.paths)}")
     files, remotes = _select(args, outdir)
     if not files:
         log("runhealth: no logs matched")
         return None
-    states = {} if args.no_squeue else slurm_states()
+    size = sum(f.stat().st_size for f in files) / 1e6
+    log(f"runhealth: {len(files)} log(s) to read, {size:.1f} MB in total")
+    states = {}
+    if not args.no_squeue and shutil.which("squeue"):
+        states = slurm_states()
+        log(f"runhealth: SLURM knows the state of {len(states)} of your job(s)")
     views = build(args, files, outdir, states, remotes)
     # Named the same way a run page names its log, so both read alike.
     here = socket.gethostname()
