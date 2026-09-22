@@ -185,6 +185,18 @@ def test_index_figure_needs_more_than_one_run(tmp_path, parsed, assessed):
     assert one is None
 
 
+def test_index_figure_bar_carries_status_and_health(tmp_path, parsed, assessed):
+    triples = [(parsed[n], assessed[n], f"{n}.html") for n in ("icon_success", "icon_hang")]
+    svg = plots.render_index(triples, tmp_path).svg
+    # icon_success ended cleanly but warns, so its bar shows both verdicts.
+    assert "lv-ok fill mark" in svg and "lv-warn fill mark" in svg
+    # icon_hang agrees with itself, so one color is enough there: one bar per
+    # panel, against two halves per panel for the run whose verdicts differ.
+    assert svg.count('data-href="icon_success.html"') == 2 * svg.count(
+        'data-href="icon_hang.html"'
+    )
+
+
 def test_theme_switch_offers_three_labelled_icons(parsed, assessed):
     html = report.render_run(views(parsed, assessed, ["icon_success"])[0])
     for mode in ("system", "light", "dark"):

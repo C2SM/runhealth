@@ -23,7 +23,7 @@ from pathlib import Path
 from . import style
 from .diff import Diff, compare, run_kind
 from .extract import RunLog
-from .health import Assessment, Check, counter_rows
+from .health import STATUS_LEVEL, Assessment, Check, counter_rows
 from .highlight import bash_html
 from .logfile import format_duration, format_stamp
 from .plots import Figure
@@ -31,15 +31,6 @@ from .plots import Figure
 GRADE_MARK = {"ok": "OK", "info": "i", "warn": "!", "fail": "X"}
 GRADE_TEXT = {"ok": "healthy", "info": "worth a look", "warn": "warning", "fail": "problem"}
 GRADE_ORDER = ("fail", "warn", "info", "ok")
-STATUS_LEVEL = {
-    "SUCCESS": "ok",
-    "FAILED": "fail",
-    "STALLED": "fail",
-    "RUNNING": "info",
-    "QUEUED": "info",
-    "INCOMPLETE": "warn",
-    "UNKNOWN": "info",
-}
 # Lines per block in an embedded log. Each block is skipped by the browser
 # until it is scrolled near, which is what keeps a large log openable.
 LOG_BLOCK = 200

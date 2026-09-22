@@ -25,6 +25,17 @@ from .tables import Table
 
 LEVELS = ["ok", "info", "warn", "fail"]
 LEVEL_RANK = {name: i for i, name in enumerate(LEVELS)}
+# The level each scheduler outcome is drawn in, so status and health share
+# one palette.
+STATUS_LEVEL = {
+    "SUCCESS": "ok",
+    "FAILED": "fail",
+    "STALLED": "fail",
+    "RUNNING": "info",
+    "QUEUED": "info",
+    "INCOMPLETE": "warn",
+    "UNKNOWN": "info",
+}
 SECONDS_PER_YEAR = 365.25 * 86400.0
 MODEL_TIME_FORMATS = (
     "%Y-%m-%d %H:%M:%S.%f",

@@ -16,6 +16,12 @@ The tiles above the table count the runs twice: once by scheduler status
 (`success`, `failed`, `stalled` and the other outcomes) and once by health
 grade, so an ended-cleanly run that still shows warnings is visible in both.
 
+Between the tiles and the table, the **All runs** comparison figure draws the
+wall clock and the throughput of every run as one bar each. A bar is split into
+two colors, the scheduler status on the left and the health grade on the right,
+so a run whose two verdicts disagree is recognizable at a glance; a bar with a
+single color means the two agree.
+
 The last column, **script diff**, states how many lines of the run script were
 added and removed relative to the previous run of the same kind, and opens the
 comparison itself. See [Comparing run scripts](#comparing-run-scripts).

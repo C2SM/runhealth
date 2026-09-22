@@ -20,7 +20,7 @@ from pathlib import Path
 
 from . import style, svg
 from .extract import RunLog
-from .health import Assessment, counter_rows
+from .health import STATUS_LEVEL, Assessment, counter_rows
 from .logfile import format_duration, format_stamp
 
 # Above this many points the drawn line is decimated per pixel column, which
@@ -819,24 +819,31 @@ def render_index(
         ch.frame.append(ch.line(box.x, box.bottom, box.right, box.bottom, cls="ax-line"))
         for i, ((log, a, href), value) in enumerate(zip(usable, values)):
             center = box.x + slot * (i + 0.5)
+            status_level = STATUS_LEVEL.get(a.status, "info")
             tip = _tip(
                 log.fields.get("job_name") or log.name,
-                f"job {log.fields.get('job_id') or '?'}  -  {a.status.lower()}, grade {a.grade}",
+                f"job {log.fields.get('job_id') or '?'}  -  "
+                f"status {a.status.lower()}, health {a.grade}",
                 f"wall clock {_dur(log.wall_seconds)}",
                 f"{a.stats['sypd']:.2f} {rate_label}" if a.stats.get("sypd") else "",
                 f"started {format_stamp(log.first_wall)}",
                 "click to open this run",
             )
-            ch.geometry.append(
-                ch.rect(
-                    center - bar / 2,
-                    y(value),
-                    bar,
-                    box.bottom - y(value),
-                    rx=2.0,
-                    **_mark(f"lv-{a.grade} fill", tip, data_href=href),
+            # Status and health can disagree, so a bar carries both: the left
+            # half is how the job ended, the right half how the run went.
+            levels = list(dict.fromkeys((status_level, a.grade)))
+            part = bar / len(levels)
+            for j, level in enumerate(levels):
+                ch.geometry.append(
+                    ch.rect(
+                        center - bar / 2 + j * part,
+                        y(value),
+                        part,
+                        box.bottom - y(value),
+                        rx=2.0,
+                        **_mark(f"lv-{level} fill", tip, data_href=href),
+                    )
                 )
-            )
             if names:
                 title = log.fields.get("job_name") or log.name
                 ch.labels.append(
@@ -885,8 +892,9 @@ def render_index(
         title="All runs",
         note=f"{len(usable)} runs",
         caption=(
-            "Wall clock and throughput per run, oldest first, colored by health grade. "
-            "Click a bar to open that run."
+            "Wall clock and throughput per run, oldest first. Each bar is colored by "
+            "scheduler status on the left and by health grade on the right, so a run "
+            "whose two verdicts differ shows both. Click a bar to open that run."
         ),
         svg=ch.render(f"Wall clock and throughput across {len(usable)} runs"),
     )
