@@ -228,6 +228,7 @@ a:hover { border-bottom-color: currentColor; }
 .nav .here { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; min-width: 0; }
 .nav .spacer { flex: 1 1 auto; }
+.nav .badge { flex: 0 0 auto; }
 .nav .up { font-size: 13.5px; color: var(--muted); border: none; flex: 0 0 auto; }
 .nav .up:hover { color: var(--ink); }
 
@@ -250,11 +251,18 @@ a:hover { border-bottom-color: currentColor; }
 .nav .jump .txt { display: flex; flex-direction: column; min-width: 0; }
 .nav .jump .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav .jump .meta { color: var(--muted); font-size: 12.5px; font-weight: 400; }
-.nav .jump .dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
-.nav .jump .dot.g-ok { background: var(--ok); }
-.nav .jump .dot.g-info { background: var(--info); }
-.nav .jump .dot.g-warn { background: var(--warn); }
-.nav .jump .dot.g-fail { background: var(--fail); }
+/* The dot is split along the diagonal: the run's status on one side, its
+   health grade on the other, in the order the header badges name them. */
+.nav .jump .dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto;
+  background: linear-gradient(135deg, var(--d-status) 0 50%, var(--d-grade) 50% 100%); }
+.nav .jump .dot.s-ok { --d-status: var(--ok); }
+.nav .jump .dot.s-info { --d-status: var(--info); }
+.nav .jump .dot.s-warn { --d-status: var(--warn); }
+.nav .jump .dot.s-fail { --d-status: var(--fail); }
+.nav .jump .dot.g-ok { --d-grade: var(--ok); }
+.nav .jump .dot.g-info { --d-grade: var(--info); }
+.nav .jump .dot.g-warn { --d-grade: var(--warn); }
+.nav .jump .dot.g-fail { --d-grade: var(--fail); }
 .nav .jump .all { justify-content: center; margin-top: 4px; padding-top: 9px;
   border-top: 1px solid var(--line); border-radius: 0 0 8px 8px;
   color: var(--muted); font-size: 13px; }
@@ -1581,7 +1589,8 @@ def _run_menu(views: list[RunView], current: str, index_href: str) -> str:
         meta_html = f'<span class="meta">{esc(meta)}</span>' if meta else ""
         items.append(
             f'<a class="item{" cur" if here else ""}" href="{esc(v.page)}"{here}>'
-            f'<span class="dot g-{esc(v.assessment.grade)}" aria-hidden="true"></span>'
+            f'<span class="dot s-{STATUS_LEVEL.get(v.assessment.status, "info")} '
+            f'g-{esc(v.assessment.grade)}" aria-hidden="true"></span>'
             f'<span class="txt"><span class="nm">{esc(name)}</span>{meta_html}</span></a>'
         )
     return (
@@ -2001,7 +2010,8 @@ def render_run(
     _, meta = _run_label(log)
     here = f"{name} ({meta})" if meta else name
     menu = _run_menu(siblings or [], view.page, index_href)
-    nav = _nav(here, _badge(a.grade), up=index_href, menu=menu, page=view.page)
+    badges = _badge(STATUS_LEVEL.get(a.status, "info"), a.status.title()) + _badge(a.grade)
+    nav = _nav(here, badges, up=index_href, menu=menu, page=view.page)
     return _page(title, nav, toc.render(), "\n".join(body))
 
 
