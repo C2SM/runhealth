@@ -12,6 +12,10 @@ string.
 The grades are `healthy`, `worth a look`, `warning` and `problem`. The grade of
 a run is the worst grade among its checks.
 
+The tiles above the table count the runs twice: once by scheduler status
+(`success`, `failed`, `stalled` and the other outcomes) and once by health
+grade, so an ended-cleanly run that still shows warnings is visible in both.
+
 The last column, **script diff**, states how many lines of the run script were
 added and removed relative to the previous run of the same kind, and opens the
 comparison itself. See [Comparing run scripts](#comparing-run-scripts).

@@ -30,6 +30,7 @@ from .plots import Figure
 
 GRADE_MARK = {"ok": "OK", "info": "i", "warn": "!", "fail": "X"}
 GRADE_TEXT = {"ok": "healthy", "info": "worth a look", "warn": "warning", "fail": "problem"}
+GRADE_ORDER = ("fail", "warn", "info", "ok")
 STATUS_LEVEL = {
     "SUCCESS": "ok",
     "FAILED": "fail",
@@ -2025,13 +2026,22 @@ def render_index(
     views: list[RunView], sources: list[str], overview: Figure | None, title: str
 ) -> str:
     counts: dict[str, int] = {}
+    status_counts: dict[str, int] = {}
     for v in views:
         counts[v.assessment.grade] = counts.get(v.assessment.grade, 0) + 1
-    tiles = [_tile(str(len(views)), "runs")] + [
-        _tile(_badge(g, str(counts[g])), GRADE_TEXT[g])
-        for g in ("fail", "warn", "info", "ok")
-        if counts.get(g)
-    ]
+        status_counts[v.assessment.status] = status_counts.get(v.assessment.status, 0) + 1
+    # Status says how a run ended, health how it went, so the summary carries both.
+    tiles = (
+        [_tile(str(len(views)), "runs")]
+        + [
+            _tile(_badge(STATUS_LEVEL.get(st, "info"), str(n)), st.lower())
+            for st, n in sorted(
+                status_counts.items(),
+                key=lambda kv: (GRADE_ORDER.index(STATUS_LEVEL.get(kv[0], "info")), kv[0]),
+            )
+        ]
+        + [_tile(_badge(g, str(counts[g])), GRADE_TEXT[g]) for g in GRADE_ORDER if counts.get(g)]
+    )
     before = previous_runs(views)
     templates = []
     rows = []
