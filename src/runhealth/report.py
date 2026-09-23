@@ -249,7 +249,8 @@ a:hover { border-bottom-color: currentColor; }
 .nav .jump .item:hover { background: var(--panel-2); }
 .nav .jump .item.cur { background: var(--panel-2); font-weight: 650; }
 .nav .jump .txt { display: flex; flex-direction: column; min-width: 0; }
-.nav .jump .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nav .jump .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
 .nav .jump .meta { color: var(--muted); font-size: 12.5px; font-weight: 400; }
 /* The dot is split along the diagonal: the run's status on one side, its
    health grade on the other, in the order the header badges name them. */
@@ -318,7 +319,33 @@ a:hover { border-bottom-color: currentColor; }
 .results mark { background: color-mix(in srgb, var(--warn) 38%, transparent);
   color: inherit; border-radius: 3px; padding: 0 1px; }
 .results .note { padding: 11px 10px; color: var(--muted); font-size: 13px; }
-@media (max-width: 720px) { .search { flex: 1 1 120px; min-width: 40px; } }
+/* -- narrow screens: the header wraps, the search taking a row of its own -- */
+@media (max-width: 720px) {
+  :root { --nav-h: 84px; }
+  .nav-in { flex-wrap: wrap; align-content: center; padding: 0 14px;
+    column-gap: 8px; row-gap: 6px; }
+  .nav .brand, .nav .here { font-size: 14px; }
+  /* A zero basis keeps the run name from breaking the row: it takes what the
+     badges and the theme switch leave and elides the rest. */
+  .nav-in > .here, .nav-in > .jump { flex: 1 1 0; min-width: 0; }
+  .nav-in:has(.here) .spacer { display: none; }
+  .nav .jump > summary.here { padding: 4px 6px; }
+  .nav .jump .menu { min-width: 0; width: calc(100vw - 28px); max-width: none; }
+  .search { order: 1; flex: 1 1 100%; min-width: 0; height: 30px; }
+}
+/* The words beside the marks are repeated by the tiles under the header, so
+   where the row runs short only the mark is drawn; the text stays for a
+   screen reader. */
+@media (max-width: 560px) {
+  .nav .badge { padding: 2px; border-color: transparent; }
+  .nav .badge .lb { position: absolute; width: 1px; height: 1px;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
+/* The brand is the link back to the index, which the run name's switcher and
+   the page head both carry as well, so the run name alone is left standing. */
+@media (max-width: 430px) {
+  .nav-in:has(.here) .brand, .nav-in:has(.here) .sep { display: none; }
+}
 
 /* -- shell and table of contents -- */
 .shell { max-width: 1420px; margin: 0 auto; padding: 0 20px 90px;
@@ -1610,7 +1637,8 @@ def _nav(
     if here and menu:
         trail = (
             '<span class="sep">/</span><details class="jump">'
-            f'<summary class="here">{esc(here)}</summary>{menu}</details>'
+            f'<summary class="here"><span class="nm">{esc(here)}</span></summary>'
+            f"{menu}</details>"
         )
     else:
         trail = f'<span class="sep">/</span><span class="here">{esc(here)}</span>' if here else ""
@@ -1631,7 +1659,8 @@ def _badge(level: str, text: str = "") -> str:
     return (
         f'<span class="badge g-{level}"><span class="mark" aria-hidden="true">'
         f'{GRADE_MARK.get(level, "?")}</span>'
-        f"{esc(text or GRADE_TEXT.get(level, level).capitalize())}</span>"
+        f'<span class="lb">{esc(text or GRADE_TEXT.get(level, level).capitalize())}</span>'
+        "</span>"
     )
 
 
