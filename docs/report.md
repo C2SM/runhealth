@@ -106,15 +106,15 @@ remaining checks.
 | **Outcome** | Did the job report success or failure, or did it end without a statement? SLURM's own verdict is included while `squeue` still knows the job. |
 | **Silence** | The longest stretch with no output. Silence *inside* the main loop, or in a run that never reached its loop, is a failure. Silence during setup is judged against a longer threshold, because reading input and compiling kernels legitimately take minutes. |
 | **Wall time** | How much of the requested limit was used, and whether the scheduler cut the job off. |
-| **Throughput** | Progress reached and the rate, in the unit the profile names (SYPD for a climate model). |
+| **Throughput** | Progress reached and the rate, in the unit the profile names (SYPD and SDPD for a climate model), both overall and after warm-up. The first progress interval carries one-off costs such as kernel compilation and is left out of the steady-state rate and the outlier count. |
 | **Throughput drift** | Whether the run slowed between its first and last quarter, which points at something degrading rather than a single bad moment. |
-| **Slow intervals** | Individual progress intervals far above the median: output, checkpointing, or a transient stall. |
+| **Slow intervals** | Individual progress intervals after warm-up far above the median: output, checkpointing, or a transient stall. |
 | **Where the time went** | The largest timers, as a share of the total. |
 | **Load imbalance** | How much longer the slowest rank spent in each timer than the fastest. This never fails a run on its own; it is a performance observation, and spread on a *wait* timer is the symptom of imbalance created somewhere else. |
 | **Coupling cost** | The share of each component's time spent in the coupler. A coupled run prints one timer report per component, so the shares are comparable: when one component's share is much the larger, that component reaches the exchange first and waits for its partner, which usually means the ranks are split unevenly between them. Like load imbalance, this never fails a run on its own. |
 | **Checkpoint write / Output cost** | Volume and rate of restart writes, and the share of the run spent in output timers. |
 | **Output write cadence / Checkpoint write cadence** | The wall-clock gap between successive output or checkpoint writes. One gap far from the typical one usually means a transient file system stall. |
-| **Network** | Fabric counters and warnings. A burst of dropped flow-control messages indicates that the network, not the code, was the limiting factor. |
+| **Network** | Fabric counters and warnings. A burst of dropped flow-control messages indicates that the network, not the code, was the limiting factor. Slingshot network timeouts are retransmissions the fabric recovered from, so a count is reported for information and only warns or fails above the `network_timeouts_warn` and `network_timeouts_fail` thresholds, or warns when the run itself failed. |
 | **Suspect nodes** | Nodes named in step failures, or carrying a disproportionate share of the warnings. The list can be pasted directly into an `--exclude=` argument. |
 | **Errors** | Lines that look like errors, collapsed by shape, with digits masked so the same message from a thousand ranks becomes one row. |
 

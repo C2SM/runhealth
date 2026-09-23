@@ -16,6 +16,7 @@ thresholds:
   gap_warn_factor: 5          # ... or this many times the typical progress interval
   walltime_warn: 0.9          # fraction of the requested wall time
   outlier_factor: 3           # progress interval counted as an outlier
+  warmup_intervals: 1         # leading progress intervals treated as warm-up
   imbalance_warn: 1.25        # slowest rank / fastest rank on a timer
   imbalance_fail: 2.0
   drift_warn: 0.2             # slowdown between first and last quarter
@@ -25,6 +26,8 @@ thresholds:
   group_warn: 1000            # a message family this large is worth a look
   group_share_warn: 0.2       # ... and this much of the whole log
   node_share_warn: 0.25       # one node contributing this much of a family
+  network_timeouts_warn: 10000   # recovered Slingshot timeouts worth a warning
+  network_timeouts_fail: 100000  # ... and a count that fails the run
 
 keyvalues:
   sbatch:

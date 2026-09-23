@@ -36,7 +36,8 @@ STATUS_LEVEL = {
     "INCOMPLETE": "warn",
     "UNKNOWN": "info",
 }
-SECONDS_PER_YEAR = 365.25 * 86400.0
+DAYS_PER_YEAR = 365.25
+SECONDS_PER_YEAR = DAYS_PER_YEAR * 86400.0
 MODEL_TIME_FORMATS = (
     "%Y-%m-%d %H:%M:%S.%f",
     "%Y-%m-%d %H:%M:%S",
@@ -160,7 +161,12 @@ def progress_series(log: RunLog) -> list[dict]:
 
 
 def intervals(log: RunLog) -> list[dict]:
-    """Wall seconds and model seconds between consecutive progress reports."""
+    """Wall seconds and model seconds between consecutive progress reports.
+
+    The first intervals carry one-off costs such as kernel compilation and the
+    first coupled exchange, so they are flagged as warm-up and kept out of the
+    steady-state rate, the outlier count and the plot scale.
+    """
     series = progress_series(log)
     field_name = log.setting("model_time_field", "model_time")
     out = []
@@ -176,7 +182,30 @@ def intervals(log: RunLog) -> list[dict]:
         if ta and tb:
             rec["model_seconds"] = (tb - ta).total_seconds()
         out.append(rec)
+    warmup = int(log.threshold("warmup_intervals", 1))
+    if len(out) >= warmup + 3:
+        for rec in out[:warmup]:
+            rec["warmup"] = True
     return out
+
+
+def steady(intervals: list[dict]) -> list[dict]:
+    """The intervals after warm-up."""
+    return [i for i in intervals if not i.get("warmup")]
+
+
+def throughput(intervals: list[dict]) -> float | None:
+    """Simulated years per wall-clock day over the given intervals."""
+    model_secs = sum(i.get("model_seconds", 0.0) for i in intervals)
+    wall_secs = sum(i["seconds"] for i in intervals)
+    if model_secs > 0 and wall_secs > 0:
+        return (model_secs / wall_secs) * 86400.0 / SECONDS_PER_YEAR
+    return None
+
+
+def rate_text(sypd: float, label: str = "SYPD") -> str:
+    """``0.09 SYPD (32.9 SDPD)``: the rate in years and in days per day."""
+    return f"{sypd:.2f} {label} ({sypd * DAYS_PER_YEAR:,.1f} SDPD)"
 
 
 def io_cadence(log: RunLog) -> dict[str, list[dict]]:
@@ -330,14 +359,17 @@ def _stats(log: RunLog, a: Assessment) -> dict[str, Any]:
     if series:
         stats["progress_last"] = series[-1].get("step")
         stats["progress_count"] = len(series)
-    good = [i["seconds"] for i in a.intervals if i["seconds"] > 0]
+    good = [i["seconds"] for i in steady(a.intervals) if i["seconds"] > 0]
     if good:
         stats["interval_median"] = statistics.median(good)
     model_secs = sum(i.get("model_seconds", 0.0) for i in a.intervals)
     wall_secs = sum(i["seconds"] for i in a.intervals)
-    if model_secs > 0 and wall_secs > 0:
-        stats["sypd"] = (model_secs / wall_secs) * 86400.0 / SECONDS_PER_YEAR
+    sypd = throughput(a.intervals)
+    if sypd:
+        stats["sypd"] = sypd
         stats["model_seconds"] = model_secs
+        if len(steady(a.intervals)) < len(a.intervals):
+            stats["sypd_steady"] = throughput(steady(a.intervals))
     if wall_secs > 0 and stats.get("progress_count"):
         stats["loop_seconds"] = wall_secs
     if a.timers:
@@ -504,19 +536,31 @@ def _check_progress(log: RunLog, a: Assessment) -> list[Check]:
     if not a.intervals:
         return []
     out: list[Check] = []
-    good = [i["seconds"] for i in a.intervals if i["seconds"] > 0]
+    runs = steady(a.intervals)
+    good = [i["seconds"] for i in runs if i["seconds"] > 0]
     if not good:
         return []
     median = statistics.median(good)
     label = log.setting("progress_label", "events")
-    sypd = a.stats.get("sypd")
+    unit = log.setting("throughput_label", "SYPD")
+    sypd, sypd_steady = a.stats.get("sypd"), a.stats.get("sypd_steady")
     headline = f"{a.stats.get('progress_last')} {label}"
     if sypd:
-        headline += f", {sypd:.2f} {log.setting('throughput_label', 'SYPD')}"
+        headline += f", {rate_text(sypd, unit)}"
+        headline += " overall" if sypd_steady else ""
+    if sypd_steady:
+        headline += f", {rate_text(sypd_steady, unit)} after warm-up"
     ev = [
         f"typical interval {format_duration(median)} between progress reports",
         f"{format_duration(a.stats.get('loop_seconds'))} spent in the main loop",
     ]
+    warm = [i for i in a.intervals if i.get("warmup")]
+    if warm:
+        ev.append(
+            f"warm-up: first {len(warm)} interval(s), "
+            f"{format_duration(sum(i['seconds'] for i in warm))}, "
+            "excluded from the steady-state rate"
+        )
     out.append(Check("throughput", "Throughput", "ok", headline, "", ev))
 
     # Drift: a run that slows down as it goes usually means a leak, a filling
@@ -555,7 +599,7 @@ def _check_progress(log: RunLog, a: Assessment) -> list[Check]:
             )
 
     factor = float(log.threshold("outlier_factor", 3))
-    slow = [i for i in a.intervals if i["seconds"] > factor * median]
+    slow = [i for i in runs if i["seconds"] > factor * median]
     if slow:
         worst = sorted(slow, key=lambda i: -i["seconds"])[:5]
         out.append(
@@ -563,8 +607,7 @@ def _check_progress(log: RunLog, a: Assessment) -> list[Check]:
                 "outliers",
                 "Slow intervals",
                 "warn" if len(slow) > 1 else "info",
-                f"{len(slow)} of {len(a.intervals)} intervals took more than "
-                f"{factor:g}x the median",
+                f"{len(slow)} of {len(runs)} intervals took more than " f"{factor:g}x the median",
                 "Isolated slow intervals usually mark output, checkpointing or a "
                 "transient network stall.",
                 [f"{label} {i['step']}: {format_duration(i['seconds'])}" for i in worst],
@@ -850,10 +893,20 @@ def _check_network(log: RunLog, a: Assessment) -> list[Check]:
     level = "ok"
     headline = "No network trouble reported"
 
+    # Timeouts are retransmissions the fabric recovered from; an unrecoverable
+    # one aborts the job, so the count alone rarely explains a failure.
     if timeouts is not None:
         ev.append(f"{timeouts} network timeouts")
         if timeouts:
-            level, headline = "fail", f"{timeouts} network timeouts"
+            headline = f"{timeouts} network timeouts"
+            if timeouts >= float(log.threshold("network_timeouts_fail", 100000)):
+                level = "fail"
+            elif timeouts >= float(log.threshold("network_timeouts_warn", 10000)) or (
+                a.status in {"FAILED", "STALLED"}
+            ):
+                level = "warn"
+            else:
+                level = "info"
 
     if counters:
         cols = log.setting("counter_columns", {}) or {}

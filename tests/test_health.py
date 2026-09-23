@@ -1,3 +1,5 @@
+from datetime import datetime, timedelta
+
 import pytest
 
 from runhealth import health
@@ -189,3 +191,43 @@ def test_coupling_is_quiet_when_the_components_are_balanced():
 def test_coupling_check_is_absent_without_coupling_timers(assessed):
     """The bundled fixtures are single-component, so nothing is attributed."""
     assert assessed["slurm_generic"].check("coupling") is None
+
+
+def _progress_log(gaps: list[float], model_step: float = 60.0, **fields) -> RunLog:
+    """A synthetic run that reports progress after each wall-time gap."""
+    walls = [0.0]
+    for g in gaps:
+        walls.append(walls[-1] + g)
+    start = datetime(2020, 1, 1)
+    series = [
+        {"wall": w, "step": n, "model_time": f"{start + timedelta(seconds=n * model_step)}"}
+        for n, w in enumerate(walls)
+    ]
+    return RunLog(
+        first_wall=walls[0],
+        last_wall=walls[-1],
+        series={"timestep": series},
+        series_roles={"timestep": "progress"},
+        fields=fields,
+    )
+
+
+def test_first_interval_is_warm_up():
+    a = health.assess(_progress_log([100.0] + [10.0] * 8))
+    assert a.intervals[0]["warmup"] and not any(i.get("warmup") for i in a.intervals[1:])
+    assert a.stats["sypd_steady"] > a.stats["sypd"]
+    assert a.check("outliers") is None
+    assert "after warm-up" in a.check("throughput").headline
+    assert "SDPD" in a.check("throughput").headline
+
+
+def test_rate_text_gives_days_per_day():
+    assert health.rate_text(0.1) == "0.10 SYPD (36.5 SDPD)"
+
+
+@pytest.mark.parametrize(
+    "count,want", [(0, "ok"), (1041, "info"), (20000, "warn"), (200000, "fail")]
+)
+def test_network_timeouts_are_graded_by_count(count, want):
+    log = _progress_log([10.0] * 6, network_timeouts=count)
+    assert health.assess(log, now=log.last_wall + 1).check("network").level == want

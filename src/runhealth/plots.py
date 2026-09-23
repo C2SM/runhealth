@@ -20,7 +20,7 @@ from pathlib import Path
 
 from . import style, svg
 from .extract import RunLog
-from .health import STATUS_LEVEL, Assessment, counter_rows
+from .health import STATUS_LEVEL, Assessment, counter_rows, rate_text
 from .logfile import format_duration, format_stamp
 
 # Above this many points the drawn line is decimated per pixel column, which
@@ -228,22 +228,24 @@ def progress_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     seconds = [record["seconds"] for record in a.intervals]
     median = a.stats.get("interval_median") or 0.0
     factor = float(log.threshold("outlier_factor", 3))
+    warm = [bool(record.get("warmup")) for record in a.intervals]
     ch = svg.Chart(height=274, pad=(68, 24, 20, 58), uid=uid)
     p = ch.plot
     x = svg.Scale(min(steps), max(steps), p.x, p.right)
-    # One slow first step (kernel compilation, cache warm-up) would otherwise
-    # flatten the rest of the run into a straight line.
-    if median > 0 and max(seconds) > 20 * median:
-        floor = min((v for v in seconds if v > 0), default=1.0)
-        y = svg.LogScale(floor * 0.8, max(seconds) * 1.3, p.bottom, p.y)
+    # Warm-up intervals are left out of the scale and pinned to the top edge,
+    # so kernel compilation does not flatten the rest of the run.
+    scaled = [v for v, w in zip(seconds, warm) if not w]
+    if median > 0 and max(scaled) > 20 * median:
+        floor = min((v for v in scaled if v > 0), default=1.0)
+        y = svg.LogScale(floor * 0.8, max(scaled) * 1.3, p.bottom, p.y)
         y_ticks = svg.log_ticks(y.d0, y.d1)
         y_fmt = _dur
     else:
-        y = svg.Scale(0, max(seconds) * 1.14 or 1.0, p.bottom, p.y)
+        y = svg.Scale(0, max(scaled) * 1.14 or 1.0, p.bottom, p.y)
         y_ticks = svg.nice_ticks(0, y.d1, 5)
         y_fmt = _dur
 
-    points = [(x(s), y(v)) for s, v in zip(steps, seconds)]
+    points = [(x(s), y(min(v, y.d1))) for s, v in zip(steps, seconds)]
     drawn = _decimate(points, p.w)
     ch.geometry.append(
         ch.path(
@@ -266,10 +268,19 @@ def progress_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         )
 
     label = log.setting("progress_label", "events")
+    for (px, py), step, value, w in zip(points, steps, seconds, warm):
+        if w:
+            tip = _tip(
+                f"{label} {step:,}: warm-up",
+                f"{_dur(value)} between reports",
+                f"{value / median:.1f}x the median" if median else "",
+                "left out of the steady-state rate and the scale",
+            )
+            ch.points.append(ch.circle(px, py, 3.4, **_mark("lv-info fill", tip)))
     hot = [
         (px, py, step, value)
-        for (px, py), step, value in zip(points, steps, seconds)
-        if median and value > factor * median
+        for (px, py), step, value, w in zip(points, steps, seconds, warm)
+        if median and value > factor * median and not w
     ]
     for px, py, step, value in _thin(hot, 120):
         tip = _tip(
@@ -304,14 +315,15 @@ def progress_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         key="progress",
         title="Progress rate",
         note=(
-            f"{rate:.2f} {log.setting('throughput_label', 'rate')}"
+            rate_text(rate, log.setting("throughput_label", "rate"))
             if rate
             else f"{len(a.intervals):,} reports"
         ),
         caption=(
             "Wall time between successive progress reports. A flat line is a healthy "
             "run; spikes are output, checkpointing or a transient stall, and a rising "
-            "trend means the run is degrading. Hover for a single report, drag to zoom."
+            "trend means the run is degrading. Warm-up at the start is marked separately "
+            "and pinned to the top edge when it is off scale. Hover for a single report, drag to zoom."
         ),
         svg=ch.render(
             f"Wall time between {len(a.intervals):,} progress reports, median {_dur(median)}",
@@ -825,7 +837,7 @@ def render_index(
                 f"job {log.fields.get('job_id') or '?'}  -  "
                 f"status {a.status.lower()}, health {a.grade}",
                 f"wall clock {_dur(log.wall_seconds)}",
-                f"{a.stats['sypd']:.2f} {rate_label}" if a.stats.get("sypd") else "",
+                rate_text(a.stats["sypd"], rate_label) if a.stats.get("sypd") else "",
                 f"started {format_stamp(log.first_wall)}",
                 "click to open this run",
             )

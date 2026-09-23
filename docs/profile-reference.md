@@ -308,6 +308,7 @@ Every number a check compares against. The defaults are defined in
 | `gap_warn_factor` | 5 | in-loop pause, as a multiple of the typical interval |
 | `walltime_warn` | 0.9 | fraction of the requested limit that warns |
 | `outlier_factor` | 3 | progress interval counted as an outlier |
+| `warmup_intervals` | 1 | leading progress intervals treated as warm-up, excluded from the steady-state rate, the outlier count and the plot scale |
 | `io_gap_outlier_factor` | 4 | gap between `role: io` events counted as an outlier |
 | `imbalance_warn` | 1.25 | ratio of slowest to fastest rank that is worth reporting |
 | `imbalance_fail` | 2.0 | ratio of slowest to fastest rank that is considered severe |
@@ -318,6 +319,8 @@ Every number a check compares against. The defaults are defined in
 | `group_warn` | 1000 | size of a message family that warrants a warning, provided that `group_share_warn` is also reached |
 | `group_share_warn` | 0.2 | fraction of the whole log that such a family must also account for |
 | `node_share_warn` | 0.25 | one node's share of a family that makes it suspect |
+| `network_timeouts_warn` | 10000 | recovered Slingshot network timeouts that warn; any nonzero count below is reported for information, or warns if the run failed |
+| `network_timeouts_fail` | 100000 | network timeouts that fail a run |
 
 ## Testing a profile
 

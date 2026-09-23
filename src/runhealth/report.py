@@ -23,7 +23,7 @@ from pathlib import Path
 from . import style
 from .diff import Diff, compare, run_kind
 from .extract import RunLog
-from .health import STATUS_LEVEL, Assessment, Check, counter_rows
+from .health import DAYS_PER_YEAR, STATUS_LEVEL, Assessment, Check, counter_rows
 from .highlight import bash_html
 from .logfile import format_duration, format_stamp
 from .plots import Figure
@@ -1979,7 +1979,8 @@ def run_tiles(log: RunLog, a: Assessment) -> str:
         _tile(format_duration(s.get("wall_seconds")) or "&ndash;", "wall clock"),
     ]
     if s.get("sypd"):
-        out.append(_tile(f"{s['sypd']:.2f}", log.setting("throughput_label", "rate")))
+        unit = log.setting("throughput_label", "rate")
+        out.append(_tile(f"{s['sypd']:.2f}", f"{unit} ({s['sypd'] * DAYS_PER_YEAR:,.1f} SDPD)"))
     if s.get("progress_last") is not None:
         out.append(_tile(f"{s['progress_last']:,}", log.setting("progress_label", "progress")))
     if s.get("nodes"):
