@@ -55,6 +55,17 @@ def test_sync_remote_pulls_matching_files_non_recursively(tmp_path, monkeypatch)
     assert sorted(p.name for p in local.iterdir()) == ["LOG.demo.1.o"]
 
 
+def test_logs_of_the_same_name_do_not_share_a_cache_entry(tmp_path):
+    for d, text in (("a", "first\n"), ("b", "second\n")):
+        (tmp_path / d).mkdir()
+        (tmp_path / d / "LOG.demo.1.o").write_text(text)
+    cache = str(tmp_path / "cache")
+    first = cli.parse_cached(tmp_path / "a" / "LOG.demo.1.o", [], [], cache)
+    second = cli.parse_cached(tmp_path / "b" / "LOG.demo.1.o", [], [], cache)
+    assert first["path"] != second["path"]
+    assert len(list((tmp_path / "cache").glob("*.json"))) == 2
+
+
 def test_sync_remote_falls_back_to_a_single_file(tmp_path, monkeypatch):
     monkeypatch.setenv("RSYNC_RSH", str(_fake_ssh(tmp_path)))
     remote_file = tmp_path / "LOG.demo.1.o"

@@ -7,6 +7,7 @@ report: an index page listing every run plus one detail page per run.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import multiprocessing
 import os
@@ -201,7 +202,9 @@ def slurm_states() -> dict[str, str]:
 
 
 def _cache_file(cache_dir: Path, path: Path) -> Path:
-    return cache_dir / f"{slug(path.name)}.json"
+    # The directory's hash keeps logs of the same name in different places apart.
+    where = hashlib.sha1(str(path.resolve().parent).encode()).hexdigest()[:8]
+    return cache_dir / f"{slug(path.name)}.{where}.json"
 
 
 def parse_cached(
@@ -216,7 +219,7 @@ def parse_cached(
     """
     profiles = profile.load_all([Path(d) for d in dirs])
     picked = profile.select(names, profiles) if names else profile.detect(path, profiles)
-    cache = Path(cache_dir) / f"{slug(path.name)}.json" if cache_dir else None
+    cache = _cache_file(Path(cache_dir), path) if cache_dir else None
     report = reports.put if reports is not None else None
     state, start = None, 0
     stat = path.stat()
