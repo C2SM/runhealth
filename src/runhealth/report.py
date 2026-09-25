@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import style
+from . import __version__, style
 from .diff import Diff, compare, run_kind
 from .extract import RunLog
 from .health import DAYS_PER_YEAR, STATUS_LEVEL, Assessment, Check, counter_rows
@@ -224,6 +224,7 @@ a:hover { border-bottom-color: currentColor; }
   display: flex; align-items: center; gap: 10px; }
 .nav .brand { font-weight: 700; font-size: 15px; letter-spacing: -.01em; border: none;
   flex: 0 0 auto; }
+.nav .ver { font-size: 12px; color: var(--muted); flex: 0 0 auto; margin-left: -4px; }
 .nav .sep { color: var(--line-2); }
 .nav .here { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; min-width: 0; }
@@ -344,7 +345,8 @@ a:hover { border-bottom-color: currentColor; }
 /* The brand is the link back to the index, which the run name's switcher and
    the page head both carry as well, so the run name alone is left standing. */
 @media (max-width: 430px) {
-  .nav-in:has(.here) .brand, .nav-in:has(.here) .sep { display: none; }
+  .nav-in:has(.here) .brand, .nav-in:has(.here) .ver,
+  .nav-in:has(.here) .sep { display: none; }
 }
 
 /* -- shell and table of contents -- */
@@ -1669,6 +1671,7 @@ def _nav(
         f'<header class="nav" data-base="{esc(base)}" data-page="{esc(page)}">'
         '<div class="nav-in">'
         f'<a class="brand" href="{esc(up or "#main")}">runhealth</a>'
+        f'<span class="ver">v{esc(__version__)}</span>'
         f"{trail}{badge}"
         '<div class="spacer"></div>'
         f"{search_box()}{theme_switch()}"
