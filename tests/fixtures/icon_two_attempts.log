@@ -21,19 +21,29 @@ end_of_job_script
 2026-01-07T08:00:00.500: SLURM_JOB_NODELIST=nid[000001-000002]
 2026-01-07T08:00:00.600: SLURM_GPUS_ON_NODE=4
 2026-01-07T08:00:00.700: SLURMD_NODENAME=nid000001
-2026-01-07T08:00:01.200:     0:  version: 2026.04
-2026-01-07T08:00:01.700:     0:  revision: icon-2026.04-1-gabcdef0
-2026-01-07T08:00:02.200:     0:  local branch: main
-2026-01-07T08:00:02.700:     0:  master_control: start model initialization.
-2026-01-07T08:00:03.200:     0:  atmo runs on 8 mpi processes.
-2026-01-07T08:00:03.700:     8:  ocean runs on 8 mpi processes.
-2026-01-07T08:00:04.200:     0:  Running ICON atmo in coupled mode with YAC version: v3.17.0
-2026-01-07T08:00:04.700:     0:  mo_atmo_coupling_frame: Constructing the coupling frame atmosphere-ocean.
-2026-01-07T08:00:14.700:     0:  Time step:        1 model time 2020-01-01 00:00:20.000
-2026-01-07T08:00:24.700:     0:  Time step:       25 model time 2020-01-01 00:08:20.000
-2026-01-07T08:00:34.700:     0:  Time step:       50 model time 2020-01-01 00:16:40.000
-2026-01-07T08:00:34.900: + srun_status=1
-2026-01-07T08:00:35.000: Script FAILED: srun exit status 1, finish_atmo.status missing, finish_ocean.status missing
+2026-01-07T08:00:01.200:     0:  executable: /scratch/demo/build/bin/icon
+2026-01-07T08:00:01.700:     0:  date: 20260105
+2026-01-07T08:00:02.200:     0:  time: 100000
+2026-01-07T08:00:02.700:     0:  user: Demo User (demo)
+2026-01-07T08:00:03.200:     0:  host: nid000001 (Linux 6.4.0 aarch64)
+2026-01-07T08:00:03.700:     0:  version: 2026.04
+2026-01-07T08:00:04.200:     0:  revision: icon-2026.04-1-gabcdef0
+2026-01-07T08:00:04.700:     0:  repository: git@example.org:icon/icon.git
+2026-01-07T08:00:05.200:     0:  local branch: main
+2026-01-07T08:00:05.700:     0:  model components:
+2026-01-07T08:00:06.200:     0:    ICON-Land:
+2026-01-07T08:00:06.700:     0:      version: 2026.04
+2026-01-07T08:00:07.200:     0:      revision: icon-land-2026.04-1-g1234567
+2026-01-07T08:00:07.700:     0:  master_control: start model initialization.
+2026-01-07T08:00:08.200:     0:  atmo runs on 8 mpi processes.
+2026-01-07T08:00:08.700:     8:  ocean runs on 8 mpi processes.
+2026-01-07T08:00:09.200:     0:  Running ICON atmo in coupled mode with YAC version: v3.17.0
+2026-01-07T08:00:09.700:     0:  mo_atmo_coupling_frame: Constructing the coupling frame atmosphere-ocean.
+2026-01-07T08:00:19.700:     0:  Time step:        1 model time 2020-01-01 00:00:20.000
+2026-01-07T08:00:29.700:     0:  Time step:       25 model time 2020-01-01 00:08:20.000
+2026-01-07T08:00:39.700:     0:  Time step:       50 model time 2020-01-01 00:16:40.000
+2026-01-07T08:00:39.900: + srun_status=1
+2026-01-07T08:00:40.000: Script FAILED: srun exit status 1, finish_atmo.status missing, finish_ocean.status missing
 #! /usr/bin/bash
 #SBATCH --account=abc01
 #SBATCH --job-name=demo
@@ -57,18 +67,28 @@ end_of_job_script
 2026-01-07T14:00:00.500: SLURM_JOB_NODELIST=nid[000001-000002]
 2026-01-07T14:00:00.600: SLURM_GPUS_ON_NODE=4
 2026-01-07T14:00:00.700: SLURMD_NODENAME=nid000001
-2026-01-07T14:00:01.200:     0:  version: 2026.04
-2026-01-07T14:00:01.700:     0:  revision: icon-2026.04-1-gabcdef0
-2026-01-07T14:00:02.200:     0:  local branch: main
-2026-01-07T14:00:02.700:     0:  master_control: start model initialization.
-2026-01-07T14:00:03.200:     0:  atmo runs on 8 mpi processes.
-2026-01-07T14:00:03.700:     8:  ocean runs on 8 mpi processes.
-2026-01-07T14:00:04.200:     0:  Running ICON atmo in coupled mode with YAC version: v3.17.0
-2026-01-07T14:00:04.700:     0:  mo_atmo_coupling_frame: Constructing the coupling frame atmosphere-ocean.
-2026-01-07T14:00:14.700:     0:  Time step:        1 model time 2020-01-01 00:00:20.000
-2026-01-07T14:00:24.700:     0:  Time step:       25 model time 2020-01-01 00:08:20.000
-2026-01-07T14:00:34.700:     0:  Time step:       50 model time 2020-01-01 00:16:40.000
-2026-01-07T14:00:44.700:     0:  Time step:       75 model time 2020-01-01 00:25:00.000
-2026-01-07T14:00:54.700:     0:  Time step:      100 model time 2020-01-01 00:33:20.000
-2026-01-07T14:00:54.900: + srun_status=0
-2026-01-07T14:00:55.000: Script run successfully: atmo=OK ocean=OK
+2026-01-07T14:00:01.200:     0:  executable: /scratch/demo/build/bin/icon
+2026-01-07T14:00:01.700:     0:  date: 20260105
+2026-01-07T14:00:02.200:     0:  time: 100000
+2026-01-07T14:00:02.700:     0:  user: Demo User (demo)
+2026-01-07T14:00:03.200:     0:  host: nid000001 (Linux 6.4.0 aarch64)
+2026-01-07T14:00:03.700:     0:  version: 2026.04
+2026-01-07T14:00:04.200:     0:  revision: icon-2026.04-1-gabcdef0
+2026-01-07T14:00:04.700:     0:  repository: git@example.org:icon/icon.git
+2026-01-07T14:00:05.200:     0:  local branch: main
+2026-01-07T14:00:05.700:     0:  model components:
+2026-01-07T14:00:06.200:     0:    ICON-Land:
+2026-01-07T14:00:06.700:     0:      version: 2026.04
+2026-01-07T14:00:07.200:     0:      revision: icon-land-2026.04-1-g1234567
+2026-01-07T14:00:07.700:     0:  master_control: start model initialization.
+2026-01-07T14:00:08.200:     0:  atmo runs on 8 mpi processes.
+2026-01-07T14:00:08.700:     8:  ocean runs on 8 mpi processes.
+2026-01-07T14:00:09.200:     0:  Running ICON atmo in coupled mode with YAC version: v3.17.0
+2026-01-07T14:00:09.700:     0:  mo_atmo_coupling_frame: Constructing the coupling frame atmosphere-ocean.
+2026-01-07T14:00:19.700:     0:  Time step:        1 model time 2020-01-01 00:00:20.000
+2026-01-07T14:00:29.700:     0:  Time step:       25 model time 2020-01-01 00:08:20.000
+2026-01-07T14:00:39.700:     0:  Time step:       50 model time 2020-01-01 00:16:40.000
+2026-01-07T14:00:49.700:     0:  Time step:       75 model time 2020-01-01 00:25:00.000
+2026-01-07T14:00:59.700:     0:  Time step:      100 model time 2020-01-01 00:33:20.000
+2026-01-07T14:00:59.900: + srun_status=0
+2026-01-07T14:01:00.000: Script run successfully: atmo=OK ocean=OK

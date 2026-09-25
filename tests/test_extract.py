@@ -17,7 +17,20 @@ def test_model_provenance(parsed):
     log = parsed["icon_success"]
     assert log.fields["model_version"] == "2026.04"
     assert log.fields["model_branch"] == "main"
+
     assert log.fields["atmo_ranks"] == 8
+
+
+def test_the_startup_banner_is_read_as_a_nested_block(parsed):
+    build = parsed["icon_success"].keyvalues["build"]
+    assert build["executable"] == "/scratch/demo/build/bin/icon"
+    assert build["repository"] == "git@example.org:icon/icon.git"
+    assert build["local branch"] == "main"
+    # A component's entries are nested under it, not mixed with the model's.
+    assert build["revision"] == "icon-2026.04-1-gabcdef0"
+    assert build["model components/ICON-Land/revision"] == "icon-land-2026.04-1-g1234567"
+    # The next message ends the block.
+    assert not any(k.startswith("master_control") for k in build)
 
 
 def test_the_echoed_job_script_does_not_set_the_outcome(parsed):

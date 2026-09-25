@@ -95,6 +95,10 @@ ICONS = {
         '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>'
         '<path d="M14 2v6h6M8 13h8M8 17h5"/>'
     ),
+    "binary": _ICON.format(
+        '<rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/>'
+        '<path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3"/>'
+    ),
     "download": _ICON.format(
         '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>'
     ),
@@ -550,6 +554,12 @@ table.runs .badge { gap: 4px; padding: 2px 9px 2px 4px; font-size: 12.5px; }
 table.runs .badge .mark { min-width: 17px; height: 17px; font-size: 11px; }
 td.stamp .clock { display: block; color: var(--muted); }
 table.runs td > a { overflow-wrap: anywhere; }
+table.runs a.exe-chg { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px;
+  padding: 1px 8px; border: 1px solid var(--warn); border-radius: 999px; color: var(--warn);
+  font-size: 12px; font-weight: 650; white-space: nowrap; text-decoration: none;
+  vertical-align: 1px; }
+table.runs a.exe-chg .ico { width: 12px; height: 12px; }
+table.runs a.exe-chg:hover { background: color-mix(in srgb, var(--warn) 12%, var(--panel)); }
 /* Runs of one name share a body headed by the name, as in the switcher; the
    heading folds its runs away, and the dots give each one's outcome, newest first. */
 tr.grp-hd th { padding: 0; background: var(--panel-2); border-bottom: 1px solid var(--line);
@@ -577,6 +587,31 @@ details > summary + * { margin-top: 0; }
 details .body { padding-bottom: 16px; }
 .depth-1 { padding-left: 16px; } .depth-2 { padding-left: 32px; }
 .depth-3 { padding-left: 48px; } .depth-4 { padding-left: 64px; }
+
+/* -- the executable and its build, against the previous run -- */
+.build { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px 16px 14px; margin: 0 0 24px; box-shadow: var(--shadow); }
+.build.changed { border-color: var(--warn); }
+.build-hd { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 9px; }
+.build-hd .ico { color: var(--muted); }
+.build.changed .build-hd .ico { color: var(--warn); }
+.build-hd .t { font-weight: 650; }
+.build-hd .note { font-size: 13.5px; color: var(--warn); font-weight: 600; }
+.build-hd .note.same { color: var(--muted); font-weight: 400; }
+dl.build-kv { display: grid; grid-template-columns: minmax(110px, max-content) 1fr;
+  gap: 3px 18px; margin: 0; font-size: 14px; }
+dl.build-kv dt { color: var(--muted); }
+dl.build-kv dt.grp { grid-column: 1 / -1; margin-top: 6px; font-weight: 600; }
+dl.build-kv dt.sub { padding-left: 14px; }
+dl.build-kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+dl.build-kv .chg { color: var(--warn); }
+dl.build-kv dt.chg { font-weight: 650; }
+dl.build-kv .was { display: block; color: var(--muted); }
+dl.build-kv .gone { font-style: italic; }
+@media (max-width: 560px) {
+  dl.build-kv { grid-template-columns: 1fr; gap: 0; }
+  dl.build-kv dd { margin-bottom: 5px; } }
 
 dl.kv { display: grid; grid-template-columns: minmax(120px, max-content) 1fr;
   gap: 4px 18px; margin: 0; font-size: 14.5px; }
@@ -1903,6 +1938,7 @@ def provenance_pairs(log: RunLog) -> tuple[list[tuple[str, str]], list[tuple[str
         ("Log size", f"{log.size / 1e6:.1f} MB, {log.n_lines:,} lines"),
     ]
     model = [
+        ("Executable", build_entries(log).get("executable", "")),
         ("Model version", f.get("model_version", "")),
         ("Revision", f.get("model_revision", "")),
         ("Branch", f.get("model_branch", "")),
@@ -1925,6 +1961,67 @@ def _provenance(log: RunLog) -> str:
     if any(v for _, v in model):
         body += '<div style="height:14px"></div>' + _kv(model)
     return _details("Job and build provenance", body)
+
+
+def build_entries(log: RunLog) -> dict[str, str]:
+    """What the model reported about its binary, less what describes the run."""
+    name = log.setting("build_block", "")
+    ignore = set(log.setting("build_ignore", []))
+    return {k: v for k, v in log.keyvalues.get(name, {}).items() if k not in ignore}
+
+
+def build_changes(log: RunLog, before: RunLog | None) -> list[str]:
+    """The build entries in which ``log`` differs from ``before``.
+
+    A run that did not report its build is no difference: an older log may
+    simply predate the banner.
+    """
+    now, old = build_entries(log), build_entries(before) if before else {}
+    if not now or not old:
+        return []
+    return [k for k in list(now) + [k for k in old if k not in now] if old.get(k) != now.get(k)]
+
+
+def build_panel(log: RunLog, before: RunLog | None = None) -> str:
+    """The executable and its build, marked where the previous run differs."""
+    now = build_entries(log)
+    if not now:
+        return ""
+    old = build_entries(before) if before else {}
+    keys = list(now) + [k for k in old if k not in now]
+    changed = set(build_changes(log, before))
+    rows, group = [], ""
+    for key in keys:
+        *parents, leaf = key.split("/")
+        if " \u203a ".join(parents) != group:
+            group = " \u203a ".join(parents)
+            rows.append(f'<dt class="grp">{esc(group)}</dt>')
+        value = now.get(key)
+        cell = (
+            f'<span class="v">{esc(value)}</span>' if value else '<span class="gone">absent</span>'
+        )
+        if key == "executable" and value:
+            cell += _copy_button(value)
+        if key in changed and old.get(key):
+            cell += f'<span class="was">previous run: {esc(old[key])}</span>'
+        chg = " chg" if key in changed else ""
+        nest = " sub" if parents else ""
+        rows.append(f'<dt class="{nest}{chg}">{esc(leaf)}</dt><dd class="{chg}">{cell}</dd>')
+    if changed:
+        n = len(changed)
+        note = (
+            f'<span class="note">{n} entr{"ies differ" if n > 1 else "y differs"} from the previous '
+            f"run, {esc(Path(before.path).name)}</span>"
+        )
+    elif old:
+        note = '<span class="note same">same as the previous run</span>'
+    else:
+        note = ""
+    return (
+        f'<section class="build{" changed" if changed else ""}" id="build">'
+        f'<div class="build-hd">{ICONS["binary"]}<span class="t">Executable</span>{note}</div>'
+        f'<dl class="build-kv">{"".join(rows)}</dl></section>'
+    )
 
 
 def _node_table(log: RunLog) -> str:
@@ -2039,6 +2136,20 @@ def _diff_template(view: RunView, base: RunView) -> tuple[Diff, str]:
     )
 
 
+def _build_marker(view: RunView, base: RunView | None) -> str:
+    """A link to the run's build panel when its build differs from ``base``."""
+    changed = build_changes(view.log, base.log) if base else []
+    if not changed:
+        return ""
+    tip = "Differs from the previous run in: " + ", ".join(
+        k.replace("/", " \u203a ") for k in changed
+    )
+    return (
+        f'<a class="exe-chg" href="{esc(view.page)}#build" title="{esc(tip)}">'
+        f'{ICONS["binary"]}executable changed</a>'
+    )
+
+
 def _diff_modal() -> str:
     """The shell every diff on the page is shown in; the script fills it."""
     return (
@@ -2093,6 +2204,7 @@ def render_run(
         f'{esc(format_stamp(log.first_wall) or "unknown start")} &rarr; '
         f'{esc(format_stamp(log.last_wall) or "unknown end")}</div>'
         f"{_source_bar(view, diff)}</div>",
+        build_panel(log, base.log if base else None),
         run_tiles(log, a),
         f'<h2 class="sec" id="{toc.add("checks", "Checks")}">Checks</h2>',
         _grade_filters(counts, ".check", "Filter checks by grade"),
@@ -2228,6 +2340,7 @@ def render_index(
             f'<td data-v="{esc(a.grade)}">{_badge(a.grade)}</td>'
             f'<td data-v="{esc(Path(log.path).name)}"><a href="{esc(v.page)}">'
             f"{esc(Path(log.path).name or log.name)}</a>"
+            + _build_marker(v, base)
             + (
                 f'<br><span style="color:var(--muted);font-size:13px">{esc(outcome[:70])}</span>'
                 if outcome

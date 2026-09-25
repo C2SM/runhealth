@@ -42,6 +42,10 @@ settings:
   # A coupled run prints one timer report per component, headed by the ranks
   # it covers; this is what assigns each report to atmo or ocean.
   timer_group_ranks: 'ranks\s+(\d+)\s*-\s*(\d+)'
+  # The startup banner describes the binary; these of its entries describe
+  # the run instead, so they are neither shown with it nor compared.
+  build_block: build
+  build_ignore: [date, time, user, host]
 
 fields:
   model_version:
@@ -81,6 +85,14 @@ fields:
     re: '^Script run successfully: (.+)'
     contains: 'Script run successfully'
     keep: last
+
+keyvalues:
+  # The banner ICON prints first: the binary, the source it was built from,
+  # and one nested entry per model component.
+  build:
+    re: '^\s*executable: '
+    contains: 'executable:'
+    block: true
 
 series:
   timestep:

@@ -1,6 +1,16 @@
+ executable: /scratch/demo/build/bin/icon
+ date: 20260105
+ time: 100000
+ user: Demo User (demo)
+ host: nid000001 (Linux 6.4.0 aarch64)
  version: 2026.04
  revision: icon-2026.04-1-gabcdef0
+ repository: git@example.org:icon/icon.git
  local branch: main
+ model components:
+   ICON-Land:
+     version: 2026.04
+     revision: icon-land-2026.04-1-g1234567
  master_control: start model initialization.
  atmo runs on 8 mpi processes.
  ocean runs on 8 mpi processes.

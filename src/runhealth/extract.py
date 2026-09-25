@@ -184,6 +184,51 @@ def _bump(counter: dict[str, int], key: str, cap: int) -> None:
         counter[key] = 1
 
 
+# One line of an indented key/value block. Keys hold no underscore, so a
+# message such as "master_control: ..." ends the block instead of joining it.
+BLOCK_LINE = re.compile(r"^( *)([A-Za-z][A-Za-z0-9 .+-]*?):(?: +(.*?))?\s*$")
+BLOCK_MAX_LINES = 200
+
+
+class KeyBlock:
+    """Reads a block of ``key: value`` lines whose indentation nests them.
+
+    A key without a value heads the lines indented below it, so a component
+    of the build is stored as ``model components/ICON-Land/revision``.
+    """
+
+    def __init__(self, out: dict[str, str], rank: int | None):
+        self.out = out
+        self.rank = rank
+        self.base: int | None = None
+        self.stack: list[tuple[int, str]] = []
+        self.seen = 0
+
+    def feed(self, line: Line, text: str) -> bool:
+        """Take one line. Returns False once the block is over."""
+        self.seen += 1
+        if self.seen > BLOCK_MAX_LINES:
+            return False
+        if line.rank != self.rank:
+            return True  # another rank's output interleaved
+        m = BLOCK_LINE.match(text)
+        if not m:
+            return False
+        indent = len(m.group(1))
+        if self.base is None:
+            self.base = indent
+        if indent < self.base:
+            return False
+        while self.stack and self.stack[-1][0] >= indent:
+            self.stack.pop()
+        key, value = m.group(2).strip(), m.group(3)
+        if value:
+            self.out["/".join([k for _, k in self.stack] + [key])] = value
+        else:
+            self.stack.append((indent, key))
+        return True
+
+
 class Extractor:
     """Applies a set of profiles to a stream of decoded lines."""
 
@@ -214,6 +259,7 @@ class Extractor:
         self._reader: TableReader | None = None
         self._reader_name: str = ""
         self._reader_rank: int | None = None
+        self._block: KeyBlock | None = None
         self._t0: float | None = self.log.first_wall
         self._min_gap = 1.0
         self._has_preamble = False
@@ -275,12 +321,17 @@ class Extractor:
         if not text:
             return
 
+        if self._block is not None and not self._block.feed(line, text):
+            self._block = None
         skip = self._skip
         for rule in self._fields:
             if not skip(rule, in_preamble):
                 self._do_field(rule, text)
         for rule in self._keyvalues:
             if skip(rule, in_preamble):
+                continue
+            if rule.spec.get("block"):
+                self._open_block(rule, line, text)
                 continue
             m = rule.search(text)
             if m and m.lastindex and m.lastindex >= 2:
@@ -385,6 +436,7 @@ class Extractor:
         self._t0 = None
         self._reader = None
         self._reader_rank = None
+        self._block = None
         self._stamped_since_reset = 0
         self._unstamped.clear()
 
@@ -514,6 +566,14 @@ class Extractor:
         if nm:
             _bump(stat.nodes, nm.group(1), 512)
             _bump(self.log.nodes, nm.group(1), MAX_GROUP_KEYS)
+
+    def _open_block(self, rule, line: Line, text: str) -> None:
+        # The first block is kept, as for a field.
+        if self._block is not None or self.log.keyvalues.get(rule.name):
+            return
+        if rule.search(text):
+            self._block = KeyBlock(self.log.keyvalues.setdefault(rule.name, {}), line.rank)
+            self._block.feed(line, text)
 
     def _open_table(self, rule, text: str, line: Line) -> None:
         m = rule.search(text)

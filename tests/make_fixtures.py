@@ -165,9 +165,19 @@ ENV = [
 ]
 
 INIT = [
+    (0, " executable: /scratch/demo/build/bin/icon"),
+    (0, " date: 20260105"),
+    (0, " time: 100000"),
+    (0, " user: Demo User (demo)"),
+    (0, " host: nid000001 (Linux 6.4.0 aarch64)"),
     (0, " version: 2026.04"),
     (0, " revision: icon-2026.04-1-gabcdef0"),
+    (0, " repository: git@example.org:icon/icon.git"),
     (0, " local branch: main"),
+    (0, " model components:"),
+    (0, "   ICON-Land:"),
+    (0, "     version: 2026.04"),
+    (0, "     revision: icon-land-2026.04-1-g1234567"),
     (0, " master_control: start model initialization."),
     (0, " atmo runs on 8 mpi processes."),
     (8, " ocean runs on 8 mpi processes."),

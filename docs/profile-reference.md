@@ -146,6 +146,34 @@ The `sbatch` entry has a special role: its `time` value is read as the
 requested wall-clock limit, on which both the wall-time check and the
 attempt-boundary detection rely.
 
+With `block: true`, the pattern only marks the first line of a block of
+`key: value` lines, which are all collected from there on. A key without a
+value heads the lines indented below it, and the nested keys are joined with
+`/`. The block ends at the first line of another shape, at a line indented
+less than the first one, or at a key containing an underscore, so a message
+such as `master_control: ...` is not taken for part of it. Lines from other
+ranks do not interrupt it. Only the first block of a run is kept.
+
+```yaml
+keyvalues:
+  build:
+    re: '^\s*executable: '
+    contains: 'executable:'
+    block: true
+```
+
+turns
+
+```text
+ executable: /path/to/bin/icon
+ revision: icon-2026.04-46-gfe40584-dirty
+ model components:
+   ICON-Land:
+     revision: icon-land-2026.04-4-g61aadeb
+```
+
+into `executable`, `revision` and `model components/ICON-Land/revision`.
+
 ### `series`: repeated events
 
 ```yaml
@@ -288,6 +316,8 @@ Names and column mappings used by the analysis. All entries are optional.
 | `coupling_timers` | timer labels that belong to the coupler rather than to computation |
 | `coupling_wait_timers` | the subset of those on which a component blocks until its partner delivers |
 | `timer_group_ranks` | pattern matching the first and last rank in the title of a timer table, which assigns each table to a component |
+| `build_block` | the `keyvalues` block that describes the executable; the run page shows it at the top and compares it with the previous run |
+| `build_ignore` | keys of that block that describe the run rather than the binary, such as its date or host; neither shown nor compared |
 | `counter_table`, `ratio_table` | network counter blocks |
 | `counter_columns` | map of `samples`, `min`, `mean`, `max` to column names |
 | `counter_watch` | counter names worth reporting |

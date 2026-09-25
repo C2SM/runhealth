@@ -31,6 +31,11 @@ The last column, **script diff**, states how many lines of the run script were
 added and removed relative to the previous run of the same kind, and opens the
 comparison itself. See [Comparing run scripts](#comparing-run-scripts).
 
+A run whose executable or build differs from that same previous run carries an
+**executable changed** marker next to its log name. Hovering over it lists the
+entries that differ, and clicking it opens the run's Executable panel (see
+below).
+
 ## The run page header
 
 Below the run's name and its job id, a row names the `machine:/path` the log
@@ -39,6 +44,18 @@ was read from, next to the items that can be opened from it. For a
 local copy in `.remote-cache/` that `runhealth` actually parsed, so it is the
 address to return to on the cluster; the button beside it copies the complete
 `machine:/path` for pasting into a terminal.
+
+Below that, the **Executable** panel lists what the model reported about the
+binary it was started from: for ICON, the startup banner with the path of the
+executable, its version, revision, repository and branch, and the same for
+each model component. The run script does not always name the binary, and a
+rebuilt or swapped one is a common reason for a run to behave differently. If
+the previous run of the same kind (see
+[Comparing run scripts](#comparing-run-scripts)) reported different values,
+the panel is highlighted, states how many entries differ, and shows the
+previous value under each of them. A revision ending in `-dirty` was built
+from a source tree with uncommitted changes, so two runs can share it and
+still use different code.
 
 **Run script** appears when the scheduler echoed the job script at the top of
 the log. It opens the script that was submitted, shell-highlighted and
