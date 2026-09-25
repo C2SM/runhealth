@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from pathlib import Path
 
 from runhealth import cli
@@ -133,6 +134,14 @@ def test_cache_is_reused(tmp_path):
     assert blob["version"] == cli.CACHE_VERSION
     assert blob["state"]["fields"]["job_id"] == "4242"
     cli.main(args)  # second pass must not raise on the cached state
+
+
+def test_editing_a_profile_invalidates_the_cache(profiles):
+    icon = profiles["icon"]
+    before = cli.profile_signature([icon])
+    edited = replace(icon, settings={**icon.settings, "build_ignore": []})
+    assert cli.profile_signature([edited]) != before
+    assert cli.profile_signature([icon]) == before
 
 
 def test_markdown_end_to_end(tmp_path):

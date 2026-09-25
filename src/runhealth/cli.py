@@ -30,7 +30,7 @@ from .health import assess
 from .logfile import format_duration
 from .report import RunView
 
-CACHE_VERSION = 4
+CACHE_VERSION = 5
 DEFAULT_GLOB = "LOG.*.o"
 LOG_GLOBS = [DEFAULT_GLOB, "slurm-*.out", "*.log", "*.out", "*.o[0-9]*"]
 SINCE_RE = re.compile(r"^(\d+(?:\.\d+)?)([smhdw])$")
@@ -235,7 +235,7 @@ def parse_cached(
             blob = {}
         same = (
             blob.get("version") == CACHE_VERSION
-            and blob.get("profiles") == [p.name for p in picked]
+            and blob.get("profiles") == profile_signature(picked)
             and blob.get("size", -1) <= stat.st_size
         )
         if same and blob.get("size") == stat.st_size and blob.get("mtime") == stat.st_mtime:
@@ -263,6 +263,19 @@ def parse_cached(
     return payload
 
 
+def profile_signature(picked) -> list[str]:
+    """Each profile's name and a digest of its rules, so editing one reparses."""
+    return [
+        f"{p.name}:"
+        + hashlib.sha1(
+            json.dumps(
+                vars(p), sort_keys=True, default=lambda o: getattr(o, "spec", str(o))
+            ).encode()
+        ).hexdigest()[:12]
+        for p in picked
+    ]
+
+
 def _store(cache: Path | None, picked, stat, offset: int, payload: dict, diag_sig: str) -> None:
     if not cache:
         return
@@ -271,7 +284,7 @@ def _store(cache: Path | None, picked, stat, offset: int, payload: dict, diag_si
         json.dumps(
             {
                 "version": CACHE_VERSION,
-                "profiles": [p.name for p in picked],
+                "profiles": profile_signature(picked),
                 "size": stat.st_size,
                 "mtime": stat.st_mtime,
                 "offset": offset,
