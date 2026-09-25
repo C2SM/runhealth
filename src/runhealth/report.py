@@ -589,20 +589,31 @@ details .body { padding-bottom: 16px; }
 .depth-3 { padding-left: 48px; } .depth-4 { padding-left: 64px; }
 
 /* -- the executable and its build, against the previous run -- */
-.build { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-  padding: 12px 16px 14px; margin: 0 0 24px; box-shadow: var(--shadow); }
+details.build { padding: 0 16px; margin: 0 0 24px; }
+details.build[open] { padding-bottom: 14px; }
 .build.changed { border-color: var(--warn); }
-.build-hd { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 9px; }
+details.build > summary.build-hd { justify-content: flex-start; align-items: center; gap: 8px;
+  flex-wrap: nowrap; padding: 12px 0; font-size: 15px; font-weight: 400; }
+details.build > summary .note { flex: 0 1 auto; min-width: 0; }
+details.build > summary > .ico, details.build > summary .t { flex: 0 0 auto; }
+details.build > summary.build-hd::after { margin-left: auto; }
 .build-hd .ico { color: var(--muted); }
 .build.changed .build-hd .ico { color: var(--warn); }
 .build-hd .t { font-weight: 650; }
 .build-hd .note { font-size: 13.5px; color: var(--warn); font-weight: 600; }
 .build-hd .note.same { color: var(--muted); font-weight: 400; }
-dl.build-kv { display: grid; grid-template-columns: minmax(110px, max-content) 1fr;
+dl.build-kv { display: grid; grid-template-columns: 190px 1fr;
   gap: 3px 18px; margin: 0; font-size: 14px; }
 dl.build-kv dt { color: var(--muted); }
 dl.build-kv dt.grp { grid-column: 1 / -1; margin-top: 6px; font-weight: 600; }
-dl.build-kv dt.sub { padding-left: 14px; }
+dl.build-kv dt.d1 { padding-left: 14px; } dl.build-kv dt.d2 { padding-left: 28px; }
+dl.build-kv dt.grp.d1 { margin-top: 3px; }
+.build details.build-more { background: none; border: 0; border-top: 1px solid var(--line);
+  border-radius: 0; box-shadow: none; padding: 0; margin: 10px 0 0; }
+.build details.build-more > summary { font-size: 14px; padding: 9px 0 3px; }
+.build details.build-more > summary .cnt { margin-left: auto; color: var(--muted);
+  font-weight: 400; }
+.build details.build-more > summary::after { margin-left: 10px; }
 dl.build-kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 dl.build-kv .chg { color: var(--warn); }
@@ -1982,20 +1993,17 @@ def build_changes(log: RunLog, before: RunLog | None) -> list[str]:
     return [k for k in list(now) + [k for k in old if k not in now] if old.get(k) != now.get(k)]
 
 
-def build_panel(log: RunLog, before: RunLog | None = None) -> str:
-    """The executable and its build, marked where the previous run differs."""
-    now = build_entries(log)
-    if not now:
-        return ""
-    old = build_entries(before) if before else {}
-    keys = list(now) + [k for k in old if k not in now]
-    changed = set(build_changes(log, before))
-    rows, group = [], ""
+def _build_rows(keys: list[str], now: dict, old: dict, changed: set[str]) -> str:
+    rows: list[str] = []
+    prev: list[str] = []
     for key in keys:
         *parents, leaf = key.split("/")
-        if " \u203a ".join(parents) != group:
-            group = " \u203a ".join(parents)
-            rows.append(f'<dt class="grp">{esc(group)}</dt>')
+        # A heading for each level of nesting this entry opens.
+        same = 0
+        while same < min(len(parents), len(prev)) and parents[same] == prev[same]:
+            same += 1
+        rows += [f'<dt class="grp d{d}">{esc(parents[d])}</dt>' for d in range(same, len(parents))]
+        prev = parents
         value = now.get(key)
         cell = (
             f'<span class="v">{esc(value)}</span>' if value else '<span class="gone">absent</span>'
@@ -2005,8 +2013,34 @@ def build_panel(log: RunLog, before: RunLog | None = None) -> str:
         if key in changed and old.get(key):
             cell += f'<span class="was">previous run: {esc(old[key])}</span>'
         chg = " chg" if key in changed else ""
-        nest = " sub" if parents else ""
-        rows.append(f'<dt class="{nest}{chg}">{esc(leaf)}</dt><dd class="{chg}">{cell}</dd>')
+        rows.append(
+            f'<dt class="d{len(parents)}{chg}">{esc(leaf)}</dt><dd class="{chg}">{cell}</dd>'
+        )
+    return f'<dl class="build-kv">{"".join(rows)}</dl>'
+
+
+def build_panel(log: RunLog, before: RunLog | None = None) -> str:
+    """The executable and its build, marked where the previous run differs.
+
+    The nested sections, components and libraries, are folded away unless
+    one of their entries changed, so the panel does not push the summary down.
+    """
+    now = build_entries(log)
+    if not now:
+        return ""
+    old = build_entries(before) if before else {}
+    keys = list(now) + [k for k in old if k not in now]
+    changed = set(build_changes(log, before))
+    top = [k for k in keys if "/" not in k]
+    nested = [k for k in keys if "/" in k]
+    body = _build_rows(top, now, old, changed) if top else ""
+    if nested:
+        is_open = " open" if changed & set(nested) else ""
+        body += (
+            f'<details class="build-more"{is_open}><summary><span>Components and libraries'
+            f'</span><span class="cnt">{len(nested)} entries</span></summary>'
+            f"{_build_rows(nested, now, old, changed)}</details>"
+        )
     if changed:
         n = len(changed)
         note = (
@@ -2017,10 +2051,11 @@ def build_panel(log: RunLog, before: RunLog | None = None) -> str:
         note = '<span class="note same">same as the previous run</span>'
     else:
         note = ""
+    # Open at first, but a long list of changes can be folded out of the way.
     return (
-        f'<section class="build{" changed" if changed else ""}" id="build">'
-        f'<div class="build-hd">{ICONS["binary"]}<span class="t">Executable</span>{note}</div>'
-        f'<dl class="build-kv">{"".join(rows)}</dl></section>'
+        f'<details class="build{" changed" if changed else ""}" id="build" open>'
+        f'<summary class="build-hd">{ICONS["binary"]}<span class="t">Executable</span>{note}'
+        f"</summary>{body}</details>"
     )
 
 

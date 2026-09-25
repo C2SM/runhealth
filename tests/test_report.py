@@ -469,12 +469,14 @@ def test_run_page_offers_the_diff_against_the_previous_run(parsed, assessed):
 def test_run_page_shows_the_executable_and_its_build(parsed, assessed):
     vs = views(parsed, assessed, ["icon_success", "icon_hang"])
     html = report.render_run(vs[1], siblings=vs)
-    assert '<section class="build" id="build">' in html
+    assert '<details class="build" id="build" open>' in html
     assert '<span class="v">/scratch/demo/build/bin/icon</span>' in html
-    assert '<dt class="grp">model components \u203a ICON-Land</dt>' in html
+    assert '<dt class="grp d0">model components</dt><dt class="grp d1">ICON-Land</dt>' in html
+    # Nothing changed, so the components stay folded away.
+    assert '<details class="build-more"><summary>' in html
     assert "same as the previous run" in html
     # Entries that describe the run rather than the binary are left out.
-    assert "Demo User" not in html.split('id="build"')[1].split("</section>")[0]
+    assert "Demo User" not in html.split('id="build"')[1].split("</dl></details>")[0]
 
 
 def test_run_page_marks_what_changed_in_the_build(parsed, assessed):
@@ -483,9 +485,10 @@ def test_run_page_marks_what_changed_in_the_build(parsed, assessed):
     build["model components/ICON-Land/revision"] = "icon-land-2026.04-9-g7654321-dirty"
     vs[1].log = replace(vs[1].log, keyvalues={**vs[1].log.keyvalues, "build": build})
     html = report.render_run(vs[1], siblings=vs)
-    assert '<section class="build changed" id="build">' in html
+    assert '<details class="build changed" id="build" open>' in html
     assert "1 entry differs from the previous run, icon_success.log" in html
     assert "previous run: icon-land-2026.04-1-g1234567" in html
+    assert '<details class="build-more" open>' in html
     # The first run of its kind has nothing to differ from.
     assert "previous run" not in report.render_run(vs[0], siblings=vs).split('id="build"')[1][:3000]
 

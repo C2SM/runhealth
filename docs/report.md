@@ -47,8 +47,9 @@ address to return to on the cluster; the button beside it copies the complete
 
 Below that, the **Executable** panel lists what the model reported about the
 binary it was started from: for ICON, the startup banner with the path of the
-executable, its version, revision, repository and branch, and the same for
-each model component. The run script does not always name the binary, and a
+executable, its version, revision, repository and branch. The model
+components, libraries and compilers the banner lists follow in a folded
+section, which opens by itself when one of them changed. The run script does not always name the binary, and a
 rebuilt or swapped one is a common reason for a run to behave differently. If
 the previous run of the same kind (see
 [Comparing run scripts](#comparing-run-scripts)) reported different values,
