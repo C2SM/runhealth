@@ -46,6 +46,39 @@ def test_query_runs_sacct_with_absolute_timestamps(tmp_path, monkeypatch):
     assert out["123"]["start"] is None  # the format string itself, not a date
 
 
+def test_query_on_a_host_runs_sacct_over_ssh(tmp_path, monkeypatch):
+    # Stands in for ssh: skips "-o BatchMode=yes host" and runs the command here.
+    (tmp_path / "ssh").write_text('#!/bin/sh\nshift 3\nexec sh -c "$1"\n')
+    (tmp_path / "sacct").write_text(
+        '#!/bin/sh\necho "7|7|CANCELLED by 0|0:0|00:10:00|01:00:00|1|nid1|$SLURM_TIME_FORMAT|x"\n'
+    )
+    for f in ("ssh", "sacct"):
+        (tmp_path / f).chmod(0o755)
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.delenv("SLURM_TIME_FORMAT", raising=False)
+    out = accounting.query(["7"], host="santis")
+    assert out["7"]["state"] == "CANCELLED by 0"  # a remote uid is not resolved locally
+
+
+def test_the_cli_asks_the_remote_host_about_synced_logs(tmp_path, monkeypatch):
+    from test_cli import FIXTURES, _fake_ssh
+
+    monkeypatch.setenv("RSYNC_RSH", str(_fake_ssh(tmp_path)))
+    monkeypatch.setattr(cli.shutil, "which", lambda n: None if n == "squeue" else "/bin/" + n)
+    asked = {}
+    monkeypatch.setattr(
+        accounting,
+        "query",
+        lambda ids, host=None: asked.setdefault(host, sorted(set(ids) - {""})) and {},
+    )
+    local = str(FIXTURES / "icon_success.log")
+    out = tmp_path / "report"
+    cli.main(
+        [f"fakehost:{FIXTURES}", local, "--glob", "icon_success.log", "--no-plots", "-o", str(out)]
+    )
+    assert asked == {"fakehost": ["4242"], None: ["4242"]}
+
+
 def test_a_log_without_verdict_takes_the_accounting_verdict():
     log = RunLog(first_wall=0.0, last_wall=600.0)
     a = health.assess(log, now=10**6, accounting=record("TIMEOUT"))
@@ -93,7 +126,9 @@ def test_the_cli_reads_accounting_unless_told_not_to(tmp_path, monkeypatch):
 
     asked = []
     monkeypatch.setattr(
-        accounting, "query", lambda ids: asked.append(sorted(ids)) or {"4242": record("FAILED")}
+        accounting,
+        "query",
+        lambda ids, host=None: asked.append(sorted(ids)) or {"4242": record("FAILED")},
     )
     base = [str(FIXTURES / "icon_success.log"), "--no-plots", "--no-squeue"]
     cli.main([*base, "-o", str(tmp_path / "a")])

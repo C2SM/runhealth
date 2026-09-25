@@ -78,7 +78,8 @@ def sync_remote(spec: str, pattern: str | None, staging: Path) -> Path | None:
     that transport. A remote directory is synced non-recursively, matching
     only the same filename patterns ``discover`` would use locally, so a
     directory of unrelated files does not get pulled down wholesale. A bare
-    remote file is copied as is.
+    remote file is copied as is. Diagnostics directories ``diag.*/`` beside the
+    logs are copied whole, since their files feed the checks.
     """
     if shutil.which("rsync") is None:
         log("runhealth: rsync is not on PATH, cannot read a remote path")
@@ -86,7 +87,8 @@ def sync_remote(spec: str, pattern: str | None, staging: Path) -> Path | None:
     local = staging / slug(spec)
     local.mkdir(parents=True, exist_ok=True)
     globs = [pattern] if pattern else LOG_GLOBS
-    filters = [f"--include={g}" for g in globs] + ["--exclude=*/", "--exclude=*"]
+    filters = ["--include=/diag.*/", "--include=/diag.*/**"]
+    filters += [f"--include={g}" for g in globs] + ["--exclude=*/", "--exclude=*"]
     command = ["rsync", "-rlptz", *filters, f"{spec}/", f"{local}/"]
     log(f"runhealth: syncing {spec}")
     try:
@@ -367,13 +369,18 @@ def build(
         named = (lambda f: bar.advance(f.name, n=0)) if bar.enabled else None
         logs = parse_all(files, names, profile_dirs, cache, jobs, follow, named)
 
-    records = {}
+    # Keyed by host (None for this machine), as job ids are only unique per cluster.
+    records: dict[str | None, dict[str, dict]] = {}
     if not (args.no_squeue or args.no_sacct):
-        # Only logs read on this machine: a synced job id belongs to another cluster.
-        ids = [str(rl.fields.get("job_id") or "") for rl in logs if not _is_synced(rl, remotes)]
-        records = accounting.query(ids)
-        if records:
-            log(f"runhealth: SLURM accounting knows {len(set(ids) & set(records))} of the job(s)")
+        ids: dict[str | None, list[str]] = {}
+        for rl in logs:
+            ids.setdefault(_host_of(rl, remotes), []).append(str(rl.fields.get("job_id") or ""))
+        for host, wanted in ids.items():
+            records[host] = accounting.query(wanted, host)
+            known = len(set(wanted) & set(records[host]))
+            if known:
+                where = f" on {host}" if host else ""
+                log(f"runhealth: SLURM accounting{where} knows {known} of the job(s)")
 
     views: list[RunView] = []
     step = progress.Progress("analyzing", len(logs), "analyzed {n} run(s) in {t}")
@@ -381,8 +388,12 @@ def build(
         if args.stall_seconds:
             rl.thresholds["stall_seconds"] = args.stall_seconds
         job_id = str(rl.fields.get("job_id") or "")
-        accounting.fill_times(rl, records.get(job_id))
-        a = assess(rl, slurm_state=states.get(job_id, ""), accounting=records.get(job_id))
+        host = _host_of(rl, remotes)
+        record = records.get(host, {}).get(job_id)
+        accounting.fill_times(rl, record)
+        # squeue only speaks for this machine.
+        state = "" if host else states.get(job_id, "")
+        a = assess(rl, slurm_state=state, accounting=record)
         v = RunView(log=rl, assessment=a, source=source_of(Path(rl.path), remotes))
         v.page = f"{slug(Path(rl.path).stem)}.html"
         if not args.no_plots:
@@ -397,8 +408,10 @@ def build(
     return views
 
 
-def _is_synced(rl: RunLog, remotes: list[tuple[str, Path]]) -> bool:
-    return any(Path(rl.path).resolve().is_relative_to(d.resolve()) for _, d in remotes)
+def _host_of(rl: RunLog, remotes: list[tuple[str, Path]]) -> str | None:
+    """The remote host a log was synced from, or None if it was read on this machine."""
+    path = Path(rl.path).resolve()
+    return next((s.partition(":")[0] for s, d in remotes if path.is_relative_to(d.resolve())), None)
 
 
 def write_report(args, views: list[RunView], outdir: Path, sources: list[str]) -> Path:

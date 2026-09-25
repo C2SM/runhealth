@@ -55,6 +55,23 @@ def test_sync_remote_pulls_matching_files_non_recursively(tmp_path, monkeypatch)
     assert sorted(p.name for p in local.iterdir()) == ["LOG.demo.1.o"]
 
 
+def test_sync_remote_also_pulls_diagnostics_directories(tmp_path, monkeypatch):
+    monkeypatch.setenv("RSYNC_RSH", str(_fake_ssh(tmp_path)))
+    remote = tmp_path / "remote"
+    (remote / "diag.demo.1" / "gpu").mkdir(parents=True)
+    (remote / "diag.demo.1" / "gpu" / "nid1.csv").write_text("timestamp\n")
+    (remote / "diag.demo.1" / "nid1").mkdir()
+    (remote / "diag.demo.1" / "nid1" / "dmesg.txt").write_text("ok\n")
+    (remote / "other" / "diag.nested.1").mkdir(parents=True)
+
+    local = cli.sync_remote(f"fakehost:{remote}", None, tmp_path / "staging")
+
+    assert local is not None
+    assert (local / "diag.demo.1" / "gpu" / "nid1.csv").is_file()
+    assert (local / "diag.demo.1" / "nid1" / "dmesg.txt").is_file()
+    assert not (local / "other").exists()
+
+
 def test_logs_of_the_same_name_do_not_share_a_cache_entry(tmp_path):
     for d, text in (("a", "first\n"), ("b", "second\n")):
         (tmp_path / d).mkdir()

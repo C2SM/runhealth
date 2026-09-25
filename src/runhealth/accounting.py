@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import pwd
+import shlex
 import shutil
 import subprocess
 from collections.abc import Iterable
@@ -65,10 +66,11 @@ def _user(uid: str) -> str:
         return uid
 
 
-def parse(text: str) -> dict[str, dict]:
+def parse(text: str, users: bool = True) -> dict[str, dict]:
     """Records keyed by job id, from ``sacct -P -n`` output in the order of ``FIELDS``.
 
-    A requeued job appears once per run; the last row is the current one.
+    A requeued job appears once per run; the last row is the current one. With
+    ``users`` off, a canceling uid is kept as is, since it belongs to another machine.
     """
     out: dict[str, dict] = {}
     for line in text.splitlines():
@@ -78,7 +80,7 @@ def parse(text: str) -> dict[str, dict]:
         row = dict(zip(FIELDS, parts))
         state = row["State"].strip()
         words = state.split()
-        if len(words) == 3 and words[1] == "by":
+        if users and len(words) == 3 and words[1] == "by":
             state = f"{words[0]} by {_user(words[2])}"
         rec = {
             "state": state,
@@ -95,13 +97,17 @@ def parse(text: str) -> dict[str, dict]:
     return out
 
 
-def query(job_ids: Iterable[str], timeout: float = 30) -> dict[str, dict]:
-    """Accounting records for ``job_ids``, or empty if ``sacct`` is unavailable."""
+def query(job_ids: Iterable[str], host: str | None = None, timeout: float = 30) -> dict[str, dict]:
+    """Accounting records for ``job_ids``, or empty if ``sacct`` is unavailable.
+
+    With ``host``, ``sacct`` runs there over ``ssh``, which must work without a prompt.
+    """
     ids = sorted({j for j in job_ids if j})
-    if not ids or shutil.which("sacct") is None:
+    if not ids or shutil.which("ssh" if host else "sacct") is None:
         return {}
     # Absolute timestamps, whatever the user's own SLURM_TIME_FORMAT says.
-    env = dict(os.environ, SLURM_TIME_FORMAT="%Y-%m-%dT%H:%M:%S")
+    stamp = "SLURM_TIME_FORMAT=%Y-%m-%dT%H:%M:%S"
+    env = dict(os.environ, SLURM_TIME_FORMAT=stamp.partition("=")[2])
     out: dict[str, dict] = {}
     for i in range(0, len(ids), BATCH):
         command = [
@@ -113,13 +119,15 @@ def query(job_ids: Iterable[str], timeout: float = 30) -> dict[str, dict]:
             ",".join(ids[i : i + BATCH]),
             f"--format={','.join(FIELDS)}",
         ]
+        if host:
+            command = ["ssh", "-o", "BatchMode=yes", host, shlex.join(["env", stamp, *command])]
         try:
             r = subprocess.run(command, capture_output=True, text=True, timeout=timeout, env=env)
         except (OSError, subprocess.SubprocessError):
             return out
         if r.returncode != 0:
             return out
-        out.update(parse(r.stdout))
+        out.update(parse(r.stdout, users=not host))
     return out
 
 
