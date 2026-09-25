@@ -241,6 +241,7 @@ def test_pages_carry_a_sticky_nav_and_a_table_of_contents(tmp_path, parsed, asse
     html = report.render_run(view)
     assert '<header class="nav"' in html
     assert "position: sticky" in html
+    assert f'href="{report.DOCS_URL}"' in html and f'href="{report.REPO_URL}"' in html
     assert '<nav id="toc">' in html
     assert 'href="#checks"' in html and 'href="#figures"' in html
     assert 'href="#fig-timeline"' in html  # figures are listed individually

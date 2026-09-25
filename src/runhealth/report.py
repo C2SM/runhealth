@@ -105,6 +105,14 @@ ICONS = {
     "check": _ICON.format('<path d="M20 6 9 17l-5-5"/>'),
     "diff": _ICON.format('<path d="M12 3v14M5 10h14M5 21h14"/>'),
     "search": _ICON.format('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>'),
+    "docs": _ICON.format(
+        '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>'
+    ),
+    "github": _ICON.format(
+        '<path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 '
+        "0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.4 5.4 0 0 0 "
+        '4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4M9 18c-4.51 2-5-2-7-2"/>'
+    ),
 }
 THEME_LABEL = {
     "system": "Follow the system theme",
@@ -137,6 +145,22 @@ def path_chip(spec: str) -> str:
         f'<span class="src-path" title="{esc(spec)}">{ICONS["host"]}'
         f'{named}<span class="p">{esc(path)}</span>{_copy_button(path)}</span>'
     )
+
+
+REPO_URL = "https://github.com/C2SM/runhealth"
+DOCS_URL = "https://c2sm.github.io/runhealth/"
+
+
+def project_links() -> str:
+    links = "".join(
+        f'<a href="{url}" target="_blank" rel="noopener" title="{label}" aria-label="{label}">'
+        f"{ICONS[icon]}</a>"
+        for icon, url, label in (
+            ("docs", DOCS_URL, "Documentation"),
+            ("github", REPO_URL, "Source code on GitHub"),
+        )
+    )
+    return f'<div class="links">{links}</div>'
 
 
 def theme_switch() -> str:
@@ -273,6 +297,10 @@ a:hover { border-bottom-color: currentColor; }
 .theme button[aria-pressed="true"] { background: var(--panel); color: var(--ink);
   box-shadow: var(--shadow); }
 .ico { width: 15px; height: 15px; }
+.links { display: inline-flex; gap: 2px; flex: 0 0 auto; }
+.links a { display: grid; place-items: center; width: 30px; height: 30px; border: none;
+  border-radius: 8px; color: var(--muted); }
+.links a:hover { color: var(--ink); background: var(--panel-2); }
 
 /* -- global search over every run in the report -- */
 .search { position: relative; flex: 0 1 300px; min-width: 140px; height: 32px;
@@ -1699,7 +1727,7 @@ def _nav(
         f'<span class="ver">v{esc(__version__)}</span>'
         f"{trail}{badge}"
         '<div class="spacer"></div>'
-        f"{search_box()}{theme_switch()}"
+        f"{search_box()}{project_links()}{theme_switch()}"
         "</div></header>"
     )
 

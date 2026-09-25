@@ -222,4 +222,5 @@ returns to the top of the page. On a narrow screen it becomes a row of chips
 below the header and scrolls to keep the current section in view.
 
 The header also carries the field that
-[searches the whole report](#searching-the-report).
+[searches the whole report](#searching-the-report), and links to this
+documentation and to the source code on GitHub.
