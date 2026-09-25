@@ -4,7 +4,12 @@
 
 One row per run, sortable by any column and filterable by health grade, with
 wall clock, throughput and longest silence side by side. This makes it easy to
-identify the point at which a series of runs began to degrade. Above the table,
+identify the point at which a series of runs began to degrade. When the report
+holds runs of more than one name, the table groups them by name as the run
+switcher does, the newest run first within each group. A group's heading shows
+how many runs it holds and one dot per run with its status and grade, and a
+click on the name folds the group away. Sorting and filtering apply within each
+group, and a group with no run left after filtering is hidden. Above the table,
 every directory the report was built from is listed as `machine:/path`,
 with the machine set apart from the path and a button that copies the complete
 string.

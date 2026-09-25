@@ -410,6 +410,33 @@ def test_run_menu_groups_runs_of_one_kind(parsed, assessed):
     assert "LOG." not in menu and ">jcp_r2b10<" in menu
 
 
+def test_index_groups_runs_of_one_kind(parsed, assessed):
+    vs = copy.deepcopy(views(parsed, assessed, ["icon_success", "icon_hang", "slurm_generic"]))
+    names = ["LOG.jcp_r2b8.900001.o", "LOG.jcp_r2b10.900002.o", "LOG.jcp_r2b10.900003.o"]
+    for v, name, wall in zip(vs, names, (3.0, 1.0, 2.0)):
+        v.log.path, v.log.first_wall = f"/runs/{name}", wall
+        v.log.fields.pop("job_name", None)
+    html = report.render_index(vs, ["/tmp"], None, "Test")
+    assert html.count('<tbody class="grp"') == 2
+    # Groups by name as in the switcher, the newest run first within each.
+    at = [
+        html.index(x)
+        for x in (
+            'data-kind="jcp_r2b10"',
+            f'href="{vs[2].page}"',
+            f'href="{vs[1].page}"',
+            'data-kind="jcp_r2b8"',
+        )
+    ]
+    assert at == sorted(at)
+    assert '<span class="cnt">2 runs</span>' in html and '<span class="cnt">1 run</span>' in html
+
+
+def test_index_of_a_single_kind_is_not_grouped(parsed, assessed):
+    html = report.render_index(views(parsed, assessed, ["icon_hang"]), ["/tmp"], None, "Test")
+    assert "grp-hd" not in html.split("</style>")[1].split("<script>")[0]
+
+
 def changed_scripts(parsed, assessed):
     """Two runs of the same experiment whose run scripts differ."""
     vs = views(parsed, assessed, ["icon_success", "icon_hang"])

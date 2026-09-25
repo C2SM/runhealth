@@ -255,16 +255,12 @@ a:hover { border-bottom-color: currentColor; }
 .nav .jump .meta { color: var(--muted); font-size: 12.5px; font-weight: 400; }
 /* The dot is split along the diagonal: the run's status on one side, its
    health grade on the other, in the order the header badges name them. */
-.nav .jump .dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto;
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto;
   background: linear-gradient(135deg, var(--d-status) 0 50%, var(--d-grade) 50% 100%); }
-.nav .jump .dot.s-ok { --d-status: var(--ok); }
-.nav .jump .dot.s-info { --d-status: var(--info); }
-.nav .jump .dot.s-warn { --d-status: var(--warn); }
-.nav .jump .dot.s-fail { --d-status: var(--fail); }
-.nav .jump .dot.g-ok { --d-grade: var(--ok); }
-.nav .jump .dot.g-info { --d-grade: var(--info); }
-.nav .jump .dot.g-warn { --d-grade: var(--warn); }
-.nav .jump .dot.g-fail { --d-grade: var(--fail); }
+.dot.s-ok { --d-status: var(--ok); } .dot.s-info { --d-status: var(--info); }
+.dot.s-warn { --d-status: var(--warn); } .dot.s-fail { --d-status: var(--fail); }
+.dot.g-ok { --d-grade: var(--ok); } .dot.g-info { --d-grade: var(--info); }
+.dot.g-warn { --d-grade: var(--warn); } .dot.g-fail { --d-grade: var(--fail); }
 .nav .jump .all { justify-content: center; margin-top: 4px; padding-top: 9px;
   border-top: 1px solid var(--line); border-radius: 0 0 8px 8px;
   color: var(--muted); font-size: 13px; }
@@ -525,6 +521,22 @@ table.runs td.n { font-size: 13px; }
 table.runs .badge { gap: 4px; padding: 2px 9px 2px 4px; font-size: 12.5px; }
 table.runs .badge .mark { min-width: 17px; height: 17px; font-size: 11px; }
 td.stamp .clock { display: block; color: var(--muted); }
+table.runs td > a { overflow-wrap: anywhere; }
+/* Runs of one name share a body headed by the name, as in the switcher; the
+   heading folds its runs away, and the dots give each one's outcome, newest first. */
+tr.grp-hd th { padding: 0; background: var(--panel-2); border-bottom: 1px solid var(--line);
+  text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--ink); }
+tbody.grp + tbody.grp tr.grp-hd th { border-top: 1px solid var(--line-2); }
+tr.grp-hd th > * { vertical-align: middle; }
+.grp-tg { display: inline-flex; align-items: center; gap: 9px; padding: 8px 10px;
+  background: none; border: none; color: inherit; font: inherit; font-weight: 650;
+  cursor: pointer; }
+.grp-tg .chev::before { content: "\\25be"; display: inline-block; width: 10px;
+  color: var(--muted); font-size: 12px; }
+.grp-tg[aria-expanded="false"] .chev::before { content: "\\25b8"; }
+.grp-tg .cnt { color: var(--muted); font-size: 12.5px; font-weight: 500; }
+tr.grp-hd .dots { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+tbody.shut tr:not(.grp-hd) { display: none; }
 
 details { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   padding: 0 16px; margin-bottom: 9px; box-shadow: var(--shadow); }
@@ -649,6 +661,7 @@ table.diff tr.hunk:first-child td { border-top: 0; }
   .nav, .toc, .filters, .skip, figure.fig .zoomed, .chart .tip, dialog,
   .src-btn, .copy { display: none !important; }
   .difflink { border: none; background: none; padding: 0; }
+  tbody.shut tr:not(.grp-hd) { display: table-row; } .grp-tg .chev { display: none; }
   .src-path { box-shadow: none; }
   .shell { display: block; max-width: none; padding: 0; }
   main { padding-top: 0; }
@@ -1205,27 +1218,43 @@ JS = r"""
         document.querySelectorAll(target).forEach(function (el) {
           el.hidden = want !== 'all' && el.dataset.grade !== want;
         });
+        // A group whose runs are all filtered out loses its heading too.
+        document.querySelectorAll('tbody.grp').forEach(function (g) {
+          g.hidden = !g.querySelector('tr[data-grade]:not([hidden])');
+        });
       });
     });
   });
   document.querySelectorAll('th.sortable').forEach(function (th) {
     th.addEventListener('click', function () {
       var table = th.closest('table');
-      var tb = table.tBodies[0];
       var idx = Array.prototype.indexOf.call(th.parentNode.children, th);
       var dir = th.dataset.dir === 'asc' ? -1 : 1;
       table.querySelectorAll('th.sortable').forEach(function (o) {
         if (o !== th) o.removeAttribute('data-dir');
       });
       th.dataset.dir = dir === 1 ? 'asc' : 'desc';
-      var rows = Array.prototype.slice.call(tb.rows);
-      rows.sort(function (a, b) {
-        var x = a.cells[idx].dataset.v, y = b.cells[idx].dataset.v;
-        var nx = parseFloat(x), ny = parseFloat(y);
-        if (!isNaN(nx) && !isNaN(ny)) return (nx - ny) * dir;
-        return String(x).localeCompare(String(y)) * dir;
+      // Each group sorts on its own, so the runs of one name stay together.
+      Array.prototype.forEach.call(table.tBodies, function (tb) {
+        var rows = Array.prototype.filter.call(tb.rows, function (r) {
+          return !r.classList.contains('grp-hd');
+        });
+        rows.sort(function (a, b) {
+          var x = a.cells[idx].dataset.v, y = b.cells[idx].dataset.v;
+          var nx = parseFloat(x), ny = parseFloat(y);
+          if (!isNaN(nx) && !isNaN(ny)) return (nx - ny) * dir;
+          return String(x).localeCompare(String(y)) * dir;
+        });
+        rows.forEach(function (r) { tb.appendChild(r); });
       });
-      rows.forEach(function (r) { tb.appendChild(r); });
+    });
+  });
+
+  document.querySelectorAll('.grp-tg').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var open = b.getAttribute('aria-expanded') !== 'true';
+      b.setAttribute('aria-expanded', open ? 'true' : 'false');
+      b.closest('tbody').classList.toggle('shut', !open);
     });
   });
 
@@ -1623,9 +1652,7 @@ def _run_label(log: RunLog) -> tuple[str, str]:
     """The run's name and the job and start date that tell two runs apart."""
     started = format_stamp(log.first_wall)[:10]
     job_id = log.fields.get("job_id")
-    return run_kind(log), " \u00b7 ".join(
-        x for x in (job_id, started) if x
-    )
+    return run_kind(log), " \u00b7 ".join(x for x in (job_id, started) if x)
 
 
 def _run_menu(views: list[RunView], current: str, index_href: str) -> str:
@@ -1641,9 +1668,7 @@ def _run_menu(views: list[RunView], current: str, index_href: str) -> str:
         meta_html = f'<span class="meta">{esc(meta)}</span>' if meta else ""
         items.append(
             f'<a class="item{" cur" if here else ""}" href="{esc(v.page)}"{here}>'
-            f'<span class="dot s-{STATUS_LEVEL.get(v.assessment.status, "info")} '
-            f'g-{esc(v.assessment.grade)}" aria-hidden="true"></span>'
-            f'<span class="txt"><span class="nm">{esc(name)}</span>{meta_html}</span></a>'
+            f'{_run_dot(v)}<span class="txt"><span class="nm">{esc(name)}</span>{meta_html}</span></a>'
         )
     return (
         f'<div class="menu">{"".join(items)}'
@@ -2082,6 +2107,52 @@ def _footer() -> str:
     )
 
 
+def _newest_first(views: list[RunView]) -> list[RunView]:
+    return sorted(views, key=lambda v: v.log.first_wall or 0, reverse=True)
+
+
+def _run_dot(v: RunView, title: str = "") -> str:
+    """A dot split into the run's status and its health grade."""
+    tip = f' title="{esc(title)}"' if title else ' aria-hidden="true"'
+    return (
+        f'<span class="dot s-{STATUS_LEVEL.get(v.assessment.status, "info")} '
+        f'g-{esc(v.assessment.grade)}"{tip}></span>'
+    )
+
+
+def _index_groups(views: list[RunView], rows: list[str]) -> str:
+    """The index rows, one collapsible body per run name as in the switcher.
+
+    A report of a single kind gains nothing from a heading, so it stays flat.
+    """
+    groups: dict[str, list[tuple[RunView, str]]] = {}
+    for v, row in zip(views, rows):
+        groups.setdefault(run_kind(v.log), []).append((v, row))
+    if len(groups) < 2:
+        return f"<tbody>{''.join(rows)}</tbody>"
+    out = []
+    for kind in sorted(groups):
+        members = groups[kind]
+        dots = "".join(
+            _run_dot(
+                v,
+                f"{v.assessment.status.title()}, {GRADE_TEXT[v.assessment.grade]}: "
+                + (_run_label(v.log)[1] or v.page),
+            )
+            for v, _ in members
+        )
+        count = f"{len(members)} run{'s' if len(members) > 1 else ''}"
+        out.append(
+            f'<tbody class="grp" data-kind="{esc(kind)}"><tr class="grp-hd">'
+            f'<th colspan="11" scope="rowgroup"><button type="button" class="grp-tg" '
+            f'aria-expanded="true"><span class="chev" aria-hidden="true"></span>'
+            f'<span class="nm">{esc(kind)}</span><span class="cnt">{count}</span></button>'
+            f'<span class="dots">{dots}</span></th></tr>'
+            f"{''.join(row for _, row in members)}</tbody>"
+        )
+    return "".join(out)
+
+
 def render_index(
     views: list[RunView], sources: list[str], overview: Figure | None, title: str
 ) -> str:
@@ -2105,7 +2176,7 @@ def render_index(
     before = previous_runs(views)
     templates = []
     rows = []
-    for v in sorted(views, key=lambda v: v.log.first_wall or 0, reverse=True):
+    for v in _newest_first(views):
         log, a = v.log, v.assessment
         s = a.stats
         base = before.get(v.page)
@@ -2127,8 +2198,8 @@ def render_index(
             f'<td data-v="{esc(a.status)}">'
             f'{_badge(STATUS_LEVEL.get(a.status, "info"), a.status.title())}</td>'
             f'<td data-v="{esc(a.grade)}">{_badge(a.grade)}</td>'
-            f'<td data-v="{esc(log.name)}"><a href="{esc(v.page)}">'
-            f'{esc(log.fields.get("job_name") or log.name)}</a>'
+            f'<td data-v="{esc(Path(log.path).name)}"><a href="{esc(v.page)}">'
+            f"{esc(Path(log.path).name or log.name)}</a>"
             + (
                 f'<br><span style="color:var(--muted);font-size:13px">{esc(outcome[:70])}</span>'
                 if outcome
@@ -2169,13 +2240,13 @@ def render_index(
         filters,
         '<div class="scroll"><table class="runs"><thead><tr>'
         '<th class="sortable">status</th><th class="sortable">health</th>'
-        '<th class="sortable">run</th>'
+        '<th class="sortable">log</th>'
         '<th class="sortable">job</th><th class="sortable">started</th>'
         '<th class="sortable">wall</th><th class="sortable">nodes</th>'
         '<th class="sortable">time steps</th><th class="sortable">rate</th>'
         '<th class="sortable">longest silence</th>'
         '<th class="sortable">script diff</th>'
-        f"</tr></thead><tbody>{''.join(rows)}</tbody></table></div>",
+        f"</tr></thead>{_index_groups(_newest_first(views), rows)}</table></div>",
         _footer(),
     ]
     if templates:
