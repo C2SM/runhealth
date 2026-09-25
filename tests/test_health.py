@@ -54,6 +54,28 @@ def test_throughput_and_rate(assessed):
     assert a.stats["sypd"] == pytest.approx(0.137, abs=0.01)
 
 
+def test_simulated_time_is_counted_from_one_step_before_the_first_report(parsed, assessed):
+    # Step 1 is reported at 00:00:20, one 20 s step after the job's start.
+    clock = health.model_clock(parsed["icon_success"])
+    assert clock.per_step == pytest.approx(20.0)
+    assert clock.start == datetime(2020, 1, 1)
+    assert clock.at_step(100) == pytest.approx(2000.0)
+    assert assessed["icon_success"].stats["sim_seconds"] == pytest.approx(2000.0)
+
+
+def test_simulated_time_is_interpolated_between_reports(parsed):
+    clock = health.model_clock(parsed["icon_success"])
+    (w0, s0), (w1, s1) = clock.points[:2]
+    assert clock.at_wall(w0 - 1) is None
+    assert clock.at_wall((w0 + w1) / 2) == pytest.approx((s0 + s1) / 2)
+    assert clock.at_wall(clock.points[-1][0] + 60) == clock.points[-1][1]
+
+
+def test_a_log_without_model_time_has_no_simulated_time(parsed, assessed):
+    assert health.model_clock(parsed["slurm_generic"]) is None
+    assert "sim_seconds" not in assessed["slurm_generic"].stats
+
+
 def test_imbalance_never_fails_a_run_on_its_own(assessed):
     check = assessed["icon_success"].check("imbalance")
     assert check is not None

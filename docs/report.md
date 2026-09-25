@@ -39,6 +39,13 @@ address to return to on the cluster; the button beside it copies the complete
 the log. It opens the script that was submitted, shell-highlighted and
 numbered, with `#SBATCH` directives picked out, and **download** saves it as a
 `.sh` file.
+The tiles below the header summarize the run. When the progress reports carry
+the model date, the **simulated** tile gives the model time this job covered,
+in its two largest units (`4d 12h`, `2y 45d`, with a year of 365.25 days as in
+SYPD); hovering over it shows the model dates it ran from and to. For a
+restarted run this is the stretch of the current job, not the whole
+experiment.
+
 **Script diff** appears when an earlier run of the same kind is part of the
 same report. **Raw log** appears when the report was built with
 `--embed-logs`.
@@ -108,7 +115,7 @@ remaining checks.
 | **Hang watchdog** | Whether the job script's own watchdog (see [Improving log quality](logging.md#3-leave-diagnostics-next-to-the-log)) fired, and when it sent SIGABRT and cancelled the step. |
 | **Silence** | The longest stretch with no output. Silence *inside* the main loop, or in a run that never reached its loop, is a failure. Silence during setup is judged against a longer threshold, because reading input and compiling kernels legitimately take minutes. When the job script declares a watchdog, the silence it tolerates before the main loop is the limit until the loop starts, which also keeps a job that is still compiling from being reported as STALLED. |
 | **Wall time** | How much of the requested limit was used, and whether the scheduler cut the job off. |
-| **Throughput** | Progress reached and the rate, in the unit the profile names (SYPD and SDPD for a climate model), both overall and after warm-up. The first progress interval carries one-off costs such as kernel compilation and is left out of the steady-state rate and the outlier count. |
+| **Throughput** | Progress reached and the rate, in the unit the profile names (SYPD and SDPD for a climate model), both overall and after warm-up, and the simulated time the job covered with its model dates. The first progress interval carries one-off costs such as kernel compilation and is left out of the steady-state rate and the outlier count. |
 | **Throughput drift** | Whether the run slowed between its first and last quarter, which points at something degrading rather than a single bad moment. |
 | **Slow intervals** | Individual progress intervals after warm-up far above the median: output, checkpointing, or a transient stall. |
 | **Where the time went** | The largest timers, as a share of the total. |
@@ -134,6 +141,11 @@ threshold a check compares against is
 **Progress rate**, the wall time between successive progress reports. A flat
 curve is healthy. The regular small spikes here are hourly output; the tall one
 is a network stall that output alone does not explain.
+When the progress reports carry the model date, a second row under each tick
+gives the simulated time reached at that step, counted from the start of the
+job, and it follows the axis when zoomed. The job is taken to start one step
+before its first report, so a model that reports only every few steps is
+counted from its first report.
 
 ```{image} images/progress.svg
 :alt: Progress rate over the run, flat apart from regular output spikes and one tall stall
@@ -183,6 +195,10 @@ interactive without anything being downloaded:
 - **Hovering over one time-based chart marks the same instant in the others**,
   which is how a burst of network messages is aligned with a slow section of
   the progress rate.
+- **Tooltips on the time-based charts name the model time** at that instant and
+  the simulated time reached by then, interpolated between progress reports on
+  the charts drawn against the wall clock. A phase of the timeline states how
+  much simulated time it covered.
 - **Click a legend entry** to hide that message family.
 - **Click a silence** to open the log at the line where the run went quiet,
   provided the report was built with `--embed-logs`.

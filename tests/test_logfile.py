@@ -5,6 +5,7 @@ import pytest
 from runhealth.logfile import (
     Line,
     format_duration,
+    format_sim_span,
     iter_lines,
     parse_stamp,
     parse_walltime,
@@ -103,3 +104,12 @@ def test_iter_lines_resumes_from_an_offset():
     half = everything[len(everything) // 2]
     rest = list(iter_lines(path, half.offset))
     assert rest[0].text == half.text
+
+
+@pytest.mark.parametrize(
+    "seconds,want",
+    [(0, "0"), (36, "36s"), (43_260, "12h 1m"), (388_800, "4d 12h"), (345_600, "4d")]
+    + [(2 * 31_557_600 + 45 * 86_400, "2y 45d"), (None, "")],
+)
+def test_format_sim_span_keeps_the_two_largest_units(seconds, want):
+    assert format_sim_span(seconds) == want

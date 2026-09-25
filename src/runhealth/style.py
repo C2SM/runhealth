@@ -94,6 +94,7 @@ CHART_CSS = """
 .rh-svg .grid { stroke: var(--grid); stroke-width: 1; }
 .rh-svg .ax-line { stroke: var(--axis); stroke-width: 1; }
 .rh-svg .tick { fill: var(--tick); font-size: 10.5px; font-weight: 500; }
+.rh-svg .tick.sub { fill: var(--muted); font-size: 9.5px; }
 .rh-svg .ax-label { fill: var(--ink); font-size: 11px; font-weight: 700;
   letter-spacing: .01em; }
 .rh-svg .panel-title { fill: var(--ink); font-size: 12.5px; font-weight: 700; }
@@ -178,6 +179,7 @@ _PLAIN: dict[str, dict[str, str]] = {
     "io-tick": {"stroke": LIGHT["muted"], "fill": "none"},
     "cross": {"stroke": LIGHT["ink"], "fill": "none"},
     "tick": {"fill": LIGHT["tick"], "font-size": "10.5px", "font-weight": "500"},
+    "sub": {"fill": LIGHT["muted"], "font-size": "9.5px"},
     "val": {"fill": LIGHT["ink"], "font-size": "10.5px", "font-weight": "600"},
     "row-label": {"fill": LIGHT["tick"], "font-size": "10.5px", "font-weight": "600"},
     "ref-label": {"fill": LIGHT["tick"], "font-size": "10.5px", "font-weight": "600"},
@@ -246,6 +248,7 @@ def print_overrides() -> str:
     rules.append(f".rh-svg .grid {{ stroke: {LIGHT['grid']}; }}")
     rules.append(f".rh-svg .ax-line {{ stroke: {LIGHT['axis']}; }}")
     rules.append(f".rh-svg .tick, .rh-svg .row-label {{ fill: {LIGHT['tick']}; }}")
+    rules.append(f".rh-svg .tick.sub {{ fill: {LIGHT['muted']}; }}")
     rules.append(f".rh-svg .val, .rh-svg .ax-label {{ fill: {LIGHT['ink']}; }}")
     rules.append(f".rh-svg .whisker {{ stroke: {LIGHT['whisker']}; }}")
     return "\n".join(rules)

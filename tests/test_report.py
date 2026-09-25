@@ -71,6 +71,36 @@ def test_figures_are_drawn_for_a_rich_log(tmp_path, parsed, assessed):
         assert not f.href  # nothing on disk unless a standalone file is asked for
 
 
+def test_progress_axis_carries_the_simulated_time_under_each_step(parsed, assessed):
+    figs = {
+        f.key: f
+        for f in plots.render_run(parsed["icon_success"], assessed["icon_success"], Path("."), "s")
+    }
+    progress = figs["progress"].svg
+    # The script relabels this row on zoom from the seconds per step and the first step.
+    assert 'data-sim="20,1"' in progress
+    assert re.search(r'class="tick sub"[^>]*>\d+m</text>', progress)
+    assert "time steps \u00b7 simulated time" in progress
+    assert "model time 2020-01-01 00:" in progress
+
+
+def test_wall_clock_tooltips_name_the_model_time(parsed, assessed):
+    figs = {
+        f.key: f
+        for f in plots.render_run(parsed["icon_success"], assessed["icon_success"], Path("."), "s")
+    }
+    assert "33m 20s simulated" in figs["timeline"].svg
+    gaps = figs["gaps"].svg
+    assert "model time 2020-01-01" in gaps and "before the first progress report" in gaps
+
+
+def test_the_summary_shows_the_simulated_time(parsed, assessed):
+    html = report.run_tiles(parsed["icon_success"], assessed["icon_success"])
+    assert '<div class="v">33m 20s</div><div class="l">simulated</div>' in html
+    assert 'title="model time 2020-01-01 00:00 to 2020-01-01 00:33"' in html
+    assert "simulated" not in report.run_tiles(parsed["slurm_generic"], assessed["slurm_generic"])
+
+
 def test_standalone_files_are_written_for_markdown(tmp_path, parsed, assessed):
     figs = plots.render_run(
         parsed["icon_success"], assessed["icon_success"], tmp_path, "demo", standalone=True
@@ -192,9 +222,7 @@ def test_index_figure_bar_carries_status_and_health(tmp_path, parsed, assessed):
     assert "lv-ok fill mark" in svg and "lv-warn fill mark" in svg
     # icon_hang agrees with itself, so one color is enough there: one bar per
     # panel, against two halves per panel for the run whose verdicts differ.
-    assert svg.count('data-href="icon_success.html"') == 2 * svg.count(
-        'data-href="icon_hang.html"'
-    )
+    assert svg.count('data-href="icon_success.html"') == 2 * svg.count('data-href="icon_hang.html"')
 
 
 def test_theme_switch_offers_three_labelled_icons(parsed, assessed):

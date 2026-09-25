@@ -105,6 +105,27 @@ def format_duration(seconds: float | None) -> str:
     return f"{s}s"
 
 
+SIM_UNITS = (("y", 31_557_600), ("d", 86_400), ("h", 3_600), ("m", 60), ("s", 1))
+
+
+def format_sim_span(seconds: float | None) -> str:
+    """Simulated time in its two largest units: ``2y 45d``, ``4d 12h``, ``36s``.
+
+    A year is 365.25 days, as in SYPD. The report script mirrors this in ``fmtSim``.
+    """
+    if seconds is None:
+        return ""
+    left = int(round(seconds))
+    parts = []
+    for unit, size in SIM_UNITS:
+        if left >= size or parts:
+            n, left = divmod(left, size)
+            parts.append((n, unit))
+        if len(parts) == 2:
+            break
+    return " ".join(f"{n}{unit}" for n, unit in parts if n) or "0"
+
+
 @dataclass(slots=True)
 class Line:
     """One decoded log line."""

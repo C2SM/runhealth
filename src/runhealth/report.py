@@ -25,7 +25,7 @@ from .diff import Diff, compare, run_kind
 from .extract import RunLog
 from .health import DAYS_PER_YEAR, STATUS_LEVEL, Assessment, Check, counter_rows
 from .highlight import bash_html
-from .logfile import format_duration, format_stamp
+from .logfile import format_duration, format_sim_span, format_stamp
 from .plots import Figure
 
 GRADE_MARK = {"ok": "OK", "info": "i", "warn": "!", "fail": "X"}
@@ -1275,6 +1275,19 @@ JS = r"""
       });
     };
   }
+  function fmtSim(v) {
+    // Mirrors format_sim_span: the two largest units of simulated time.
+    var units = [['y', 31557600], ['d', 86400], ['h', 3600], ['m', 60], ['s', 1]];
+    var left = Math.round(v), parts = [];
+    for (var i = 0; i < units.length && parts.length < 2; i++) {
+      if (left >= units[i][1] || parts.length) {
+        var n = Math.floor(left / units[i][1]);
+        left -= n * units[i][1];
+        parts.push(n ? n + units[i][0] : '');
+      }
+    }
+    return parts.filter(Boolean).join(' ') || '0';
+  }
   function fmtSi(v) {
     var a = Math.abs(v);
     if (a >= 1e9) return (v / 1e9).toFixed(1).replace(/\.0$/, '') + 'G';
@@ -1480,6 +1493,7 @@ JS = r"""
         svg.querySelectorAll('.rh-labels [x], .rh-points [cx]'));
       var xticks = svg.querySelector('.rh-xticks');
       var xtitle = svg.querySelector('.ax-label[data-label]');
+      var sim = svg.dataset.sim ? svg.dataset.sim.split(',').map(Number) : null;
       var button = host.parentNode.querySelector('.zoomed');
       var view = domain.slice();
       var start = null, band = null;
@@ -1541,6 +1555,13 @@ JS = r"""
           });
           label.textContent = fmt(t);
           xticks.appendChild(label);
+          if (sim) {
+            var below = el('text', {
+              'class': 'tick sub', x: x, y: base + 30, 'text-anchor': 'middle'
+            });
+            below.textContent = fmtSim((t - sim[1] + 1) * sim[0]);
+            xticks.appendChild(below);
+          }
         });
       }
       function reset() { view = domain.slice(); apply(); }
@@ -1664,8 +1685,8 @@ def _badge(level: str, text: str = "") -> str:
     )
 
 
-def _tile(value: str, label: str, anchor: str = "") -> str:
-    at = f' id="{esc(anchor)}"' if anchor else ""
+def _tile(value: str, label: str, anchor: str = "", hint: str = "") -> str:
+    at = (f' id="{esc(anchor)}"' if anchor else "") + (f' title="{esc(hint)}"' if hint else "")
     return (
         f'<div class="tile"{at}><div class="v">{value}</div>'
         f'<div class="l">{esc(label)}</div></div>'
@@ -1983,6 +2004,9 @@ def run_tiles(log: RunLog, a: Assessment) -> str:
         out.append(_tile(f"{s['sypd']:.2f}", f"{unit} ({s['sypd'] * DAYS_PER_YEAR:,.1f} SDPD)"))
     if s.get("progress_last") is not None:
         out.append(_tile(f"{s['progress_last']:,}", log.setting("progress_label", "progress")))
+    if s.get("sim_seconds"):
+        span = f"model time {s['sim_start']:%Y-%m-%d %H:%M} to {s['sim_end']:%Y-%m-%d %H:%M}"
+        out.append(_tile(format_sim_span(s["sim_seconds"]), "simulated", hint=span))
     if s.get("nodes"):
         out.append(_tile(f"{s['nodes']:,}", "nodes"))
     if s.get("max_gap"):

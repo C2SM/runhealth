@@ -16,12 +16,13 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 
 from . import style, svg
 from .extract import RunLog
-from .health import STATUS_LEVEL, Assessment, counter_rows, rate_text
-from .logfile import format_duration, format_stamp
+from .health import STATUS_LEVEL, Assessment, ModelClock, counter_rows, model_clock, rate_text
+from .logfile import format_duration, format_sim_span, format_stamp
 
 # Above this many points the drawn line is decimated per pixel column, which
 # keeps a spike visible while the file stays a sensible size.
@@ -53,6 +54,30 @@ def _time_fmt(span: float):
     while decimals < 3 and step / size < 10**-decimals:
         decimals += 1
     return unit, lambda t: f"{t / size:.{decimals}f}"
+
+
+def _sim(clock: ModelClock | None, seconds: float | None) -> str:
+    """The tooltip line naming the model date and the simulated time reached."""
+    if clock is None:
+        return ""
+    if seconds is None:
+        return "before the first progress report"
+    date = clock.start + timedelta(seconds=seconds)
+    return f"model time {date:%Y-%m-%d %H:%M}, {format_sim_span(seconds)} simulated"
+
+
+def _sim_at(clock: ModelClock | None, wall: float) -> str:
+    return _sim(clock, clock.at_wall(wall)) if clock and clock.points else ""
+
+
+def _sim_between(clock: ModelClock | None, start: float, end: float) -> float:
+    """Simulated seconds covered between two wall times; the first report counts from zero."""
+    if not clock or not clock.points:
+        return 0.0
+    first = clock.points[0][0]
+    lo = clock.at_wall(start) if start > first else 0.0
+    hi = clock.at_wall(end) if end > first else 0.0
+    return (hi or 0.0) - (lo or 0.0)
 
 
 def _decimate(points: list[tuple[float, float]], columns: float) -> list[tuple[float, float]]:
@@ -110,6 +135,7 @@ def phase_timeline(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         return None
     t0 = log.first_wall
     total = log.wall_seconds or 1.0
+    clock = model_clock(log)
     unit, fmt = _time_fmt(total)
     ch = svg.Chart(height=192, pad=(66, 20, 20, 52), uid=uid)
     p = ch.plot
@@ -120,10 +146,12 @@ def phase_timeline(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     y_ph, h_ph = lanes["phase"]
     for i, ph in enumerate(a.phases):
         x0, w = x(ph.start - t0), max(x(ph.end - t0) - x(ph.start - t0), 1.0)
+        simulated = _sim_between(clock, ph.start, ph.end)
         tip = _tip(
             ph.name,
             f"{_dur(ph.seconds)}  ({ph.seconds / total * 100:.0f}% of the wall clock)",
             f"starts {format_stamp(ph.start)}",
+            f"{format_sim_span(simulated)} simulated" if simulated > 0 else "",
         )
         ch.geometry.append(
             ch.rect(x0, y_ph, w, h_ph, rx=2.0, **_mark(f"p{i % len(style.PHASES)} fill", tip))
@@ -153,6 +181,7 @@ def phase_timeline(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         tip = _tip(
             f"{_dur(g.seconds)} with no output",
             f"{format_stamp(g.start)} to {format_stamp(g.end)}",
+            _sim_at(clock, g.start),
             f"last line: {svg.truncate(g.before, 90)}" if g.before else "",
             f"line {g.line:,} of the log" if g.line else "",
         )
@@ -229,7 +258,10 @@ def progress_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     median = a.stats.get("interval_median") or 0.0
     factor = float(log.threshold("outlier_factor", 3))
     warm = [bool(record.get("warmup")) for record in a.intervals]
-    ch = svg.Chart(height=274, pad=(68, 24, 20, 58), uid=uid)
+    clock = model_clock(log)
+    # A second row of tick labels needs the room of one more line below the axis.
+    extra = 13 if clock else 0
+    ch = svg.Chart(height=274 + extra, pad=(68, 24, 20, 58 + extra), uid=uid)
     p = ch.plot
     x = svg.Scale(min(steps), max(steps), p.x, p.right)
     # Warm-up intervals are left out of the scale and pinned to the top edge,
@@ -272,6 +304,7 @@ def progress_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         if w:
             tip = _tip(
                 f"{label} {step:,}: warm-up",
+                _sim(clock, clock.at_step(step)) if clock else "",
                 f"{_dur(value)} between reports",
                 f"{value / median:.1f}x the median" if median else "",
                 "left out of the steady-state rate and the scale",
@@ -285,6 +318,7 @@ def progress_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     for px, py, step, value in _thin(hot, 120):
         tip = _tip(
             f"{label} {step:,}",
+            _sim(clock, clock.at_step(step)) if clock else "",
             f"{_dur(value)} between reports",
             f"{value / median:.1f}x the median",
         )
@@ -297,10 +331,11 @@ def progress_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     ):
         tip = _tip(
             f"{label} {step:,}",
+            _sim(clock, clock.at_step(step)) if clock else "",
             f"{_dur(value)} between reports",
             f"{value / median:.2f}x the median" if median else "",
             (
-                f"model time advanced {_dur(record['model_seconds'])}"
+                f"{_dur(record['model_seconds'])} of model time since the previous report"
                 if record.get("model_seconds")
                 else ""
             ),
@@ -308,7 +343,13 @@ def progress_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         samples.append([round(px, 1), round(py, 1), round(record["wall"] - t0, 1), tip])
 
     x_ticks = svg.nice_ticks(min(steps), max(steps), 7)
-    ch.x_axis(x, x_ticks, svg.si_ticks(x_ticks), label)
+    ch.x_axis(
+        x,
+        x_ticks,
+        svg.si_ticks(x_ticks),
+        f"{label} \u00b7 simulated time" if clock else label,
+        sub=(lambda t: format_sim_span(clock.at_step(t))) if clock else None,
+    )
     ch.y_axis(y, y_ticks, y_fmt, "wall time per report")
     rate = a.stats.get("sypd")
     return Figure(
@@ -332,6 +373,7 @@ def progress_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
             xfmt="si",
             samples=svg.pack(samples),
             time="1",
+            sim=f"{svg.num(clock.per_step)},{clock.first_step}" if clock else None,
         ),
     )
 
@@ -341,6 +383,7 @@ def top_gaps(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     if len(gaps) < 2:
         return None
     stall = float(log.threshold("stall_seconds", 300))
+    clock = model_clock(log)
     row = 26
     ch = svg.Chart(height=row * len(gaps) + 72, pad=(300, 14, 78, 52), uid=uid)
     p = ch.plot
@@ -352,6 +395,7 @@ def top_gaps(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         tip = _tip(
             f"{_dur(g.seconds)} with no output",
             f"{format_stamp(g.start)} to {format_stamp(g.end)}",
+            _sim_at(clock, g.start),
             f"last line: {svg.truncate(g.before, 110)}" if g.before else "",
             f"next line: {svg.truncate(g.after, 110)}" if g.after else "",
             f"line {g.line:,} of the log" if g.line else "",
@@ -400,6 +444,7 @@ def io_cadence(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     total = log.wall_seconds or 1.0
     t0 = log.first_wall or 0.0
     factor = float(log.threshold("io_gap_outlier_factor", 4))
+    clock = model_clock(log)
     all_seconds = [g["seconds"] for n in names for g in live[n]]
 
     ch = svg.Chart(height=266, pad=(68, 26, 20, 58), uid=uid)
@@ -433,6 +478,7 @@ def io_cadence(log: RunLog, a: Assessment, uid: str) -> Figure | None:
                 label,
                 f"{_dur(v)} since the previous one, {v / median:.1f}x the median",
                 f"at {format_stamp(g['wall'])}",
+                _sim_at(clock, g["wall"]),
             )
             dots += ch.circle(x(g["wall"] - t0), y(v), 3.4, **_mark("lv-warn fill", tip))
         ch.geometry.append(
@@ -447,6 +493,7 @@ def io_cadence(log: RunLog, a: Assessment, uid: str) -> Figure | None:
                 f"{_dur(v)} since the previous one",
                 f"{v / median:.2f}x the median" if median else "",
                 f"at {format_stamp(g['wall'])}",
+                _sim_at(clock, g["wall"]),
             )
             samples.append(
                 [round(x(g["wall"] - t0), 1), round(y(v), 1), round(g["wall"] - t0, 1), tip]
@@ -650,8 +697,10 @@ def warning_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
 
     samples = []
     busiest = families[0][1]
+    clock = model_clock(log)
+    t0 = log.first_wall or 0.0
     for minute in range(span):
-        rows = [f"minute {minute}"] + [
+        rows = [f"minute {minute}", _sim_at(clock, t0 + minute * 60.0)] + [
             f"{g.label}: {g.bins.get(str(minute), 0):,}" for _, g in families
         ]
         samples.append(
@@ -659,7 +708,7 @@ def warning_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
                 round(x(minute), 1),
                 round(y(busiest.bins.get(str(minute), 0)), 1),
                 minute * 60.0,
-                "\n".join(rows),
+                _tip(*rows),
             ]
         )
 

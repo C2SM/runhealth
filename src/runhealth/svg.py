@@ -365,7 +365,9 @@ class Chart:
         grid: bool = True,
         box: Box | None = None,
         unit: str = "",
+        sub=None,
     ) -> None:
+        """``sub`` formats a second, muted row of labels under the ticks."""
         p = box or self.plot
         self.frame.append(self.line(p.x, p.bottom, p.right, p.bottom, cls="ax-line"))
         parts = []
@@ -377,6 +379,10 @@ class Chart:
                 parts.append(self.line(x, p.y, x, p.bottom, cls="grid"))
             parts.append(self.line(x, p.bottom, x, p.bottom + 4, cls="ax-line"))
             parts.append(self.text(x, p.bottom + 17, fmt(t), cls="tick", text_anchor="middle"))
+            if sub:
+                parts.append(
+                    self.text(x, p.bottom + 30, sub(t), cls="tick sub", text_anchor="middle")
+                )
         self.frame.append(tag("g", "".join(parts), cls="rh-xticks"))
         if label:
             # A unit given apart from the label is one a zoom may change, so the
@@ -384,7 +390,7 @@ class Chart:
             self.frame.append(
                 self.text(
                     p.x + p.w / 2,
-                    p.bottom + 37,
+                    p.bottom + (50 if sub else 37),
                     f"{label} ({unit})" if unit else label,
                     cls="ax-label",
                     text_anchor="middle",

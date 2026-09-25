@@ -11,18 +11,19 @@ The grade of a run is the worst level any check returned.
 
 from __future__ import annotations
 
+import bisect
 import math
 import re
 import statistics
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from . import diag
 from .accounting import ACTIVE_STATES, FAILED_STATES, base_state
 from .extract import RunLog
-from .logfile import format_duration, format_stamp, parse_walltime
+from .logfile import format_duration, format_sim_span, format_stamp, parse_walltime
 from .tables import Table
 
 LEVELS = ["ok", "info", "warn", "fail"]
@@ -189,6 +190,56 @@ def intervals(log: RunLog) -> list[dict]:
         for rec in out[:warmup]:
             rec["warmup"] = True
     return out
+
+
+@dataclass
+class ModelClock:
+    """Simulated time covered by the job, read from the progress reports.
+
+    The job is taken to start one step before its first report, which is where
+    a model that reports every step begins. ``points`` pair each report's wall
+    time with the simulated seconds reached by then.
+    """
+
+    start: datetime
+    end: datetime
+    per_step: float
+    first_step: int
+    points: list[tuple[float, float]]
+
+    @property
+    def seconds(self) -> float:
+        return (self.end - self.start).total_seconds()
+
+    def at_step(self, step: float) -> float:
+        return (step - self.first_step + 1) * self.per_step
+
+    def at_wall(self, wall: float) -> float | None:
+        """Simulated seconds at a wall time, or ``None`` before the first report."""
+        pts = self.points
+        if not pts or wall < pts[0][0]:
+            return None
+        i = bisect.bisect_right(pts, (wall, math.inf))
+        if i >= len(pts):
+            return pts[-1][1]
+        (w0, s0), (w1, s1) = pts[i - 1], pts[i]
+        return s0 + (s1 - s0) * (wall - w0) / (w1 - w0) if w1 > w0 else s1
+
+
+def model_clock(log: RunLog) -> ModelClock | None:
+    field_name = log.setting("model_time_field", "model_time")
+    reports = [
+        (r["step"], t, r.get("wall"))
+        for r in progress_series(log)
+        if isinstance(r.get("step"), int) and (t := parse_model_time(r.get(field_name, "")))
+    ]
+    if len(reports) < 2 or reports[-1][0] <= reports[0][0]:
+        return None
+    (s0, t0, _), (s1, t1, _) = reports[0], reports[-1]
+    per_step = (t1 - t0).total_seconds() / (s1 - s0)
+    start = t0 - timedelta(seconds=per_step)
+    points = [(w, (t - start).total_seconds()) for _, t, w in reports if w is not None]
+    return ModelClock(start, t1, per_step, s0, sorted(points))
 
 
 def steady(intervals: list[dict]) -> list[dict]:
@@ -411,6 +462,11 @@ def _stats(log: RunLog, a: Assessment, acct: dict) -> dict[str, Any]:
             stats["sypd_steady"] = throughput(steady(a.intervals))
     if wall_secs > 0 and stats.get("progress_count"):
         stats["loop_seconds"] = wall_secs
+    clock = model_clock(log)
+    if clock:
+        stats["sim_seconds"] = clock.seconds
+        stats["sim_start"] = clock.start
+        stats["sim_end"] = clock.end
     if a.timers:
         stats["timer_root_seconds"] = max(g.root_seconds for g in a.timers)
     return stats
@@ -619,6 +675,11 @@ def _check_progress(log: RunLog, a: Assessment) -> list[Check]:
         f"typical interval {format_duration(median)} between progress reports",
         f"{format_duration(a.stats.get('loop_seconds'))} spent in the main loop",
     ]
+    if a.stats.get("sim_seconds"):
+        ev.append(
+            f"{format_sim_span(a.stats['sim_seconds'])} simulated, "
+            f"{a.stats['sim_start']:%Y-%m-%d %H:%M} to {a.stats['sim_end']:%Y-%m-%d %H:%M}"
+        )
     warm = [i for i in a.intervals if i.get("warmup")]
     if warm:
         ev.append(
