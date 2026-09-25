@@ -40,6 +40,9 @@ POLL_SECONDS = 0.2  # how often a parse in progress is redrawn
 # Reports are written with the user's umask, which on a shared file system is
 # often too restrictive for a web server, so the transfer sets the modes needed.
 RSYNC_FLAGS = ["-rlptz", "--chmod=D755,F644"]
+# Working state of the output directory, not part of the report: the parse cache
+# and the raw logs synced from a cluster.
+PUBLISH_EXCLUDES = ["--exclude=/.cache/", "--exclude=/.remote-cache/"]
 
 
 def log(msg: str) -> None:
@@ -469,7 +472,7 @@ def publish(outdir: Path, dest: str, url: str) -> bool:
     if shutil.which("rsync") is None:
         log("runhealth: rsync is not on PATH, cannot publish")
         return False
-    command = ["rsync", *RSYNC_FLAGS, f"{outdir}/", dest]
+    command = ["rsync", *RSYNC_FLAGS, *PUBLISH_EXCLUDES, f"{outdir}/", dest]
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=1800)
     except (OSError, subprocess.SubprocessError) as exc:

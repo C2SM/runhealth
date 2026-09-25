@@ -126,7 +126,9 @@ runhealth: published to https://intranet.example/runs/index.html
 
 Files are transferred with modes a web server can read (`755`/`644`), because a
 report written under a restrictive umask on a shared file system would
-otherwise arrive unreadable. Nothing is ever deleted at the destination: a
+otherwise arrive unreadable. The parse cache `.cache/` and the logs synced from
+a cluster in `.remote-cache/` stay behind, since they are working state rather
+than part of the report. Nothing is ever deleted at the destination: a
 report directory is often one subdirectory of a document root that holds other
 content as well.
 

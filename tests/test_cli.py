@@ -217,6 +217,7 @@ def test_publish_copies_the_report(tmp_path):
     assert rc == 0
     assert (web / "index.html").is_file()
     assert (web / "icon_hang.html").is_file()
+    assert (out / ".cache").is_dir() and not (web / ".cache").exists()
 
 
 def test_publish_reads_its_destination_from_the_environment(tmp_path, monkeypatch):
