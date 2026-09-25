@@ -5,7 +5,7 @@ runhealth [PATH ...] [-o OUTDIR] [-f html|md|pdf]
           [--profile NAME[,NAME]] [--profile-dir DIR] [--list-profiles]
           [--glob PATTERN] [--last N] [--since 7d] [--list]
           [--watch SECONDS] [--stall-seconds N] [--jobs N]
-          [--no-plots] [--no-cache] [--no-squeue] [--embed-logs]
+          [--no-plots] [--no-cache] [--no-squeue] [--no-sacct] [--embed-logs]
           [--title TEXT] [--open] [--serve PORT]
           [--publish DEST] [--publish-url URL]
 ```
@@ -23,7 +23,8 @@ runhealth [PATH ...] [-o OUTDIR] [-f html|md|pdf]
 | `--stall-seconds N` | override the silence threshold |
 | `--no-plots` | omit the figures |
 | `--jobs N` | parallel parsers (default: one per core, capped) |
-| `--no-cache`, `--no-squeue` | skip the parse cache; do not query SLURM for job states |
+| `--no-cache`, `--no-squeue` | skip the parse cache; do not query SLURM (`squeue` or `sacct`) at all |
+| `--no-sacct` | do not read the SLURM accounting records of the jobs |
 | `--embed-logs` | embed logs smaller than 8 MB as a page the figures can link into |
 | `--open` | open the report when it is written |
 | `--serve [PORT]` | serve the report on `127.0.0.1:PORT` (default 8000) until interrupted |

@@ -46,6 +46,9 @@ ERROR_SKIP_RE = re.compile(
     r"\bprint\(|\becho\b.*['\"])",
     re.IGNORECASE,
 )
+# The job id a scheduler writes into a log's name: LOG.<name>.<id>.o,
+# slurm-<id>.out, <name>.o<id>.
+JOB_ID_NAME_RE = re.compile(r"(?:[.-](\d{5,})(?:\.(?:o|out|err|log))?|\.o(\d{5,}))$")
 NODE_RE = re.compile(r"\b(nid\d{4,}|[a-z][a-z0-9-]*\d{3,})\b")
 MASK_RE = re.compile(r"0x[0-9a-fA-F]+|\d+")
 
@@ -136,6 +139,7 @@ class RunLog:
     settings: dict[str, Any] = field(default_factory=dict)
     thresholds: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
+    diag: dict[str, Any] = field(default_factory=dict)
 
     @property
     def wall_seconds(self) -> float | None:
@@ -584,6 +588,11 @@ def parse(
     if on_read is not None:
         on_read(max(0, st.st_size - reported))  # the tail, so the count comes out whole
     ex.log.offset = st.st_size
+    if not ex.log.fields.get("job_id"):
+        # A job killed before it printed its environment still has its id in the name.
+        m = JOB_ID_NAME_RE.search(path.name)
+        if m:
+            ex.log.fields["job_id"] = m.group(1) or m.group(2)
     if ex.log.attempts > 1:
         ex.log.notes.append(
             f"This file holds {ex.log.attempts} job attempts; only the last is analyzed."

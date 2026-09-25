@@ -123,3 +123,15 @@ def test_resuming_from_an_offset_matches_a_full_pass(profiles):
     partial_state = partial.to_dict()
     resumed = extract.parse(path, picked, start=cut, state=partial_state)
     assert resumed.outcome.text == whole.outcome.text
+
+
+def test_the_job_id_falls_back_to_the_file_name(tmp_path, profiles):
+    for name, expected in (
+        ("LOG.demo.880843.o", "880843"),
+        ("slurm-123456.out", "123456"),
+        ("run.o98765", "98765"),
+        ("run_2024.log", None),
+    ):
+        path = tmp_path / name
+        path.write_text("hello\n")
+        assert extract.parse(path, profile.detect(path, profiles)).fields.get("job_id") == expected

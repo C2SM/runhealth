@@ -10,6 +10,7 @@ runhealth --list-profiles
 # cray-mpich     Cray MPICH / Slingshot: CXI counters, libfabric warnings
 # icon           ICON atmosphere/ocean model: progress, timer report, coupling
 # slurm          SLURM batch job metadata, step failures and cancellations. (always applied)
+# watchdog       Hang watchdog in the job script: timeouts, firing, tracebacks
 ```
 
 | Profile | Detects | Contributes |
@@ -17,6 +18,7 @@ runhealth --list-profiles
 | `slurm` | always | `#SBATCH` directives, the SLURM environment, `srun` step failures, cancellations, wall-clock limits |
 | `icon` | ICON output or a generated ICON runscript | time steps and SYPD, the timer report, coupling and I/O phases, `WARNING PE` families, the success/failure protocol |
 | `cray-mpich` | Slingshot or libfabric output | the CXI counter summary, libfabric flow-control warnings, MPICH aborts |
+| `watchdog` | a `hang_watchdog()` function in the echoed job script, or its output | the timeouts the script declares, when the watchdog fired, sent SIGABRT and cancelled the step, the diagnostics directory it wrote, and the Python frames printed at the signal |
 
 ## Adding a profile
 

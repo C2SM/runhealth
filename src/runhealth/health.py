@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from . import diag
+from .accounting import ACTIVE_STATES, FAILED_STATES, base_state
 from .extract import RunLog
 from .logfile import format_duration, format_stamp, parse_walltime
 from .tables import Table
@@ -284,9 +286,19 @@ def counter_rows(log: RunLog) -> tuple[Table | None, Table | None]:
 # -- the checks -----------------------------------------------------------
 
 
-def assess(log: RunLog, now: float | None = None, slurm_state: str = "") -> Assessment:
-    """Run every applicable check and return the verdict."""
+def assess(
+    log: RunLog,
+    now: float | None = None,
+    slurm_state: str = "",
+    accounting: dict | None = None,
+) -> Assessment:
+    """Run every applicable check and return the verdict.
+
+    ``accounting`` is the job's record from :func:`runhealth.accounting.query`,
+    if SLURM still has one.
+    """
     now = time.time() if now is None else now
+    acct = accounting or {}
     a = Assessment()
     a.phases = phases(log)
     a.intervals = intervals(log)
@@ -294,12 +306,14 @@ def assess(log: RunLog, now: float | None = None, slurm_state: str = "") -> Asse
     a.timers = timer_groups(log)
     stall_seconds = float(log.threshold("stall_seconds", 300))
 
-    a.status = _status(log, now, stall_seconds, slurm_state)
-    a.stats = _stats(log, a)
+    a.status = _status(log, now, stall_seconds, slurm_state, acct)
+    a.stats = _stats(log, a, acct)
 
-    a.checks.append(_check_outcome(log, a, slurm_state))
+    a.checks.append(_check_outcome(log, a, slurm_state, acct))
+    a.checks.append(_check_accounting(log, acct))
+    a.checks.append(_check_watchdog(log))
     a.checks.append(_check_stall(log, a, stall_seconds))
-    a.checks.append(_check_walltime(log, a))
+    a.checks.append(_check_walltime(log, a, acct))
     a.checks.extend(_check_progress(log, a))
     a.checks.extend(_check_timers(log, a))
     a.checks.extend(_check_coupling(log, a))
@@ -308,6 +322,10 @@ def assess(log: RunLog, now: float | None = None, slurm_state: str = "") -> Asse
     a.checks.extend(_check_network(log, a))
     a.checks.append(_check_errors(log, a))
     a.checks.extend(_check_groups(log, a))
+    a.checks.append(_check_gpu_health(log))
+    a.checks.append(_check_gpu_activity(log))
+    a.checks.append(_check_dumps(log))
+    a.checks.append(_check_kernel(log))
     a.suspect_nodes = _suspect_nodes(log, a)
     if a.suspect_nodes:
         a.checks.append(
@@ -326,30 +344,51 @@ def assess(log: RunLog, now: float | None = None, slurm_state: str = "") -> Asse
     return a
 
 
-def _status(log: RunLog, now: float, stall_seconds: float, slurm_state: str) -> str:
+def _status(log: RunLog, now: float, stall_seconds: float, slurm_state: str, acct: dict) -> str:
     """SUCCESS, FAILED, QUEUED, RUNNING, STALLED or INCOMPLETE.
 
     STALLED means the scheduler still believes the job is running while its log
     has gone quiet, which is the one case in which intervention can still help.
     A log that simply stops without a verdict and is no longer in the queue is
     INCOMPLETE: the job has ended, and the silence check explains what
-    happened.
+    happened. SLURM accounting, when available, settles the verdict of a log
+    that ends without one.
     """
-    if slurm_state in {"PENDING", "CONFIGURING"}:
+    acct_state = base_state(acct.get("state", ""))
+    live = slurm_state or (acct_state if acct_state in ACTIVE_STATES else "")
+    if live in {"PENDING", "CONFIGURING"}:
         return "QUEUED"
     if log.outcome and log.outcome.level == "fail":
         return "FAILED"
     if log.outcome and log.outcome.level == "ok":
         return "SUCCESS"
+    if acct_state in FAILED_STATES:
+        return "FAILED"
+    if acct_state == "COMPLETED":
+        return "SUCCESS" if acct.get("exit_code") == "0:0" else "FAILED"
     age = now - (log.last_wall or log.mtime or now)
-    if slurm_state == "RUNNING":
-        return "STALLED" if age >= stall_seconds else "RUNNING"
-    return "RUNNING" if age < stall_seconds else "INCOMPLETE"
+    limit = max(stall_seconds, _setup_allowance(log) or 0.0)
+    if live == "RUNNING":
+        return "STALLED" if age >= limit else "RUNNING"
+    return "RUNNING" if age < limit else "INCOMPLETE"
 
 
-def _stats(log: RunLog, a: Assessment) -> dict[str, Any]:
+def _setup_allowance(log: RunLog) -> float | None:
+    """Silence the job script's own watchdog tolerates before the main loop.
+
+    Only while the run has not reached its loop: kernel compilation and input
+    reading can legitimately keep a job silent far longer than the default
+    threshold, and a script that declares how long says so better than any
+    default.
+    """
+    allowance = log.fields.get("watchdog_init_timeout")
+    return float(allowance) if allowance and not progress_series(log) else None
+
+
+def _stats(log: RunLog, a: Assessment, acct: dict) -> dict[str, Any]:
     stats: dict[str, Any] = {
-        "wall_seconds": log.wall_seconds,
+        # A log without timestamps has no duration, but the scheduler knows it.
+        "wall_seconds": log.wall_seconds or acct.get("elapsed"),
         "lines": log.n_lines,
         "size": log.size,
         "nodes": log.fields.get("node_count") or len(log.nodes) or None,
@@ -377,7 +416,7 @@ def _stats(log: RunLog, a: Assessment) -> dict[str, Any]:
     return stats
 
 
-def _check_outcome(log: RunLog, a: Assessment, slurm_state: str) -> Check:
+def _check_outcome(log: RunLog, a: Assessment, slurm_state: str, acct: dict) -> Check:
     ev = []
     if log.outcome:
         ev.append(log.outcome.text)
@@ -386,14 +425,24 @@ def _check_outcome(log: RunLog, a: Assessment, slurm_state: str) -> Check:
         ev.append(f"srun exit status {status_field}")
     if slurm_state:
         ev.append(f"SLURM reports the job as {slurm_state}")
+    if acct.get("state"):
+        ev.append(f"SLURM accounting: {acct['state']}, exit code {acct.get('exit_code', '?')}")
+    verdict = log.outcome and log.outcome.level in {"ok", "fail"}
     if a.status == "SUCCESS":
-        return Check("outcome", "Outcome", "ok", "The run reported success", "", ev)
+        headline = "The run reported success" if verdict else "SLURM recorded the job as completed"
+        return Check("outcome", "Outcome", "ok", headline, "", ev)
     if a.status == "FAILED":
+        if verdict:
+            headline = log.outcome.text
+        elif acct.get("state"):
+            headline = f"SLURM recorded the job as {acct['state']}"
+        else:
+            headline = "The run failed"
         return Check(
             "outcome",
             "Outcome",
             "fail",
-            log.outcome.text if log.outcome else "The run failed",
+            headline,
             "The job script or SLURM reported a failure.",
             ev,
         )
@@ -449,8 +498,19 @@ def _check_stall(log: RunLog, a: Assessment, stall_seconds: float) -> Check:
     # against a longer threshold unless the run never reached its main loop.
     reached_loop = bool(progress_series(log))
     setup_limit = float(log.threshold("setup_stall_seconds", stall_seconds * 4))
+    allowance = _setup_allowance(log)
+    if allowance:
+        detail += (
+            f" The job script's watchdog allows {format_duration(allowance)} of silence "
+            "before the main loop, which is the limit applied until the loop starts."
+        )
     for g in log.gaps:
-        hard = stall_seconds if (_in_loop(log, g.start) or not reached_loop) else None
+        if _in_loop(log, g.start):
+            hard = stall_seconds
+        elif not reached_loop:
+            hard = max(stall_seconds, allowance or 0.0)
+        else:
+            hard = None
         if hard is not None and g.seconds >= hard:
             where = "in the main loop" if reached_loop else "before the main loop started"
             return Check(
@@ -501,14 +561,19 @@ def _in_loop(log: RunLog, when: float) -> bool:
     return bool(walls) and walls[0] <= when <= walls[-1]
 
 
-def _check_walltime(log: RunLog, a: Assessment) -> Check | None:
-    requested = parse_walltime(log.keyvalues.get("sbatch", {}).get("time", ""))
-    used = log.wall_seconds
+def _check_walltime(log: RunLog, a: Assessment, acct: dict) -> Check | None:
+    # The scheduler's account, when there is one, includes the time before the
+    # first stamped line and after the last one.
+    requested = acct.get("timelimit") or parse_walltime(
+        log.keyvalues.get("sbatch", {}).get("time", "")
+    )
+    used = acct.get("elapsed") or log.wall_seconds
     if not requested or not used:
         return None
     frac = used / requested
     ev = [f"{format_duration(used)} used of {format_duration(requested)} requested"]
-    if log.outcome and "TIME LIMIT" in (log.outcome.text or "").upper():
+    timed_out = base_state(acct.get("state", "")) == "TIMEOUT"
+    if timed_out or (log.outcome and "TIME LIMIT" in (log.outcome.text or "").upper()):
         return Check(
             "walltime",
             "Wall time",
@@ -1050,6 +1115,374 @@ def _check_groups(log: RunLog, a: Assessment) -> list[Check]:
     return out
 
 
+def _check_accounting(log: RunLog, acct: dict) -> Check | None:
+    """The scheduler's record, and whether it agrees with the log."""
+    if not acct.get("state"):
+        return None
+    state, code = acct["state"], acct.get("exit_code", "?")
+    base = base_state(state)
+    ev = [f"state {state}, exit code {code}"]
+    if acct.get("elapsed") is not None:
+        limit = acct.get("timelimit")
+        ev.append(
+            f"ran {format_duration(acct['elapsed'])}"
+            + (f" of {format_duration(limit)} allowed" if limit else "")
+        )
+    if acct.get("nnodes"):
+        ev.append(f"{acct['nnodes']} node(s): {acct.get('nodelist', '')}")
+    if acct.get("start"):
+        ev.append(
+            f"{format_stamp(acct['start'])} to {format_stamp(acct.get('end')) or 'still running'}"
+        )
+    detail = (
+        "The scheduler's own record of the job, which remains available when the log "
+        "stops early, for example because the job was killed before its epilogue ran."
+    )
+    if base in ACTIVE_STATES:
+        return Check(
+            "accounting", "SLURM accounting", "info", f"The job is {state.lower()}", detail, ev
+        )
+    if base == "COMPLETED" and code == "0:0":
+        return Check(
+            "accounting", "SLURM accounting", "ok", "Completed with exit code 0", detail, ev
+        )
+    if log.outcome and log.outcome.level == "ok":
+        return Check(
+            "accounting",
+            "SLURM accounting",
+            "warn",
+            f"SLURM recorded {state} with exit code {code} although the job script "
+            "reported success",
+            detail + " A command after the success message failed, for example the "
+            "submission of the next job in a chain.",
+            ev,
+        )
+    return Check("accounting", "SLURM accounting", "fail", f"{state}, exit code {code}", detail, ev)
+
+
+def _check_watchdog(log: RunLog) -> Check | None:
+    """Whether the job script's own hang detection fired."""
+    fired = next((m for m in log.markers if m.name == "watchdog_fired"), None)
+    in_loop = log.fields.get("watchdog_timeout")
+    setup = log.fields.get("watchdog_init_timeout")
+    if fired is None and not (in_loop or setup):
+        return None
+    armed = ", ".join(
+        part
+        for part in (
+            f"{format_duration(in_loop)} in the main loop" if in_loop else "",
+            f"{format_duration(setup)} before it" if setup else "",
+        )
+        if part
+    )
+    detail = (
+        "A background loop in the job script that treats a log which has stopped "
+        "growing as a hang, collects diagnostics on every node and then ends the "
+        "model step, first with SIGABRT so that the runtimes print tracebacks."
+    )
+    ev = [f"timeouts: {armed}"] if armed else []
+    if fired is None:
+        headline = "Configured in the job script, did not fire"
+        return Check("watchdog", "Hang watchdog", "ok", headline, detail, ev)
+    steps = [m for m in log.markers if m.name.startswith("watchdog_")]
+    ev += [f"{format_stamp(m.wall)}: {m.text}" for m in steps]
+    idle = log.fields.get("watchdog_idle")
+    silence = f"no output for {format_duration(idle)}" if idle else "a hang"
+    return Check(
+        "watchdog",
+        "Hang watchdog",
+        "fail",
+        f"The watchdog found {silence} at {format_stamp(fired.wall)} and ended the step",
+        detail,
+        ev,
+    )
+
+
+def _gpus(log: RunLog):
+    """Every monitored GPU as ``(node, index, aggregates)``."""
+    for node, summary in sorted((log.diag.get("gpu") or {}).items()):
+        for index, g in sorted(summary["gpus"].items(), key=lambda kv: int(kv[0])):
+            yield node, index, g
+
+
+def _check_gpu_health(log: RunLog) -> Check | None:
+    """Uncorrected memory errors and hardware slowdown in the GPU monitor."""
+    gpus = list(_gpus(log))
+    if not gpus:
+        return None
+    ecc = [
+        f"{node} GPU {i}: {int(g['ecc_max'])} uncorrected ECC error(s)"
+        for node, i, g in gpus
+        if g.get("ecc_max")
+    ]
+    slow = [
+        f"{node} GPU {i}: {diag.SLOWDOWN_BITS[int(bit)]} in {n} of {g['samples']} samples"
+        for node, i, g in gpus
+        for bit, n in sorted(g["slowdown"].items())
+    ]
+    nodes = {node for node, _, _ in gpus}
+    ev = ecc + slow
+    temps = [g["temp_max"] for _, _, g in gpus if g.get("temp_max") is not None]
+    power = [g["power_max"] for _, _, g in gpus if g.get("power_max") is not None]
+    mem = [g["mem_max"] for _, _, g in gpus if g.get("mem_max") is not None]
+    ev.append(f"{len(gpus)} GPU(s) on {len(nodes)} node(s), {_sample_interval(log)}")
+    peaks = []
+    if temps:
+        peaks.append(f"{max(temps):.0f} °C")
+    if power:
+        peaks.append(f"{max(power):.0f} W")
+    if mem:
+        peaks.append(f"{max(mem) / 1024:.1f} GiB memory")
+    if peaks:
+        ev.append("peak " + ", ".join(peaks))
+    detail = (
+        "From the per-node GPU monitor in the diagnostics directory. Uncorrected ECC "
+        "errors mean the GPU memory returned wrong data; a hardware slowdown, thermal "
+        "slowdown or power brake means the GPU ran below its clocks, which makes its "
+        "node the slowest of the run."
+    )
+    if ecc:
+        headline = f"{len(ecc)} GPU(s) with uncorrected ECC errors: {ecc[0]}"
+        return Check("gpu_health", "GPU health", "fail", headline, detail, ev[:20])
+    if slow:
+        headline = f"{len(slow)} GPU(s) slowed down by the hardware: {slow[0]}"
+        return Check("gpu_health", "GPU health", "warn", headline, detail, ev[:20])
+    return Check(
+        "gpu_health",
+        "GPU health",
+        "ok",
+        f"No ECC errors or hardware slowdown on {len(gpus)} GPU(s)",
+        detail,
+        ev,
+    )
+
+
+def _sample_interval(log: RunLog) -> str:
+    spans = [
+        (s["last"] - s["first"]) / max(1, max(g["samples"] for g in s["gpus"].values()) - 1)
+        for s in (log.diag.get("gpu") or {}).values()
+        if s.get("first") is not None and s.get("last") is not None
+    ]
+    spans = [s for s in spans if s > 0]
+    return f"sampled every {format_duration(statistics.median(spans))}" if spans else "one sample"
+
+
+GPU_BUSY = 50.0  # mean utilization above which a GPU counts as busy
+GPU_IDLE = 5.0
+
+
+def _silence_window(log: RunLog) -> tuple[str, float] | None:
+    """The monitor window covering the longest silence, and its length.
+
+    For a hung job the silence is usually the tail after its last line, which
+    the gap list does not contain, so the tail wins when the monitor kept
+    sampling for longer after the log stopped than the longest gap lasted.
+    """
+    d = log.diag
+    windows = d.get("windows", {})
+    last = max((s["last"] for s in (d.get("gpu") or {}).values() if s.get("last")), default=None)
+    tail = (last - log.last_wall) if last and log.last_wall else 0.0
+    gap = windows.get("silence")
+    gap_len = (gap[1] - gap[0]) if gap else 0.0
+    if tail >= diag.MIN_SILENCE and tail > gap_len:
+        return "tail", tail
+    if gap_len >= diag.MIN_SILENCE:
+        return "silence", gap_len
+    return None
+
+
+def _check_gpu_activity(log: RunLog) -> Check | None:
+    """How busy the GPUs were in the main loop, and during the longest silence."""
+    gpu = log.diag.get("gpu")
+    if not gpu:
+        return None
+    ev: list[str] = []
+    headline = ""
+    level = "ok"
+    loop = diag.node_utils(gpu, "loop") or diag.node_utils(gpu, None)
+    where = "in the main loop" if diag.node_utils(gpu, "loop") else "over the whole run"
+    if loop:
+        median = statistics.median(loop.values())
+        lo, hi = min(loop, key=loop.get), max(loop, key=loop.get)
+        headline = f"GPUs {median:.0f}% busy {where} (median over {len(loop)} node(s))"
+        if lo != hi:
+            ev.append(f"node means {where}: {loop[lo]:.0f}% on {lo} to {loop[hi]:.0f}% on {hi}")
+        odd = [n for n, u in loop.items() if abs(u - median) >= 20]
+        if odd and len(loop) > 2:
+            level = "info"
+            ev += [f"{n}: {loop[n]:.0f}% against a median of {median:.0f}%" for n in odd[:8]]
+    silence = _silence_window(log)
+    if silence:
+        window, seconds = silence
+        per_gpu = [
+            (node, i, u)
+            for node, i, g in _gpus(log)
+            if (u := diag.mean_util(g, window)) is not None
+        ]
+        if per_gpu:
+            busy = [(n, i, u) for n, i, u in per_gpu if u >= GPU_BUSY]
+            idle = [x for x in per_gpu if x[2] < GPU_IDLE]
+            span = format_duration(seconds)
+            if busy and len(busy) < len(per_gpu):
+                level = "info"
+                headline = (
+                    f"During the {span} of silence {len(busy)} of {len(per_gpu)} GPU(s) "
+                    f"stayed busy while {len(idle)} were idle"
+                )
+                ev += [f"busy during the silence: {n} GPU {i} ({u:.0f}%)" for n, i, u in busy[:8]]
+            elif busy:
+                headline = f"All {len(per_gpu)} GPU(s) stayed busy during the {span} of silence"
+            else:
+                headline = f"All {len(per_gpu)} GPU(s) were idle during the {span} of silence"
+    if not headline:
+        return None
+    return Check(
+        "gpu_activity",
+        "GPU activity",
+        level,
+        headline,
+        "Mean utilization from the GPU monitor. In a run whose ranks advance in "
+        "lockstep, a node much busier than the others is the one the rest wait for. "
+        "During a hang, the GPUs still busy point at the ranks that did not reach "
+        "the point where the others wait.",
+        ev,
+    )
+
+
+def _ranges(values: list[int]) -> str:
+    """``0-3, 7, 9-12`` from a sorted list of integers."""
+    runs: list[list[int]] = []
+    for v in values:
+        if runs and v == runs[-1][1] + 1:
+            runs[-1][1] = v
+        else:
+            runs.append([v, v])
+    return ", ".join(str(a) if a == b else f"{a}-{b}" for a, b in runs)
+
+
+PROC_STATES = {
+    "R": "running",
+    "S": "sleeping",
+    "D": "uninterruptible (I/O)",
+    "T": "stopped",
+    "Z": "zombie",
+}
+
+
+def _check_dumps(log: RunLog) -> Check | None:
+    """Where the ranks were when the hang was dumped."""
+    d = log.diag.get("dumps")
+    if not d:
+        return None
+    groups = d.get("groups", [])
+    ev = [
+        f"{len(g['ranks'])} rank(s) [{_ranges(g['ranks'])}] on {len(g['nodes'])} node(s): "
+        f"{g['place']}"
+        for g in groups[:8]
+    ]
+    states = d.get("states", {})
+    if states:
+        ev.append(
+            "process states: "
+            + ", ".join(f"{PROC_STATES.get(s, s)} {n}" for s, n in sorted(states.items()))
+        )
+    if d.get("wchan"):
+        top = sorted(d["wchan"].items(), key=lambda kv: -kv[1])[:4]
+        ev.append("kernel wait channels: " + ", ".join(f"{w} {n}" for w, n in top))
+    if groups:
+        biggest = groups[0]
+        headline = (
+            f"{d['ranks']} backtrace(s) in {len(groups)} distinct place(s); "
+            f"{len(biggest['ranks'])} rank(s) in {biggest['place'][:90]}"
+        )
+    else:
+        headline = f"Process states of {sum(states.values())} rank(s)"
+    level = "warn" if states.get("D") else "info"
+    return Check(
+        "hang_dumps",
+        "Hang backtraces",
+        level,
+        headline,
+        "Backtraces of the main thread taken by gdb while the job hung, grouped by the "
+        "innermost frame and the innermost frame with a source location. The small "
+        "groups are usually the interesting ones: the ranks the others wait for. Ranks "
+        "in uninterruptible sleep are blocked in the kernel, typically on I/O.",
+        ev,
+    )
+
+
+# GPU Xid events that indicate a hardware or driver fault rather than a bug in
+# the application (NVIDIA's Xid catalog).
+FATAL_XID = {"48", "63", "64", "74", "79", "92", "94", "95", "119", "120"}
+
+
+def _check_kernel(log: RunLog) -> Check | None:
+    """GPU Xid events and out-of-memory kills in the nodes' kernel logs."""
+    k = log.diag.get("kernel")
+    if not k:
+        return None
+    readable = {n: v for n, v in k.items() if v.get("readable", True)}
+    if not readable:
+        return Check(
+            "kernel",
+            "Kernel messages",
+            "info",
+            "The kernel log was not readable",
+            "dmesg is restricted on these nodes.",
+        )
+    ev = []
+    level = "ok"
+    for node, v in sorted(readable.items()):
+        if v.get("xid"):
+            codes = ", ".join(f"Xid {c} ({n}x)" for c, n in sorted(v["xid"].items()))
+            ev.append(f"{node}: {codes}")
+            fatal = bool(set(v["xid"]) & FATAL_XID)
+            level = "fail" if fatal or level == "fail" else "warn"
+        if v.get("oom"):
+            ev.append(f"{node}: {v['oom']} out-of-memory kill(s)")
+            level = "fail"
+        if v.get("sample") and len(ev) < 12:
+            ev.append(f"    {v['sample']}")
+    headline = (
+        f"GPU or memory faults on {sum(1 for v in readable.values() if v.get('xid') or v.get('oom'))} "
+        "node(s)"
+        if ev
+        else f"No GPU Xid or out-of-memory messages on {len(readable)} node(s)"
+    )
+    return Check(
+        "kernel",
+        "Kernel messages",
+        level,
+        headline,
+        "Kernel logs collected on each node. An Xid is the GPU driver reporting a "
+        "fault; codes such as 48, 79 or 94 point at the hardware, others at the "
+        "application.",
+        ev[:20],
+    )
+
+
+def _diag_suspects(log: RunLog) -> list[tuple[str, str]]:
+    """Nodes the diagnostics directory implicates."""
+    out = []
+    for node, i, g in _gpus(log):
+        if g.get("ecc_max"):
+            out.append((node, f"uncorrected ECC errors on GPU {i}"))
+        for bit in g["slowdown"]:
+            out.append((node, f"{diag.SLOWDOWN_BITS[int(bit)]} on GPU {i}"))
+    for node, v in (log.diag.get("kernel") or {}).items():
+        if set(v.get("xid", {})) & FATAL_XID:
+            out.append((node, "GPU Xid " + ", ".join(sorted(v["xid"]))))
+        if v.get("oom"):
+            out.append((node, "out-of-memory kill"))
+    silence = _silence_window(log)
+    if silence:
+        per_gpu = [(n, diag.mean_util(g, silence[0])) for n, _, g in _gpus(log)]
+        busy = {n for n, u in per_gpu if u is not None and u >= GPU_BUSY}
+        if busy and len(busy) < len({n for n, _ in per_gpu}):
+            out += [(n, "GPUs busy during the silence while others were idle") for n in busy]
+    return out
+
+
 def _suspect_nodes(log: RunLog, a: Assessment) -> list[tuple[str, str]]:
     """Nodes worth excluding on the next submission, with the reason."""
     reasons: dict[str, list[str]] = {}
@@ -1072,4 +1505,6 @@ def _suspect_nodes(log: RunLog, a: Assessment) -> list[tuple[str, str]]:
                 reasons.setdefault(f"rank {int(r.max_rank)}", []).append(
                     f"slowest on {r.label} ({r.imbalance:.1f}x)"
                 )
+    for node, why in _diag_suspects(log):
+        reasons.setdefault(node, []).append(why)
     return sorted(((n, "; ".join(v[:3])) for n, v in reasons.items()))

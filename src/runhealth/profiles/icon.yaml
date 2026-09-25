@@ -148,6 +148,11 @@ tables:
     durations: [t_min, t_avg, t_max]
 
 outcome:
+  # Printed before the output is redirected into the stamping helper, when
+  # that helper could not be started.
+  - re: '^ERROR: (timewarp failed to start.*)'
+    contains: 'timewarp failed to start'
+    level: fail
   - re: '^Script FAILED: (.+)'
     contains: 'Script FAILED'
     level: fail

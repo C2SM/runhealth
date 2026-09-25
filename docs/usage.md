@@ -36,7 +36,10 @@ exactly as `scp` and `rsync` interpret it. This assumes that `ssh host` already
 works without a prompt, since `runhealth` calls `rsync` over that same
 connection to copy the matching logs into `<outdir>/.remote-cache/` before
 reading them. Only files matching the active glob are transferred, and only
-from that one directory, not from its subdirectories.
+from that one directory, not from its subdirectories. A
+[diagnostics directory](logging.md#3-leave-diagnostics-next-to-the-log) is
+therefore not transferred, and its checks appear only when the logs are read
+on the cluster itself.
 
 The result is a report on the local disk, so `--open` displays it immediately,
 without port forwarding or a combination of `--serve` and `ssh -L`. It also
@@ -64,6 +67,15 @@ queued job appears as **QUEUED** rather than as a broken run, and a job that
 the scheduler still believes to be running while its log has gone quiet is
 reported as **STALLED**, the one case in which intervention can still help.
 `--no-squeue` disables this.
+
+When `sacct` is available, `runhealth` also reads the SLURM accounting record
+of every job whose log was read on the same machine, in one call. The record
+settles the verdict of a log that stops without one (`TIMEOUT`, `NODE_FAIL`,
+`OUT_OF_MEMORY`, `CANCELLED by <user>`), supplies the start and the duration
+of a log without timestamps, and reveals a job that printed its success
+message but still ended with a nonzero exit code. Logs synced from another
+machine are left out, because their job ids belong to another cluster.
+`--no-sacct` disables this, and `--no-squeue` disables both queries.
 
 ```bash
 runhealth /path/to/logs --watch 60 -o report/

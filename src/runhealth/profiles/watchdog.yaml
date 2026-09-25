@@ -1,0 +1,59 @@
+# A hang watchdog in the job script: a background loop that treats a log
+# which has stopped growing as a hang, collects per-node diagnostics into
+# diag.<job name>.<job id>/ next to the log and then ends the model step,
+# first with SIGABRT so that Python and the compiler runtime print tracebacks.
+# Independent of the model, so it is its own overlay like cray-mpich.
+name: watchdog
+description: "Hang watchdog in the job script: timeouts, firing, tracebacks"
+priority: 30
+
+detect:
+  - 'hang_watchdog\(\)'
+  - 'WATCHDOG: no log output'
+
+fields:
+  # The timeouts the job script declares, read from its echoed copy.
+  watchdog_timeout:
+    re: '^\s*watchdog_timeout=\$\{watchdog_timeout:=(\d+)\}'
+    contains: 'watchdog_timeout:='
+    cast: int
+    preamble: true
+  watchdog_init_timeout:
+    re: '^\s*watchdog_init_timeout=\$\{watchdog_init_timeout:=(\d+)\}'
+    contains: 'watchdog_init_timeout:='
+    cast: int
+    preamble: true
+  watchdog_idle:
+    re: '^WATCHDOG: no log output for (\d+) s'
+    contains: 'WATCHDOG: no log output'
+    cast: int
+  diag_dir:
+    re: '^WATCHDOG: .*Collecting diagnostics in (\S+)'
+    contains: 'Collecting diagnostics in'
+  diag_dir_on_failure:
+    re: '^Diagnostics \([^)]*\): (\S+)'
+    contains: 'Diagnostics ('
+
+markers:
+  watchdog_fired:
+    re: '^WATCHDOG: no log output for'
+    contains: 'WATCHDOG: no log output'
+    label: hang diagnostics
+  watchdog_abort:
+    re: '^WATCHDOG: diagnostics done, sending SIGABRT'
+    contains: 'sending SIGABRT'
+    label: SIGABRT tracebacks
+  watchdog_cancel:
+    re: '^WATCHDOG: cancelling step'
+    contains: 'WATCHDOG: cancelling step'
+    label: step cancelled
+
+groups:
+  # Python's faulthandler writes "line N in func", without the comma of a
+  # regular traceback, so only the dump triggered by the signal is counted.
+  python_frames:
+    re: '^\s*File "([^"]+)", line \d+ in (\S+)$'
+    contains: '", line '
+    key: 2
+    label: Python frames at the signal
+    claim: true

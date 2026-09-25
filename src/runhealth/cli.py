@@ -23,13 +23,13 @@ from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, wait
 from pathlib import Path
 
-from . import __version__, plots, profile, progress, report, search
+from . import __version__, accounting, diag, plots, profile, progress, report, search
 from .extract import RunLog, parse
 from .health import assess
 from .logfile import format_duration
 from .report import RunView
 
-CACHE_VERSION = 3
+CACHE_VERSION = 4
 DEFAULT_GLOB = "LOG.*.o"
 LOG_GLOBS = [DEFAULT_GLOB, "slurm-*.out", "*.log", "*.out", "*.o[0-9]*"]
 SINCE_RE = re.compile(r"^(\d+(?:\.\d+)?)([smhdw])$")
@@ -211,7 +211,8 @@ def parse_cached(
 
     ``reports`` is a queue that receives the number of bytes read every few
     megabytes, which is how the parent process follows a file it is not
-    reading itself.
+    reading itself. The summary of the run's diagnostics directory is cached
+    with the log and read again only when a file in that directory changes.
     """
     profiles = profile.load_all([Path(d) for d in dirs])
     picked = profile.select(names, profiles) if names else profile.detect(path, profiles)
@@ -232,29 +233,45 @@ def parse_cached(
         if same and blob.get("size") == stat.st_size and blob.get("mtime") == stat.st_mtime:
             if report:
                 report(stat.st_size)  # nothing to read, but the file is accounted for
-            return blob["state"]
+            cached = RunLog.from_dict(blob["state"])
+            where = diag.locate(cached)
+            sig = diag.signature(where)
+            if sig == blob.get("diag_sig", ""):
+                return blob["state"]
+            cached.diag = diag.collect(cached, where)
+            payload = RunLog.to_dict(cached)
+            _store(cache, picked, stat, cached.offset, payload, sig)
+            return payload
         if same and blob.get("offset"):
             # Job logs only ever grow, so continue where the last pass stopped.
             state, start = blob["state"], int(blob["offset"])
     if report and start:
         report(start)
     result = parse(path, picked, start=start, state=state, on_read=report)
+    where = diag.locate(result)
+    result.diag = diag.collect(result, where)
     payload = RunLog.to_dict(result)
-    if cache:
-        cache.parent.mkdir(parents=True, exist_ok=True)
-        cache.write_text(
-            json.dumps(
-                {
-                    "version": CACHE_VERSION,
-                    "profiles": [p.name for p in picked],
-                    "size": stat.st_size,
-                    "mtime": stat.st_mtime,
-                    "offset": result.offset,
-                    "state": payload,
-                }
-            )
-        )
+    _store(cache, picked, stat, result.offset, payload, diag.signature(where))
     return payload
+
+
+def _store(cache: Path | None, picked, stat, offset: int, payload: dict, diag_sig: str) -> None:
+    if not cache:
+        return
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(
+        json.dumps(
+            {
+                "version": CACHE_VERSION,
+                "profiles": [p.name for p in picked],
+                "size": stat.st_size,
+                "mtime": stat.st_mtime,
+                "offset": offset,
+                "diag_sig": diag_sig,
+                "state": payload,
+            }
+        )
+    )
 
 
 def parse_all(
@@ -347,13 +364,22 @@ def build(
         named = (lambda f: bar.advance(f.name, n=0)) if bar.enabled else None
         logs = parse_all(files, names, profile_dirs, cache, jobs, follow, named)
 
+    records = {}
+    if not (args.no_squeue or args.no_sacct):
+        # Only logs read on this machine: a synced job id belongs to another cluster.
+        ids = [str(rl.fields.get("job_id") or "") for rl in logs if not _is_synced(rl, remotes)]
+        records = accounting.query(ids)
+        if records:
+            log(f"runhealth: SLURM accounting knows {len(set(ids) & set(records))} of the job(s)")
+
     views: list[RunView] = []
     step = progress.Progress("analyzing", len(logs), "analyzed {n} run(s) in {t}")
     for rl in step.wrap(logs, lambda rl: rl.name):
         if args.stall_seconds:
             rl.thresholds["stall_seconds"] = args.stall_seconds
-        state = states.get(str(rl.fields.get("job_id") or ""), "")
-        a = assess(rl, slurm_state=state)
+        job_id = str(rl.fields.get("job_id") or "")
+        accounting.fill_times(rl, records.get(job_id))
+        a = assess(rl, slurm_state=states.get(job_id, ""), accounting=records.get(job_id))
         v = RunView(log=rl, assessment=a, source=source_of(Path(rl.path), remotes))
         v.page = f"{slug(Path(rl.path).stem)}.html"
         if not args.no_plots:
@@ -366,6 +392,10 @@ def build(
             v.log_href = report.copy_log(rl, outdir, MAX_EMBED_LOG)
         views.append(v)
     return views
+
+
+def _is_synced(rl: RunLog, remotes: list[tuple[str, Path]]) -> bool:
+    return any(Path(rl.path).resolve().is_relative_to(d.resolve()) for _, d in remotes)
 
 
 def write_report(args, views: list[RunView], outdir: Path, sources: list[str]) -> Path:
@@ -488,6 +518,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-plots", action="store_true", help="skip the figures")
     p.add_argument("--no-cache", action="store_true", help="ignore and do not write the cache")
     p.add_argument("--no-squeue", action="store_true", help="do not ask SLURM for job states")
+    p.add_argument(
+        "--no-sacct", action="store_true", help="do not read SLURM accounting (sacct) for the jobs"
+    )
     p.add_argument(
         "--embed-logs",
         action="store_true",
