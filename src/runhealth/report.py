@@ -1621,7 +1621,7 @@ def _run_label(log: RunLog) -> tuple[str, str]:
     """The run's name and the job and start date that tell two runs apart."""
     started = format_stamp(log.first_wall)[:10]
     job_id = log.fields.get("job_id")
-    return log.fields.get("job_name") or log.name, " \u00b7 ".join(
+    return run_kind(log), " \u00b7 ".join(
         x for x in (job_id, started) if x
     )
 
@@ -1631,7 +1631,9 @@ def _run_menu(views: list[RunView], current: str, index_href: str) -> str:
     if len(views) < 2:
         return ""
     items = []
-    for v in sorted(views, key=lambda v: v.log.first_wall or 0, reverse=True):
+    # Runs of one kind stay together, the newest first within each kind.
+    views = sorted(views, key=lambda v: v.log.first_wall or 0, reverse=True)
+    for v in sorted(views, key=lambda v: run_kind(v.log)):
         name, meta = _run_label(v.log)
         here = ' aria-current="page"' if v.page == current else ""
         meta_html = f'<span class="meta">{esc(meta)}</span>' if meta else ""
@@ -2019,7 +2021,7 @@ def render_run(
     view: RunView, index_href: str = "index.html", siblings: list[RunView] | None = None
 ) -> str:
     log, a = view.log, view.assessment
-    name = log.fields.get("job_name") or log.name
+    name = run_kind(log)
     title = f"{name} - run health"
     base = previous_runs(siblings or []).get(view.page)
     diff, template = _diff_template(view, base) if base else (None, "")

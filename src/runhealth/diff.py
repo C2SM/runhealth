@@ -30,9 +30,10 @@ def run_kind(log: RunLog) -> str:
     if name:
         return name
     # Without SLURM metadata the log name is the only name there is; the job
-    # id has to go, or every run looks like a kind of its own.
+    # id has to go, or every run looks like a kind of its own, and so does the
+    # LOG. prefix of SLURM's LOG.%x.%j.o, which the job name never carries.
     stem = Path(log.path).stem or log.name
-    return JOB_ID_SUFFIX.sub("", stem) or stem
+    return JOB_ID_SUFFIX.sub("", stem).removeprefix("LOG.") or stem
 
 
 @dataclass

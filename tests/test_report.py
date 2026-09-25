@@ -1,3 +1,4 @@
+import copy
 import re
 from dataclasses import replace
 from pathlib import Path
@@ -393,6 +394,20 @@ def test_run_page_switches_to_the_other_runs(parsed, assessed):
     assert 'aria-current="page"' in html
     # A single run has nothing to switch to, so the name stays plain text.
     assert '<details class="jump">' not in report.render_run(vs[0], siblings=vs[:1])
+
+
+def test_run_menu_groups_runs_of_one_kind(parsed, assessed):
+    vs = copy.deepcopy(views(parsed, assessed, ["icon_success", "icon_hang", "slurm_generic"]))
+    names = ["LOG.jcp_r2b8.900001.o", "LOG.jcp_r2b10.900002.o", "LOG.jcp_r2b10.900003.o"]
+    for v, name, wall in zip(vs, names, (3.0, 1.0, 2.0)):
+        v.log.path, v.log.first_wall = f"/runs/{name}", wall
+        v.log.fields.pop("job_name", None)
+    menu = report._run_menu(vs, vs[0].page, "index.html")
+    # Name first, so r2b10 precedes r2b8, then the newest run of each kind.
+    assert [menu.index(f'href="{v.page}"') for v in (vs[2], vs[1], vs[0])] == sorted(
+        menu.index(f'href="{v.page}"') for v in vs
+    )
+    assert "LOG." not in menu and ">jcp_r2b10<" in menu
 
 
 def changed_scripts(parsed, assessed):

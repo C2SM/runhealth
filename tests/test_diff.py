@@ -10,7 +10,7 @@ def test_runs_are_grouped_by_the_job_name(parsed):
 
 
 def test_a_log_without_slurm_metadata_falls_back_to_its_name():
-    assert run_kind(RunLog(path="/runs/LOG.jcp_r2b10.863100.o")) == "LOG.jcp_r2b10"
+    assert run_kind(RunLog(path="/runs/LOG.jcp_r2b10.863100.o")) == "jcp_r2b10"
     # Nothing that looks like a job id, so the name is kept whole.
     assert run_kind(RunLog(path="/runs/nightly.log")) == "nightly"
 
