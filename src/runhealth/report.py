@@ -281,6 +281,7 @@ a:hover { border-bottom-color: currentColor; }
 .nav .jump .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis;
   white-space: nowrap; }
 .nav .jump .meta { color: var(--muted); font-size: 12.5px; font-weight: 400; }
+.nav .jump .grp { margin: 4px 9px; border: none; border-top: 1px solid var(--line); opacity: .6; }
 /* The dot is split along the diagonal: the run's status on one side, its
    health grade on the other, in the order the header badges name them. */
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto;
@@ -1736,8 +1737,12 @@ def _run_menu(views: list[RunView], current: str, index_href: str) -> str:
     items = []
     # Runs of one kind stay together, the newest first within each kind.
     views = sorted(views, key=lambda v: v.log.first_wall or 0, reverse=True)
+    kind = None
     for v in sorted(views, key=lambda v: run_kind(v.log)):
         name, meta = _run_label(v.log)
+        if kind is not None and name != kind:
+            items.append('<hr class="grp">')
+        kind = name
         here = ' aria-current="page"' if v.page == current else ""
         meta_html = f'<span class="meta">{esc(meta)}</span>' if meta else ""
         items.append(

@@ -409,6 +409,9 @@ def test_run_menu_groups_runs_of_one_kind(parsed, assessed):
         menu.index(f'href="{v.page}"') for v in vs
     )
     assert "LOG." not in menu and ">jcp_r2b10<" in menu
+    # A divider separates the two kinds, and only them.
+    assert menu.count('<hr class="grp">') == 1
+    assert menu.index(f'href="{vs[1].page}"') < menu.index("<hr") < menu.index(f'href="{vs[0].page}"')
 
 
 def test_index_groups_runs_of_one_kind(parsed, assessed):
