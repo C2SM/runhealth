@@ -317,7 +317,7 @@ def progress_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         for (px, _), record, step, value, w in zip(points, a.intervals, steps, slowest, warm)
         if median and value > factor * median and not w
     ]
-    for px, py, step, value in _thin(hot, 120):
+    for px, py, step, value in sorted(hot, key=lambda h: -h[3])[:120]:
         tip = _tip(
             f"{label} {step:,}",
             _sim(clock, clock.at_step(step)) if clock else "",
