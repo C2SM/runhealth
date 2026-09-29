@@ -119,7 +119,9 @@ fields:
 ```
 
 `group` picks the capture group (default 1), `cast` is `int` or `float`, and
-`keep` is `first` (default) or `last`.
+`keep` is `first` (default) or `last`. A `float` also accepts what Fortran
+prints: a `D` exponent, an exponent of three digits without its `E`
+(`0.22+279`), and a field of asterisks, which is read as infinity.
 
 One name is conventional: a field called `<component>_ranks`, cast to `int`,
 declares how many ranks a component of a coupled model was given. The report
@@ -199,6 +201,35 @@ line.
   gap between successive events of the same series is also tracked: an
   outlier gap raises a cadence check, and the "Output cadence" figure plots
   every series over the run.
+- `stability`: values a model reports about its own numerical state, such as
+  wind maxima or CFL numbers. They feed the "Numerical stability" check and
+  one figure per `figure` group.
+
+A `stability` series takes four more keys:
+
+```yaml
+series:
+  max_w:
+    re: 'MAXABS VN, W .* +(\S+?) at level +(\d+),$'
+    fields: [w, level]
+    cast: {w: float, level: int}
+    role: stability
+    peak: w                  # the field that is judged and plotted
+    label: vertical wind |w|
+    unit: m/s
+    figure: Maximum wind speed
+```
+
+With `peak`, the series is judged against the thresholds `<series>_warn` and
+`<series>_fail` (here `max_w_warn`, `max_w_fail`). A value that is not finite
+always fails. The other fields of the record, such as the level, are quoted as
+evidence. A series with `peak` is never cut off: once it holds 20,000 records,
+neighboring pairs are merged and each keeps its larger value, so a series
+reported on every substep still covers the whole run. The first record at or
+beyond the `_fail` limit and the record before it are kept exactly.
+
+Without `peak`, a `stability` series is counted as events, listed in the check,
+and drawn as dots along the bottom of the figure named by its `figure`.
 
 ### `markers`: phases
 
@@ -351,6 +382,7 @@ Every number a check compares against. The defaults are defined in
 | `node_share_warn` | 0.25 | one node's share of a family that makes it suspect |
 | `network_timeouts_warn` | 10000 | recovered Slingshot network timeouts that warn; any nonzero count below is reported for information, or warns if the run failed |
 | `network_timeouts_fail` | 100000 | network timeouts that fail a run |
+| `<series>_warn`, `<series>_fail` | none | limits for a `role: stability` series with `peak`; the ICON profile sets `max_vn_warn: 400`, `max_vn_fail: 1000`, `max_w_warn: 100` and `max_w_fail: 1000` (m/s) |
 
 ## Testing a profile
 

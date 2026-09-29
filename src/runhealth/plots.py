@@ -14,12 +14,13 @@ PDF.
 
 from __future__ import annotations
 
+import math
 import statistics
 from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 
-from . import style, svg
+from . import health, style, svg
 from .extract import RunLog
 from .health import STATUS_LEVEL, Assessment, ModelClock, counter_rows, model_clock, rate_text
 from .logfile import format_duration, format_sim_span, format_stamp
@@ -524,6 +525,168 @@ def io_cadence(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     )
 
 
+def stability(log: RunLog, a: Assessment, uid: str) -> list[Figure]:
+    """One figure per ``figure`` group of the ``role: stability`` series."""
+    peaks, events = health.stability_series(log)
+    groups: dict[str, tuple[list[str], list[str]]] = {}
+    for name in peaks:
+        meta = log.series_meta[name]
+        groups.setdefault(meta.get("figure") or meta.get("label") or name, ([], []))[0].append(name)
+    for name in events:
+        title = log.series_meta.get(name, {}).get("figure")
+        if title in groups:
+            groups[title][1].append(name)
+    out = []
+    for i, (title, (names, marks)) in enumerate(groups.items()):
+        figure = _stability_figure(log, title, names, marks, f"{uid}-{i}")
+        if figure:
+            out.append(figure)
+    return out
+
+
+def _stability_figure(
+    log: RunLog, title: str, names: list[str], marks: list[str], uid: str
+) -> Figure | None:
+    t0 = log.first_wall or 0.0
+    total = log.wall_seconds or 1.0
+    clock = model_clock(log)
+    series = []
+    for name in names:
+        meta = log.series_meta[name]
+        key = meta["peak"]
+        warn, fail = health.stability_limits(log, name)
+        points = [
+            (r["wall"], r.get(key), r)
+            for r in log.series[name]
+            if r.get("wall") is not None and isinstance(r.get(key), (int, float))
+        ]
+        if points:
+            series.append((name, meta, key, warn, fail, points))
+    if not series:
+        return None
+    sane = [
+        abs(v) for *_, fail, points in series for _, v, _ in points if not health.beyond(v, fail)
+    ]
+    y_max = (max(sane) if sane else 1.0) * 1.14 or 1.0
+    units = {meta.get("unit", "") for _, meta, *_ in series}
+
+    ch = svg.Chart(height=266, pad=(68, 26, 20, 58), uid=uid)
+    p = ch.plot
+    x = svg.Scale(0, total, p.x, p.right)
+    y = svg.Scale(0, y_max, p.bottom, p.y)
+    samples = []
+    legend_entries = []
+    for i, (name, meta, key, warn, fail, points) in enumerate(series):
+        cls = f"s{i % 7}"
+        label = meta.get("label", name.replace("_", " "))
+        unit = f" {meta['unit']}" if meta.get("unit") else ""
+
+        def tip(wall, value, record, head=label):
+            return _tip(
+                head,
+                f"{health.value_text(value)}{unit}",
+                ", ".join(
+                    f"{k} {v}"
+                    for k, v in record.items()
+                    if k not in ("wall", key) and v is not None
+                ),
+                f"at {format_stamp(wall)}",
+                _sim_at(clock, wall),
+            )
+
+        def py(value):
+            size = abs(value)
+            return y(y_max if math.isnan(size) or size > y_max else size)
+
+        xy = [(x(w - t0), py(v)) for w, v, _ in points]
+        # A model may report only while a value is high, so a long pause is a
+        # break in the line rather than a straight stretch across it.
+        cuts = [0] + [
+            k for k in range(1, len(points)) if points[k][0] - points[k - 1][0] > 0.02 * total
+        ]
+        body = lone = ""
+        for lo, hi in zip(cuts, cuts[1:] + [len(points)]):
+            if hi - lo == 1:
+                lone += ch.circle(*xy[lo], 2.2, cls=f"{cls} fill")
+            else:
+                body += ch.path(
+                    _decimate(xy[lo:hi], p.w),
+                    cls=f"{cls} stroke",
+                    vector_effect="non-scaling-stroke",
+                )
+        ch.geometry.append(svg.tag("g", body, cls="series", data_series=str(i), aria_label=label))
+        if lone:
+            ch.points.append(svg.tag("g", lone, cls="series", data_series=str(i)))
+        bad = [(w, v, r) for w, v, r in points if health.beyond(v, fail)]
+        dots = "".join(
+            ch.circle(
+                x(w - t0),
+                py(v),
+                3.4,
+                **_mark("lv-fail fill", tip(w, v, r, f"{label}: beyond limit")),
+            )
+            for w, v, r in _thin(bad, 60)
+        )
+        if dots:
+            ch.points.append(svg.tag("g", dots, cls="series", data_series=str(i)))
+        if warn is not None and warn <= y_max:
+            ch.frame.append(ch.line(p.x, y(warn), p.right, y(warn), cls="ref dash"))
+            ch.frame.append(
+                ch.text(
+                    p.right - 3,
+                    y(warn) - 6,
+                    f"{label} limit {warn:g}{unit}",
+                    cls="ref-label",
+                    text_anchor="end",
+                )
+            )
+        legend_entries.append((cls, label))
+        for (w, v, r), (px, ppy) in _thin(list(zip(points, xy)), MAX_HOVER_SAMPLES):
+            samples.append([round(px, 1), round(ppy, 1), round(w - t0, 1), tip(w, v, r)])
+
+    # Events sit in their own rows along the bottom edge, one color each.
+    for j, name in enumerate(marks):
+        i = len(series) + j
+        cls = f"s{i % 7}"
+        label = log.series_meta.get(name, {}).get("label", name.replace("_", " "))
+        dots = ""
+        for r in _thin([r for r in log.series[name] if r.get("wall") is not None], 200):
+            extra = ", ".join(f"{k} {v}" for k, v in r.items() if k != "wall" and v is not None)
+            text = _tip(label, extra, f"at {format_stamp(r['wall'])}", _sim_at(clock, r["wall"]))
+            cy = p.bottom - 5 - 8 * j
+            dots += ch.circle(x(r["wall"] - t0), cy, 2.6, **_mark(f"{cls} fill", text))
+        ch.points.append(svg.tag("g", dots, cls="series", data_series=str(i)))
+        legend_entries.append((cls, f"{label} ({len(log.series[name])})"))
+
+    ch.legend(legend_entries)
+    unit, fmt = _time_fmt(total)
+    ch.x_axis(x, svg.time_ticks(total), fmt, "wall clock since the first stamped line", unit=unit)
+    y_fmt = svg.si if y_max >= 10 else (lambda t: f"{t:g}")
+    ch.y_axis(y, svg.nice_ticks(0, y_max, 5), y_fmt, units.pop() if len(units) == 1 else "")
+    reports = sum(len(s[-1]) for s in series)
+    return Figure(
+        key=f"stability_{title.lower().replace(' ', '_')}",
+        title=title,
+        note=f"{reports:,} points",
+        caption=(
+            "Largest values the model reports about its own numerical state, over the run. "
+            "A value beyond its failure limit, or not finite, is pinned to the top edge in "
+            "red; dashed lines are warning limits. A gap in a line is a stretch without "
+            "reports."
+            + (" Dots along the bottom mark related events." if marks else "")
+            + " Click a legend entry to hide that series, drag across the chart to zoom."
+        ),
+        svg=ch.render(
+            f"{title}: {', '.join(meta.get('label', name) for name, meta, *_ in series)}",
+            zoom=True,
+            xdomain=f"0,{svg.num(total)}",
+            xfmt="duration",
+            samples=svg.pack(samples),
+            time="1",
+        ),
+    )
+
+
 def timer_breakdown(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     picks = []
     for group in a.timers:
@@ -826,6 +989,7 @@ MAKERS = [
     progress_rate,
     top_gaps,
     io_cadence,
+    stability,
     timer_breakdown,
     imbalance,
     warning_rate,
@@ -844,11 +1008,10 @@ def render_run(
         except Exception as exc:  # a figure must never sink the report
             log.notes.append(f"figure {maker.__name__} failed: {exc}")
             continue
-        if figure is None:
-            continue
-        if standalone:
-            figure.href = write_standalone(figure, outdir, prefix)
-        out.append(figure)
+        for f in figure if isinstance(figure, list) else [figure] if figure else []:
+            if standalone:
+                f.href = write_standalone(f, outdir, prefix)
+            out.append(f)
     return out
 
 

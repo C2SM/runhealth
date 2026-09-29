@@ -112,6 +112,62 @@ series:
     fields: [gigabytes, seconds, gb_per_s]
     cast: {gigabytes: float, seconds: float, gb_per_s: float}
     role: io
+  # Global wind maxima, printed on every dynamics substep. msg_level >= 7
+  # adds the level, msg_level >= 13 also the rank; below 7 only the values.
+  max_vn:
+    re: 'MAXABS VN, W(?: in domain *\d+:)? +(\S+?)(?:(?: at level|\s*\(on proc # *(\d+), level) +(\d+))?(?:\)?,| )'
+    contains: 'MAXABS VN, W'
+    fields: [vn, rank, level]
+    cast: {vn: float, rank: int, level: int}
+    role: stability
+    peak: vn
+    label: horizontal wind |vn|
+    unit: m/s
+    figure: Maximum wind speed
+  max_w:
+    re: 'MAXABS VN, W(?: in domain *\d+:)? +\S+?(?:(?: at level|\s*\(on proc # *\d+, level) +\d+\)?,)? +(\S+?)(?:(?: at level|\s*\(on proc # *(\d+), level) +(\d+))?(?:\)?,|\s*$)'
+    contains: 'MAXABS VN, W'
+    fields: [w, rank, level]
+    cast: {w: float, rank: int, level: int}
+    role: stability
+    peak: w
+    label: vertical wind |w|
+    unit: m/s
+    figure: Maximum wind speed
+  # Printed only in the CFL watch mode, i.e. once the CFL number approaches
+  # vcfl_threshold. A value that overflows the field prints as asterisks.
+  vertical_cfl:
+    re: 'Maximum vertical CFL number in domain +\d+: *(\S+)'
+    contains: 'Maximum vertical CFL'
+    fields: [cfl]
+    cast: {cfl: float}
+    role: stability
+    peak: cfl
+    label: vertical CFL
+    figure: CFL number
+  horizontal_cfl:
+    re: 'Maximum horizontal CFL number in domain +\d+: *(\S+)'
+    contains: 'Maximum horizontal CFL'
+    fields: [cfl]
+    cast: {cfl: float}
+    role: stability
+    peak: cfl
+    label: horizontal CFL
+    figure: CFL number
+  cfl_watch:
+    re: 'High CFL number for horizontal or vertical advection'
+    contains: 'High CFL number'
+    role: stability
+    label: CFL watch mode entries
+    figure: CFL number
+  substeps_increased:
+    re: 'Number of dynamics substeps in domain +\d+ increased to +(\d+)'
+    contains: 'substeps in domain'
+    fields: [substeps]
+    cast: {substeps: int}
+    role: stability
+    label: dynamics substep increases
+    figure: CFL number
 
 # Markers cut the wall clock into phases. The label names the stretch that
 # *starts* at the marker, which is what the timeline reads out.
@@ -142,6 +198,15 @@ markers:
     re: 'clean-up finished'
     contains: clean-up finished
     label: cleanup
+
+# Limits for the peak series above, as <series>_warn and <series>_fail. The
+# warnings sit just above what healthy global runs at 2.5 km reach, the
+# failures well beyond anything physical.
+thresholds:
+  max_vn_warn: 400
+  max_vn_fail: 1000
+  max_w_warn: 100
+  max_w_fail: 1000
 
 groups:
   icon_warning:

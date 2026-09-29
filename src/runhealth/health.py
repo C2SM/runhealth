@@ -22,7 +22,7 @@ from typing import Any
 
 from . import diag
 from .accounting import ACTIVE_STATES, FAILED_STATES, base_state
-from .extract import RunLog
+from .extract import RunLog, beyond, magnitude
 from .logfile import format_duration, format_sim_span, format_stamp, parse_walltime
 from .tables import Table
 
@@ -366,6 +366,7 @@ def assess(
     a.checks.append(_check_stall(log, a, stall_seconds))
     a.checks.append(_check_walltime(log, a, acct))
     a.checks.extend(_check_progress(log, a))
+    a.checks.append(_check_stability(log))
     a.checks.extend(_check_timers(log, a))
     a.checks.extend(_check_coupling(log, a))
     a.checks.extend(_check_io(log, a))
@@ -740,6 +741,145 @@ def _check_progress(log: RunLog, a: Assessment) -> list[Check]:
             )
         )
     return out
+
+
+# -- numerical stability --------------------------------------------------
+
+
+def stability_series(log: RunLog) -> tuple[dict[str, list[dict]], dict[str, list[dict]]]:
+    """The non-empty ``role: stability`` series: those with a ``peak`` value, and plain events."""
+    peaks: dict[str, list[dict]] = {}
+    events: dict[str, list[dict]] = {}
+    for name, role in log.series_roles.items():
+        records = log.series.get(name)
+        if role != "stability" or not records:
+            continue
+        key = log.series_meta.get(name, {}).get("peak")
+        if key is None:
+            events[name] = records
+        elif any(isinstance(r.get(key), (int, float)) for r in records):
+            peaks[name] = records
+    return peaks, events
+
+
+def stability_limits(log: RunLog, name: str) -> tuple[float | None, float | None]:
+    """The ``<series>_warn`` and ``<series>_fail`` thresholds of a peak series."""
+    warn = log.threshold(f"{name}_warn", None)
+    fail = log.threshold(f"{name}_fail", None)
+    return (None if warn is None else float(warn)), (None if fail is None else float(fail))
+
+
+def value_text(value) -> str:
+    if not isinstance(value, (int, float)):
+        return "-"
+    if math.isnan(value):
+        return "NaN"
+    if math.isinf(value):
+        return "overflow"
+    return f"{value:.2e}" if abs(value) >= 1e5 else f"{value:.4g}"
+
+
+def model_date(clock: ModelClock | None, wall: float | None) -> str:
+    seconds = clock.at_wall(wall) if clock and clock.points and wall is not None else None
+    return (
+        "" if seconds is None else f"{clock.start + timedelta(seconds=seconds):%Y-%m-%d %H:%M:%S}"
+    )
+
+
+def _stability_record(log: RunLog, clock, name: str, record: dict) -> str:
+    meta = log.series_meta.get(name, {})
+    key = meta.get("peak", "")
+    unit = f" {meta['unit']}" if meta.get("unit") and key else ""
+    where = ", ".join(
+        f"{k} {v}" for k, v in record.items() if k not in ("wall", key) and v is not None
+    )
+    date = model_date(clock, record.get("wall"))
+    return ", ".join(
+        part
+        for part in (
+            f"{value_text(record.get(key))}{unit}" if key else "",
+            where,
+            f"model time {date}" if date else "",
+            f"at {format_stamp(record['wall'])}" if record.get("wall") is not None else "",
+        )
+        if part
+    )
+
+
+def _check_stability(log: RunLog) -> Check | None:
+    """Peak values a model reports about its own numerical state, such as wind maxima.
+
+    A value that is not finite, or beyond its ``_fail`` threshold, fails the
+    run and names the first report that was, so a later crash can be read as a
+    consequence of it.
+    """
+    peaks, events = stability_series(log)
+    if not peaks and not events:
+        return None
+    clock = model_clock(log)
+    levels: list[str] = []
+    blown: list[tuple[float, str]] = []
+    heads: list[str] = []
+    ev: list[str] = []
+    for name, records in peaks.items():
+        meta = log.series_meta[name]
+        key, label = meta["peak"], meta.get("label", name.replace("_", " "))
+        unit = f" {meta['unit']}" if meta.get("unit") else ""
+        warn, fail = stability_limits(log, name)
+        top = max(records, key=lambda r: magnitude(r.get(key)))
+        breach = log.series_breach.get(name)
+        if not breach:
+            i = next((i for i, r in enumerate(records) if beyond(r.get(key), fail)), None)
+            breach = None if i is None else records[max(0, i - 1) : i + 1]
+        if breach:
+            bad = breach[-1]
+            levels.append("fail")
+            date = model_date(clock, bad.get("wall"))
+            blown.append(
+                (
+                    bad.get("wall") or 0.0,
+                    f"{label} blew up to {value_text(bad.get(key))}{unit}"
+                    + (f" at model time {date}" if date else ""),
+                )
+            )
+            ev.append(f"{label} first beyond the limit: {_stability_record(log, clock, name, bad)}")
+            if len(breach) > 1:
+                ev.append(
+                    f"{label} in the report before: "
+                    f"{_stability_record(log, clock, name, breach[0])}"
+                )
+            ev.append(f"{label} peak: {_stability_record(log, clock, name, top)}")
+            continue
+        if beyond(top.get(key), warn):
+            levels.append("warn")
+            heads.append(f"{label} reached {value_text(top.get(key))}{unit}, limit {warn:g}")
+        else:
+            levels.append("ok")
+            heads.append(f"peak {label} {value_text(top.get(key))}{unit}")
+        ev.append(f"{label} peak: {_stability_record(log, clock, name, top)}")
+        stride = log.series_stride.get(name, 1)
+        if stride > 1:
+            ev.append(f"{label}: {len(records):,} points, each the largest of {stride} reports")
+    for name, records in events.items():
+        label = log.series_meta.get(name, {}).get("label", name.replace("_", " "))
+        first, last = records[0].get("wall"), records[-1].get("wall")
+        ev.append(
+            f"{len(records):,} {label}"
+            + (f", first {format_stamp(first)}" if first is not None else "")
+            + (f", last {format_stamp(last)}" if last is not None and len(records) > 1 else "")
+        )
+    level = _worst(levels) if levels else "ok"
+    if blown:
+        headline = "; ".join(text for _, text in sorted(blown))
+        detail = (
+            "The model reported a value that is not physical. The state was already corrupted "
+            "at that point, so errors reported afterwards, such as an illegal memory access or "
+            "an overflowing CFL number, are most likely consequences rather than the cause."
+        )
+    else:
+        headline = ", ".join(heads) if heads else f"{sum(map(len, events.values())):,} events"
+        detail = ""
+    return Check("stability", "Numerical stability", level, headline, detail, ev)
 
 
 def _check_timers(log: RunLog, a: Assessment) -> list[Check]:

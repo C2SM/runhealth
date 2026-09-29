@@ -141,6 +141,7 @@ remaining checks.
 | **Throughput** | Progress reached and the rate, in the unit the profile names (SYPD and SDPD for a climate model), both overall and after warm-up, and the simulated time the job covered with its model dates. The first progress interval carries one-off costs such as kernel compilation and is left out of the steady-state rate and the outlier count. |
 | **Throughput drift** | Whether the run slowed between its first and last quarter, which points at something degrading rather than a single bad moment. |
 | **Slow intervals** | Individual progress intervals after warm-up far above the median: output, checkpointing, or a transient stall. |
+| **Numerical stability** | Values the model reports about its own state: for ICON, the global maxima of horizontal and vertical wind printed on every dynamics substep, and the CFL numbers, CFL watch mode entries and substep increases printed while the CFL number is high. A value that is not finite, or beyond its failure limit, fails the run; the check names the first report that was, with its level and model time, and the report before it. A crash that follows, such as an illegal memory access or an overflowing CFL number, is then most likely a consequence. Values above the warning limit warn. ICON prints the level with `msg_level >= 7` and the rank with `msg_level >= 13`. |
 | **Where the time went** | The largest timers, as a share of the total. |
 | **Load imbalance** | How much longer the slowest rank spent in each timer than the fastest. This never fails a run on its own; it is a performance observation, and spread on a *wait* timer is the symptom of imbalance created somewhere else. |
 | **Coupling cost** | The share of each component's time spent in the coupler. A coupled run prints one timer report per component, so the shares are comparable: when one component's share is much the larger, that component reaches the exchange first and waits for its partner, which usually means the ranks are split unevenly between them. Like load imbalance, this never fails a run on its own. |
@@ -194,7 +195,11 @@ points to the fabric rather than to the code.
 In addition, on every page for which the log provides the input: the **run
 timeline** shown on the [front page](index.md), the **longest silences**, each
 labeled with the last line before it, the **output cadence** (wall time between
-successive output or checkpoint writes, one line per kind of event),
+successive output or checkpoint writes, one line per kind of event), the
+**numerical stability** figures (for ICON, maximum wind speed and CFL number
+over the run, with values beyond the failure limit pinned to the top edge in
+red and CFL watch mode entries and substep increases as dots along the
+bottom),
 **load imbalance** per timer, and the **network counter spread** between the
 least and the most loaded NIC.
 

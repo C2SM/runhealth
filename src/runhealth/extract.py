@@ -19,6 +19,7 @@ re-reading a 150 MB file on every pass.
 from __future__ import annotations
 
 import heapq
+import math
 import re
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
@@ -62,6 +63,13 @@ ATTEMPT_GAP_FALLBACK = 6 * 3600.0
 MAX_GROUP_KEYS = 4000
 MAX_ERROR_KEYS = 200
 MAX_EVENTS = 50_000
+# A series with ``peak`` is binned instead of cut off, so it covers the whole
+# run; each bin keeps its largest record.
+MAX_BINNED_EVENTS = 20_000
+# The descriptive keys of a series spec that the checks and figures read.
+SERIES_META = ("peak", "label", "unit", "figure")
+# A Fortran E format drops the E when the exponent needs three digits.
+FORTRAN_EXP_RE = re.compile(r"(?<=[\d.])([+-]\d{3})$")
 TOP_GAPS = 25
 
 
@@ -127,6 +135,12 @@ class RunLog:
     keyvalues: dict[str, dict[str, str]] = field(default_factory=dict)
     series: dict[str, list[dict]] = field(default_factory=dict)
     series_roles: dict[str, str] = field(default_factory=dict)
+    series_meta: dict[str, dict] = field(default_factory=dict)
+    # Records merged into each bin of a ``peak`` series.
+    series_stride: dict[str, int] = field(default_factory=dict)
+    # The report before and the first report at or beyond ``<series>_fail``,
+    # kept exactly because binning would blur both.
+    series_breach: dict[str, list[dict]] = field(default_factory=dict)
     markers: list[Marker] = field(default_factory=list)
     groups: dict[str, GroupStat] = field(default_factory=dict)
     errors: dict[str, GroupStat] = field(default_factory=dict)
@@ -247,9 +261,7 @@ class Extractor:
         self._tables = [r for p in profiles for r in p.tables]
         self._outcome = [r for p in profiles for r in p.outcome]
         self._boundary = [r for p in profiles for r in p.boundary]
-        for r in self._series:
-            self.log.series.setdefault(r.name, [])
-            self.log.series_roles[r.name] = r.spec.get("role", "")
+        self._declare_series(self.log)
         for r in self._groups:
             self.log.groups.setdefault(r.name, GroupStat(label=r.spec.get("label", r.name)))
         self._gap_heap: list[tuple[float, int, Gap]] = []
@@ -265,6 +277,16 @@ class Extractor:
         self._has_preamble = False
         self._stamped_since_reset = 0
         self._unstamped: list[Line] = []
+        self._fill: dict[str, int] = {}
+        self._last: dict[str, dict] = {}
+
+    def _declare_series(self, log: RunLog) -> None:
+        for r in self._series:
+            log.series.setdefault(r.name, [])
+            log.series_roles[r.name] = r.spec.get("role", "")
+            meta = {k: r.spec[k] for k in SERIES_META if k in r.spec}
+            if meta:
+                log.series_meta[r.name] = meta
 
     # -- resume support ---------------------------------------------------
 
@@ -424,9 +446,9 @@ class Extractor:
         fresh.keyvalues["sbatch"] = dict(keep.keyvalues.get("sbatch", {}))
         fresh.runscript = keep.runscript
         self.log = fresh
-        for r in self._series:
-            fresh.series.setdefault(r.name, [])
-            fresh.series_roles[r.name] = r.spec.get("role", "")
+        self._declare_series(fresh)
+        self._fill.clear()
+        self._last.clear()
         for r in self._groups:
             fresh.groups.setdefault(r.name, GroupStat(label=r.spec.get("label", r.name)))
         self._gap_heap.clear()
@@ -486,7 +508,8 @@ class Extractor:
 
     def _do_series(self, rule, text: str, line: Line) -> None:
         bucket = self.log.series[rule.name]
-        if len(bucket) >= MAX_EVENTS:
+        peak = rule.spec.get("peak")
+        if len(bucket) >= MAX_EVENTS and not peak:
             return
         m = rule.search(text)
         if not m:
@@ -499,7 +522,42 @@ class Extractor:
         for i, key in enumerate(names, start=1):
             if m.lastindex and i <= m.lastindex:
                 rec[key] = _cast(m.group(i), casts.get(key))
-        bucket.append(rec)
+        if peak:
+            self._check_breach(rule.name, rec, peak)
+            self._add_binned(rule.name, bucket, rec, lambda a, b: _larger(a, b, peak))
+        else:
+            bucket.append(rec)
+
+    def _check_breach(self, name: str, rec: dict, key: str) -> None:
+        if name not in self.log.series_breach:
+            fail = self.log.threshold(f"{name}_fail", None)
+            if beyond(rec.get(key), None if fail is None else float(fail)):
+                self.log.series_breach[name] = [r for r in (self._last.get(name), rec) if r]
+            self._last[name] = rec
+
+    def _add_binned(
+        self,
+        name: str,
+        bucket: list[dict],
+        rec: dict,
+        merge: Callable[[dict, dict], dict],
+    ) -> None:
+        """Append to a binned series, halving its resolution whenever it is full."""
+        stride = self.log.series_stride.get(name, 1)
+        fill = self._fill.get(name, stride)
+        if bucket and fill < stride:
+            bucket[-1] = merge(bucket[-1], rec)
+            self._fill[name] = fill + 1
+        else:
+            bucket.append(rec)
+            self._fill[name] = 1
+        if len(bucket) >= MAX_BINNED_EVENTS:
+            pairs = range(0, len(bucket), 2)
+            bucket[:] = [
+                merge(*bucket[i : i + 2]) if i + 1 < len(bucket) else bucket[i] for i in pairs
+            ]
+            self.log.series_stride[name] = 2 * stride
+            self._fill[name] = 2 * stride
 
     def _do_marker(self, rule, text: str, line: Line) -> None:
         if not rule.spec.get("all") and any(m.name == rule.name for m in self.log.markers):
@@ -601,6 +659,39 @@ class Extractor:
         self._reader_rank = None
 
 
+def magnitude(value: Any) -> float:
+    """Size of a series value for ranking; a missing value is the smallest, NaN the largest."""
+    if not isinstance(value, (int, float)):
+        return -1.0
+    return math.inf if math.isnan(value) else abs(value)
+
+
+def beyond(value: Any, limit: float | None) -> bool:
+    """A value at or above the limit; a value that is not finite always is."""
+    size = magnitude(value)
+    return size == math.inf or (limit is not None and size >= limit)
+
+
+def _larger(a: dict, b: dict, key: str) -> dict:
+    return b if magnitude(b.get(key)) > magnitude(a.get(key)) else a
+
+
+def _float(raw: str) -> float | None:
+    """A float as Fortran prints it, including the forms Python rejects."""
+    text = raw.strip()
+    try:
+        return float(text)
+    except ValueError:
+        pass
+    # Fortran fills a field with asterisks when the value does not fit.
+    if text and set(text) == {"*"}:
+        return math.inf
+    try:
+        return float(FORTRAN_EXP_RE.sub(r"E\1", text.replace("D", "E").replace("d", "E")))
+    except ValueError:
+        return None
+
+
 def _cast(raw: str, kind: str | None):
     if kind == "int":
         try:
@@ -608,10 +699,7 @@ def _cast(raw: str, kind: str | None):
         except (TypeError, ValueError):
             return None
     if kind == "float":
-        try:
-            return float(raw)
-        except (TypeError, ValueError):
-            return None
+        return _float(raw) if isinstance(raw, str) else None
     return raw.strip() if isinstance(raw, str) else raw
 
 
