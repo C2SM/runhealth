@@ -246,6 +246,7 @@ def test_pages_carry_a_sticky_nav_and_a_table_of_contents(tmp_path, parsed, asse
     assert 'href="#checks"' in html and 'href="#figures"' in html
     assert 'href="#fig-timeline"' in html  # figures are listed individually
     assert 'href="#check-0" class="lv2"' in html  # and so are the checks
+    assert '<span class="tdot g-' in html  # each with a dot in its grade color
     assert '<a class="skip" href="#main">' in html
 
 

@@ -201,18 +201,20 @@ class Toc:
     """Anchors collected while a page is built, in reading order."""
 
     def __init__(self) -> None:
-        self.items: list[tuple[str, str, int]] = []
+        self.items: list[tuple[str, str, int, str]] = []
 
-    def add(self, anchor: str, label: str, level: int = 1) -> str:
-        self.items.append((anchor, label, level))
+    def add(self, anchor: str, label: str, level: int = 1, grade: str = "") -> str:
+        self.items.append((anchor, label, level, grade))
         return anchor
 
     def render(self) -> str:
         if len(self.items) < 2:
             return ""
         links = "".join(
-            f'<a href="#{esc(anchor)}" class="lv{level}">{esc(label)}</a>'
-            for anchor, label, level in self.items
+            f'<a href="#{esc(anchor)}" class="lv{level}">'
+            + (f'<span class="tdot g-{grade}" aria-hidden="true"></span>' if grade else "")
+            + f"{esc(label)}</a>"
+            for anchor, label, level, grade in self.items
         )
         return (
             '<aside class="toc" aria-label="On this page">'
@@ -391,6 +393,10 @@ a:hover { border-bottom-color: currentColor; }
   margin-left: -1px; border-left: 2px solid transparent; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 .toc a.lv2 { padding-left: 25px; font-size: 13.5px; }
+.toc .tdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+  margin-right: 7px; vertical-align: 1px; }
+.tdot.g-ok { background: var(--ok); } .tdot.g-info { background: var(--info); }
+.tdot.g-warn { background: var(--warn); } .tdot.g-fail { background: var(--fail); }
 .toc a:hover { color: var(--ink); }
 .toc a[aria-current="true"] { color: var(--ink); font-weight: 600;
   border-left-color: var(--info); }
@@ -2264,7 +2270,7 @@ def render_run(
         "".join(_check_card(c, i) for i, c in enumerate(a.checks)),
     ]
     for i, c in enumerate(a.checks):
-        toc.add(f"check-{i}", c.title, level=2)
+        toc.add(f"check-{i}", c.title, level=2, grade=c.level)
     if view.figures:
         body.append(f'<h2 class="sec" id="{toc.add("figures", "Figures")}">Figures</h2>')
         for f in view.figures:
