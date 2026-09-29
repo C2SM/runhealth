@@ -385,7 +385,8 @@ a:hover { border-bottom-color: currentColor; }
 .toc-h { margin: 0 0 9px; font-size: 12px; text-transform: uppercase; letter-spacing: .09em;
   color: var(--muted); font-weight: 650; }
 .toc nav { display: flex; flex-direction: column; gap: 1px;
-  border-left: 1px solid var(--line); }
+  border-left: 1px solid var(--line); overflow-y: auto; scrollbar-width: thin;
+  max-height: calc(100vh - var(--nav-h) - 100px); }
 .toc a { border: none; font-size: 14px; color: var(--muted); padding: 4px 0 4px 13px;
   margin-left: -1px; border-left: 2px solid transparent; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
@@ -401,7 +402,7 @@ main > *:first-child { margin-top: 0; }
   .toc { position: sticky; top: var(--nav-h); z-index: 30; padding: 8px 0 9px;
     background: var(--bg); border-bottom: 1px solid var(--line); }
   .toc-h { display: none; }
-  .toc nav { flex-direction: row; gap: 6px; overflow-x: auto; border-left: none;
+  .toc nav { flex-direction: row; gap: 6px; overflow-x: auto; border-left: none; max-height: none;
     scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
   .toc a { border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px;
     margin: 0; flex: 0 0 auto; }
@@ -1245,6 +1246,7 @@ JS = r"""
   // Read from the live geometry on every frame that scrolls: a jump to an
   // anchor can move a heading across the reading line without crossing it,
   // which would leave an observer holding the section already left behind.
+  // Links not shown (a narrow screen, a grade filter) are never marked.
   var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
   if (links.length) {
     var targets = links.map(function (l) {
@@ -1255,7 +1257,8 @@ JS = r"""
     function mark() {
       var best = 0;
       for (var i = 0; i < targets.length; i++) {
-        if (targets[i] && targets[i].getBoundingClientRect().top - LINE <= 0) best = i;
+        if (!targets[i] || !links[i].getClientRects().length) continue;
+        if (targets[i].getBoundingClientRect().top - LINE <= 0) best = i;
       }
       if (best === shown) return;
       shown = best;
@@ -1268,6 +1271,10 @@ JS = r"""
         var box = active.parentNode;
         var want = active.offsetLeft - box.clientWidth / 2 + active.offsetWidth / 2;
         box.scrollTo({ left: want, behavior: reduce ? 'auto' : 'smooth' });
+      } else if (active && active.parentNode.scrollHeight > active.parentNode.clientHeight) {
+        var col = active.parentNode;
+        var top = active.offsetTop - col.offsetTop - col.clientHeight / 2 + active.offsetHeight / 2;
+        col.scrollTo({ top: top, behavior: reduce ? 'auto' : 'smooth' });
       }
     }
     var queued = false;
@@ -1297,6 +1304,12 @@ JS = r"""
         document.querySelectorAll('tbody.grp').forEach(function (g) {
           g.hidden = !g.querySelector('tr[data-grade]:not([hidden])');
         });
+        // Filtered-out checks leave the table of contents as well.
+        document.querySelectorAll('#toc a').forEach(function (l) {
+          var t = document.getElementById(decodeURIComponent(l.hash.slice(1)));
+          if (t && t.matches(target)) l.hidden = t.hidden;
+        });
+        window.dispatchEvent(new Event('scroll'));
       });
     });
   });
@@ -2250,6 +2263,8 @@ def render_run(
         _grade_filters(counts, ".check", "Filter checks by grade"),
         "".join(_check_card(c, i) for i, c in enumerate(a.checks)),
     ]
+    for i, c in enumerate(a.checks):
+        toc.add(f"check-{i}", c.title, level=2)
     if view.figures:
         body.append(f'<h2 class="sec" id="{toc.add("figures", "Figures")}">Figures</h2>')
         for f in view.figures:
