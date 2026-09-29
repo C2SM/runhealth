@@ -131,6 +131,10 @@ buttons above the list filters by grade, in the same way as the index filters
 runs, so that a run with a single warning does not require reading through the
 remaining checks.
 
+The checks come in three blocks, in this order: whether the run finished, what
+went wrong, and how well it performed. The order is fixed, so that the same
+check is always found in the same place.
+
 | Check | What it means |
 | --- | --- |
 | **Outcome** | Did the job report success or failure, or did it end without a statement? SLURM's own verdict is included while `squeue` still knows the job, and the accounting record settles a log that ends without one. |
@@ -138,22 +142,22 @@ remaining checks.
 | **Hang watchdog** | Whether the job script's own watchdog (see [Improving log quality](logging.md#3-leave-diagnostics-next-to-the-log)) fired, and when it sent SIGABRT and cancelled the step. |
 | **Silence** | The longest stretch with no output. Silence *inside* the main loop, or in a run that never reached its loop, is a failure. Silence during setup is judged against a longer threshold, because reading input and compiling kernels legitimately take minutes. When the job script declares a watchdog, the silence it tolerates before the main loop is the limit until the loop starts, which also keeps a job that is still compiling from being reported as STALLED. |
 | **Wall time** | How much of the requested limit was used, and whether the scheduler cut the job off. |
+| **Errors** | Lines that look like errors, collapsed by shape, with digits masked so the same message from a thousand ranks becomes one row. |
+| **Numerical stability** | Values the model reports about its own state: for ICON, the global maxima of horizontal and vertical wind printed on every dynamics substep, and the CFL numbers, CFL watch mode entries and substep increases printed while the CFL number is high. A value that is not finite, or beyond its failure limit, fails the run; the check names the first report that was, with its level and model time, and the report before it. A crash that follows, such as an illegal memory access or an overflowing CFL number, is then most likely a consequence. Values above the warning limit warn. ICON prints the level with `msg_level >= 7` and the rank with `msg_level >= 13`. |
+| **Hang backtraces** | The gdb backtraces of the main thread taken during a hang, grouped by the innermost frame and the innermost frame with a source location. A rank in uninterruptible sleep, blocked in the kernel, warns. |
+| **Kernel messages** | GPU Xid events and out-of-memory kills in the nodes' kernel logs. Xid codes that indicate a hardware fault, and out-of-memory kills, fail the run. |
+| **GPU health** | From the GPU monitor in the diagnostics directory: uncorrected ECC errors fail the run; hardware slowdown, thermal slowdown and power brake warn, because they make their node the slowest of the run. Peak temperature, power and memory are listed. |
+| **Suspect nodes** | Nodes named in step failures, carrying a disproportionate share of the warnings, or implicated by the diagnostics directory (ECC errors, slowdown, a fatal Xid, GPUs busy while the rest waited). The list can be pasted directly into an `--exclude=` argument. |
 | **Throughput** | Progress reached and the rate, in the unit the profile names (SYPD and SDPD for a climate model), both overall and after warm-up, and the simulated time the job covered with its model dates. The first progress interval carries one-off costs such as kernel compilation and is left out of the steady-state rate and the outlier count. |
 | **Throughput drift** | Whether the run slowed between its first and last quarter, which points at something degrading rather than a single bad moment. |
 | **Slow intervals** | Individual progress intervals after warm-up far above the median: output, checkpointing, or a transient stall. |
-| **Numerical stability** | Values the model reports about its own state: for ICON, the global maxima of horizontal and vertical wind printed on every dynamics substep, and the CFL numbers, CFL watch mode entries and substep increases printed while the CFL number is high. A value that is not finite, or beyond its failure limit, fails the run; the check names the first report that was, with its level and model time, and the report before it. A crash that follows, such as an illegal memory access or an overflowing CFL number, is then most likely a consequence. Values above the warning limit warn. ICON prints the level with `msg_level >= 7` and the rank with `msg_level >= 13`. |
 | **Where the time went** | The largest timers, as a share of the total. |
 | **Load imbalance** | How much longer the slowest rank spent in each timer than the fastest. This never fails a run on its own; it is a performance observation, and spread on a *wait* timer is the symptom of imbalance created somewhere else. |
 | **Coupling cost** | The share of each component's time spent in the coupler. A coupled run prints one timer report per component, so the shares are comparable: when one component's share is much the larger, that component reaches the exchange first and waits for its partner, which usually means the ranks are split unevenly between them. Like load imbalance, this never fails a run on its own. |
 | **Checkpoint write / Output cost** | Volume and rate of restart writes, and the share of the run spent in output timers. |
 | **Output write cadence / Checkpoint write cadence** | The wall-clock gap between successive output or checkpoint writes. One gap far from the typical one usually means a transient file system stall. |
 | **Network** | Fabric counters and warnings. A burst of dropped flow-control messages indicates that the network, not the code, was the limiting factor. Slingshot network timeouts are retransmissions the fabric recovered from, so a count is reported for information and only warns or fails above the `network_timeouts_warn` and `network_timeouts_fail` thresholds, or warns when the run itself failed. |
-| **GPU health** | From the GPU monitor in the diagnostics directory: uncorrected ECC errors fail the run; hardware slowdown, thermal slowdown and power brake warn, because they make their node the slowest of the run. Peak temperature, power and memory are listed. |
 | **GPU activity** | Mean GPU utilization in the main loop, with nodes far from the median, and during the longest silence. During a hang, the GPUs that are still busy point at the ranks the others are waiting for. |
-| **Hang backtraces** | The gdb backtraces of the main thread taken during a hang, grouped by the innermost frame and the innermost frame with a source location. A rank in uninterruptible sleep, blocked in the kernel, warns. |
-| **Kernel messages** | GPU Xid events and out-of-memory kills in the nodes' kernel logs. Xid codes that indicate a hardware fault, and out-of-memory kills, fail the run. |
-| **Suspect nodes** | Nodes named in step failures, carrying a disproportionate share of the warnings, or implicated by the diagnostics directory (ECC errors, slowdown, a fatal Xid, GPUs busy while the rest waited). The list can be pasted directly into an `--exclude=` argument. |
-| **Errors** | Lines that look like errors, collapsed by shape, with digits masked so the same message from a thousand ranks becomes one row. |
 
 Checks for which a profile supplies no data do not appear. A completely unknown
 log still yields outcome, silence, wall time and errors. Every

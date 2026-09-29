@@ -378,24 +378,19 @@ def assess(
     a.status = _status(log, now, stall_seconds, slurm_state, acct)
     a.stats = _stats(log, a, acct)
 
+    # Three blocks: whether the run finished, what went wrong, how well it ran.
     a.checks.append(_check_outcome(log, a, slurm_state, acct))
     a.checks.append(_check_accounting(log, acct))
     a.checks.append(_check_watchdog(log))
     a.checks.append(_check_stall(log, a, stall_seconds))
     a.checks.append(_check_walltime(log, a, acct))
-    a.checks.extend(_check_progress(log, a))
-    a.checks.append(_check_stability(log))
-    a.checks.extend(_check_timers(log, a))
-    a.checks.extend(_check_coupling(log, a))
-    a.checks.extend(_check_io(log, a))
-    a.checks.extend(_check_io_cadence(log, a))
-    a.checks.extend(_check_network(log, a))
+
     a.checks.append(_check_errors(log, a))
     a.checks.extend(_check_groups(log, a))
-    a.checks.append(_check_gpu_health(log))
-    a.checks.append(_check_gpu_activity(log))
+    a.checks.append(_check_stability(log))
     a.checks.append(_check_dumps(log))
     a.checks.append(_check_kernel(log))
+    a.checks.append(_check_gpu_health(log))
     a.suspect_nodes = _suspect_nodes(log, a)
     if a.suspect_nodes:
         a.checks.append(
@@ -409,6 +404,14 @@ def assess(
                 [f"{n} - {why}" for n, why in a.suspect_nodes[:12]],
             )
         )
+
+    a.checks.extend(_check_progress(log, a))
+    a.checks.extend(_check_timers(log, a))
+    a.checks.extend(_check_coupling(log, a))
+    a.checks.extend(_check_io(log, a))
+    a.checks.extend(_check_io_cadence(log, a))
+    a.checks.extend(_check_network(log, a))
+    a.checks.append(_check_gpu_activity(log))
     a.checks = [c for c in a.checks if c is not None]
     a.grade = _worst([c.level for c in a.checks])
     return a
