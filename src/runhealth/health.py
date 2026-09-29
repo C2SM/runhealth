@@ -169,6 +169,9 @@ def intervals(log: RunLog) -> list[dict]:
     The first intervals carry one-off costs such as kernel compilation and the
     first coupled exchange, so they are flagged as warm-up and kept out of the
     steady-state rate, the outlier count and the plot scale.
+
+    A binned series spans several reports per interval: ``reports`` counts
+    them, and ``slowest`` with ``slowest_step`` names the longest single one.
     """
     series = progress_series(log)
     field_name = log.setting("model_time_field", "model_time")
@@ -181,6 +184,10 @@ def intervals(log: RunLog) -> list[dict]:
             "wall": b["wall"],
             "seconds": b["wall"] - a["wall"],
         }
+        if b.get("reports", 1) > 1:
+            rec.update(
+                reports=b["reports"], slowest=b.get("slowest"), slowest_step=b.get("slowest_step")
+            )
         ta, tb = parse_model_time(a.get(field_name, "")), parse_model_time(b.get(field_name, ""))
         if ta and tb:
             rec["model_seconds"] = (tb - ta).total_seconds()
@@ -240,6 +247,17 @@ def model_clock(log: RunLog) -> ModelClock | None:
     start = t0 - timedelta(seconds=per_step)
     points = [(w, (t - start).total_seconds()) for _, t, w in reports if w is not None]
     return ModelClock(start, t1, per_step, s0, sorted(points))
+
+
+def per_report(interval: dict) -> float:
+    """Mean wall seconds per progress report within an interval."""
+    return interval["seconds"] / interval.get("reports", 1)
+
+
+def slowest(interval: dict) -> float:
+    """Wall seconds of the longest single report within an interval."""
+    value = interval.get("slowest")
+    return per_report(interval) if value is None else value
 
 
 def steady(intervals: list[dict]) -> list[dict]:
@@ -449,8 +467,8 @@ def _stats(log: RunLog, a: Assessment, acct: dict) -> dict[str, Any]:
     series = progress_series(log)
     if series:
         stats["progress_last"] = series[-1].get("step")
-        stats["progress_count"] = len(series)
-    good = [i["seconds"] for i in steady(a.intervals) if i["seconds"] > 0]
+        stats["progress_count"] = sum(r.get("reports", 1) for r in series)
+    good = [per_report(i) for i in steady(a.intervals) if i["seconds"] > 0]
     if good:
         stats["interval_median"] = statistics.median(good)
     model_secs = sum(i.get("model_seconds", 0.0) for i in a.intervals)
@@ -659,7 +677,7 @@ def _check_progress(log: RunLog, a: Assessment) -> list[Check]:
         return []
     out: list[Check] = []
     runs = steady(a.intervals)
-    good = [i["seconds"] for i in runs if i["seconds"] > 0]
+    good = [per_report(i) for i in runs if i["seconds"] > 0]
     if not good:
         return []
     median = statistics.median(good)
@@ -726,18 +744,23 @@ def _check_progress(log: RunLog, a: Assessment) -> list[Check]:
             )
 
     factor = float(log.threshold("outlier_factor", 3))
-    slow = [i for i in runs if i["seconds"] > factor * median]
+    slow = [i for i in runs if slowest(i) > factor * median]
+    reports = sum(i.get("reports", 1) for i in runs)
     if slow:
-        worst = sorted(slow, key=lambda i: -i["seconds"])[:5]
+        worst = sorted(slow, key=lambda i: -slowest(i))[:5]
         out.append(
             Check(
                 "outliers",
                 "Slow intervals",
                 "warn" if len(slow) > 1 else "info",
-                f"{len(slow)} of {len(runs)} intervals took more than " f"{factor:g}x the median",
+                f"{len(slow)} of {reports} intervals took more than {factor:g}x the median",
                 "Isolated slow intervals usually mark output, checkpointing or a "
                 "transient network stall.",
-                [f"{label} {i['step']}: {format_duration(i['seconds'])}" for i in worst],
+                [
+                    f"{label} {i.get('slowest_step') or i['step']}: "
+                    f"{format_duration(slowest(i))}"
+                    for i in worst
+                ],
             )
         )
     return out

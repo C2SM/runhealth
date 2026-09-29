@@ -255,7 +255,8 @@ def progress_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     if len(a.intervals) < 4:
         return None
     steps = [record.get("step") or n for n, record in enumerate(a.intervals)]
-    seconds = [record["seconds"] for record in a.intervals]
+    seconds = [health.per_report(record) for record in a.intervals]
+    slowest = [health.slowest(record) for record in a.intervals]
     median = a.stats.get("interval_median") or 0.0
     factor = float(log.threshold("outlier_factor", 3))
     warm = [bool(record.get("warmup")) for record in a.intervals]
@@ -267,7 +268,7 @@ def progress_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     x = svg.Scale(min(steps), max(steps), p.x, p.right)
     # Warm-up intervals are left out of the scale and pinned to the top edge,
     # so kernel compilation does not flatten the rest of the run.
-    scaled = [v for v, w in zip(seconds, warm) if not w]
+    scaled = [t for v, s, w in zip(seconds, slowest, warm) if not w for t in (v, s)]
     if median > 0 and max(scaled) > 20 * median:
         floor = min((v for v in scaled if v > 0), default=1.0)
         y = svg.LogScale(floor * 0.8, max(scaled) * 1.3, p.bottom, p.y)
@@ -312,8 +313,8 @@ def progress_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
             )
             ch.points.append(ch.circle(px, py, 3.4, **_mark("lv-info fill", tip)))
     hot = [
-        (px, py, step, value)
-        for (px, py), step, value, w in zip(points, steps, seconds, warm)
+        (px, y(min(value, y.d1)), record.get("slowest_step") or step, value)
+        for (px, _), record, step, value, w in zip(points, a.intervals, steps, slowest, warm)
         if median and value > factor * median and not w
     ]
     for px, py, step, value in _thin(hot, 120):
@@ -335,6 +336,11 @@ def progress_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
             _sim(clock, clock.at_step(step)) if clock else "",
             f"{_dur(value)} between reports",
             f"{value / median:.2f}x the median" if median else "",
+            (
+                f"mean of {record['reports']} reports, slowest {_dur(health.slowest(record))}"
+                if record.get("reports")
+                else ""
+            ),
             (
                 f"{_dur(record['model_seconds'])} of model time since the previous report"
                 if record.get("model_seconds")

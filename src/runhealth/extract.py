@@ -63,8 +63,8 @@ ATTEMPT_GAP_FALLBACK = 6 * 3600.0
 MAX_GROUP_KEYS = 4000
 MAX_ERROR_KEYS = 200
 MAX_EVENTS = 50_000
-# A series with ``peak`` is binned instead of cut off, so it covers the whole
-# run; each bin keeps its largest record.
+# A series with ``peak`` or ``bin: last`` is binned instead of cut off, so it
+# covers the whole run; each bin keeps its largest or its latest record.
 MAX_BINNED_EVENTS = 20_000
 # The descriptive keys of a series spec that the checks and figures read.
 SERIES_META = ("peak", "label", "unit", "figure")
@@ -136,7 +136,7 @@ class RunLog:
     series: dict[str, list[dict]] = field(default_factory=dict)
     series_roles: dict[str, str] = field(default_factory=dict)
     series_meta: dict[str, dict] = field(default_factory=dict)
-    # Records merged into each bin of a ``peak`` series.
+    # Records merged into each bin of a ``peak`` or ``bin: last`` series.
     series_stride: dict[str, int] = field(default_factory=dict)
     # The report before and the first report at or beyond ``<series>_fail``,
     # kept exactly because binning would blur both.
@@ -509,7 +509,8 @@ class Extractor:
     def _do_series(self, rule, text: str, line: Line) -> None:
         bucket = self.log.series[rule.name]
         peak = rule.spec.get("peak")
-        if len(bucket) >= MAX_EVENTS and not peak:
+        last = rule.spec.get("bin") == "last"
+        if len(bucket) >= MAX_EVENTS and not (peak or last):
             return
         m = rule.search(text)
         if not m:
@@ -525,6 +526,14 @@ class Extractor:
         if peak:
             self._check_breach(rule.name, rec, peak)
             self._add_binned(rule.name, bucket, rec, lambda a, b: _larger(a, b, peak))
+        elif last:
+            # The latest record of a bin is always the latest report, so the
+            # bucket's tail gives the wall time since the previous one.
+            walls = (bucket[-1]["wall"] if bucket else None, rec["wall"])
+            gap = walls[1] - walls[0] if None not in walls else None
+            rec.update(reports=1, slowest=gap, slowest_step=rec.get("step"))
+            # The first report stays on its own, so the warm-up it closes is not diluted.
+            self._add_binned(rule.name, bucket, rec, _later, keep_first=True)
         else:
             bucket.append(rec)
 
@@ -541,20 +550,22 @@ class Extractor:
         bucket: list[dict],
         rec: dict,
         merge: Callable[[dict, dict], dict],
+        keep_first: bool = False,
     ) -> None:
         """Append to a binned series, halving its resolution whenever it is full."""
         stride = self.log.series_stride.get(name, 1)
         fill = self._fill.get(name, stride)
-        if bucket and fill < stride:
+        if len(bucket) > keep_first and fill < stride:
             bucket[-1] = merge(bucket[-1], rec)
             self._fill[name] = fill + 1
         else:
             bucket.append(rec)
             self._fill[name] = 1
         if len(bucket) >= MAX_BINNED_EVENTS:
-            pairs = range(0, len(bucket), 2)
-            bucket[:] = [
-                merge(*bucket[i : i + 2]) if i + 1 < len(bucket) else bucket[i] for i in pairs
+            head, rest = bucket[:keep_first], bucket[keep_first:]
+            pairs = range(0, len(rest), 2)
+            bucket[:] = head + [
+                merge(*rest[i : i + 2]) if i + 1 < len(rest) else rest[i] for i in pairs
             ]
             self.log.series_stride[name] = 2 * stride
             self._fill[name] = 2 * stride
@@ -674,6 +685,17 @@ def beyond(value: Any, limit: float | None) -> bool:
 
 def _larger(a: dict, b: dict, key: str) -> dict:
     return b if magnitude(b.get(key)) > magnitude(a.get(key)) else a
+
+
+def _later(a: dict, b: dict) -> dict:
+    """The later record, counting the reports of both and keeping the slowest."""
+    slow = b if magnitude(b.get("slowest")) >= magnitude(a.get("slowest")) else a
+    return {
+        **b,
+        "reports": a.get("reports", 1) + b.get("reports", 1),
+        "slowest": slow.get("slowest"),
+        "slowest_step": slow.get("slowest_step"),
+    }
 
 
 def _float(raw: str) -> float | None:

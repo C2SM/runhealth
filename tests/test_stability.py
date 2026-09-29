@@ -149,3 +149,39 @@ def test_one_figure_per_group_with_the_blow_up_pinned_in_red(profiles):
     assert [f.title for f in figures] == ["Maximum wind speed", "CFL number"]
     assert "lv-fail" in figures[0].svg
     assert "Infinity" not in figures[0].svg and "NaN" not in figures[0].svg
+
+
+def _steps(profiles, walls: list[float]) -> extract.RunLog:
+    ex = extract.Extractor([profiles["slurm"], profiles["icon"]])
+    for n, wall in enumerate(walls, start=1):
+        text = f"Time step: {n:8d} model time 2020-01-01 00:{n // 3 % 60:02d}:{n * 20 % 60:02d}.000"
+        ex.feed(Line(wall=wall, rank=0, text=text, offset=0, number=n))
+    return ex.finish()
+
+
+def test_time_steps_are_binned_without_losing_the_totals(profiles, monkeypatch):
+    monkeypatch.setattr(extract, "MAX_BINNED_EVENTS", 16)
+    walls = [0.0, 60.0] + [60.0 + k for k in range(1, 99)]
+    walls[70] += 30.0  # one slow step
+    walls[71:] = [w + 30.0 for w in walls[71:]]
+    log = _steps(profiles, walls)
+    series = log.series["timestep"]
+    assert len(series) < 16 and log.series_stride["timestep"] > 1
+    # The first report stays alone; the last one is always kept.
+    assert series[0]["step"] == 1 and series[-1]["step"] == 100
+    assert sum(r["reports"] for r in series) == 100
+
+    a = health.assess(log)
+    assert a.stats["progress_last"] == 100
+    assert a.stats["progress_count"] == 100
+    assert sum(i["seconds"] for i in a.intervals) == pytest.approx(walls[-1] - walls[0])
+    assert a.stats["interval_median"] == pytest.approx(1.0)
+    outliers = a.check("outliers")
+    assert outliers is not None
+    assert outliers.evidence == ["time steps 71: 31s"]
+
+
+def test_unbinned_time_steps_behave_as_before(profiles):
+    log = _steps(profiles, [0.0, 60.0, 61.0, 62.0, 63.0, 64.0])
+    assert all(r["reports"] == 1 for r in log.series["timestep"])
+    assert not any("reports" in i for i in health.intervals(log))

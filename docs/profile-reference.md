@@ -231,6 +231,15 @@ beyond the `_fail` limit and the record before it are kept exactly.
 Without `peak`, a `stability` series is counted as events, listed in the check,
 and drawn as dots along the bottom of the figure named by its `figure`.
 
+A series without `peak` keeps its first 50,000 records and ignores the rest.
+A progress series that may run longer takes `bin: last`: once it holds 20,000
+records, neighboring pairs are merged into the later one, which counts the
+reports it stands for and keeps the slowest of them. The first report is never
+merged, and the step, the model time and the total wall time stay exact, so
+the throughput is unaffected. The slow-interval check still finds every bin
+with a slow report and names its step, but counts a bin with several slow
+reports once.
+
 ### `markers`: phases
 
 ```yaml

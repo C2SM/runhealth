@@ -101,6 +101,8 @@ series:
     fields: [step, model_time]
     cast: {step: int}
     role: progress
+    # A long run reports more steps than a series may hold, so bin them.
+    bin: last
   output_write:
     re: 'Write output at: ?(\d\S* \S+)'
     contains: 'Write output at'
