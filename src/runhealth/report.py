@@ -1375,16 +1375,28 @@ JS = r"""
     mark();
   }
 
-  // Folding a heading hides the entries up to the next heading.
+  // Folding a heading hides the entries up to the next heading. The folded
+  // headings are remembered by anchor, so every page of a report shares them.
+  var FOLD_KEY = 'runhealth-toc-folded', folded = [];
+  try { folded = JSON.parse(localStorage.getItem(FOLD_KEY)) || []; } catch (e) {}
+  function fold(b, open) {
+    b.setAttribute('aria-expanded', open ? 'true' : 'false');
+    for (var el = b.nextElementSibling; el && el.classList.contains('lv2'); el = el.nextElementSibling)
+      el.classList.toggle('folded', !open);
+  }
   document.querySelectorAll('.tfold').forEach(function (b) {
+    var anchor = b.previousElementSibling.hash.slice(1);
+    if (folded.indexOf(anchor) >= 0) fold(b, false);
     b.addEventListener('click', function () {
       var open = b.getAttribute('aria-expanded') !== 'true';
-      b.setAttribute('aria-expanded', open ? 'true' : 'false');
-      for (var el = b.nextElementSibling; el && el.classList.contains('lv2'); el = el.nextElementSibling)
-        el.classList.toggle('folded', !open);
+      fold(b, open);
+      folded = folded.filter(function (a) { return a !== anchor; });
+      if (!open) folded.push(anchor);
+      try { localStorage.setItem(FOLD_KEY, JSON.stringify(folded)); } catch (e) {}
       window.dispatchEvent(new Event('scroll'));
     });
   });
+  if (folded.length) window.dispatchEvent(new Event('scroll'));
 
   // -- filter by grade: the index's rows, or a run's checks -------------
   document.querySelectorAll('.filters').forEach(function (box) {
