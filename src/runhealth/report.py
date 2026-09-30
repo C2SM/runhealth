@@ -451,7 +451,8 @@ a:hover { border-bottom-color: currentColor; }
 .toc nav { display: flex; flex-direction: column; gap: 1px;
   border-left: 1px solid var(--line); overflow-y: auto; scrollbar-width: thin;
   max-height: calc(100vh - var(--nav-h) - 100px); }
-.toc a { border: none; font-size: 14px; color: var(--muted); padding: 4px 0 4px 13px;
+/* Links keep their height, so a long list scrolls rather than squeezing each row. */
+.toc a { flex: none; border: none; font-size: 14px; color: var(--muted); padding: 4px 0 4px 13px;
   margin-left: -1px; border-left: 2px solid transparent; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 .toc a.lv2 { padding-left: 25px; font-size: 13.5px; }
