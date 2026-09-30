@@ -462,9 +462,10 @@ a:hover { border-bottom-color: currentColor; }
 .toc-h { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .09em;
   color: var(--muted); font-weight: 650; }
 /* Two columns: the links, and the fold buttons beside the headings that have them. */
-.toc nav { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 1px;
+/* The reserved gutter keeps the scrollbar clear of the fold buttons. */
+.toc nav { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 6px;
   align-items: center; border-left: 1px solid var(--line); overflow-y: auto; scrollbar-width: thin;
-  max-height: calc(100vh - var(--nav-h) - 100px); }
+  scrollbar-gutter: stable; padding-right: 4px; max-height: calc(100vh - var(--nav-h) - 100px); }
 /* Links keep their height, so a long list scrolls rather than squeezing each row. */
 .toc a { flex: none; grid-column: 1 / -1; border: none; font-size: 14px; color: var(--muted); padding: 4px 0 4px 13px;
   margin-left: -1px; border-left: 2px solid transparent; overflow: hidden;
@@ -472,13 +473,15 @@ a:hover { border-bottom-color: currentColor; }
 .toc a.lv2 { padding-left: 25px; font-size: 13.5px; }
 .toc a.nest { grid-column: 1; }
 .toc a.folded { display: none; }
-.tfold { display: grid; place-items: center; width: 22px; height: 22px; padding: 0;
-  background: none; border: none; border-radius: 4px; color: var(--muted); cursor: pointer; }
-.tfold:hover { color: var(--ink); background: var(--panel-2); }
+.tfold { display: grid; place-items: center; width: 26px; height: 26px; padding: 0;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+  color: var(--ink); cursor: pointer; }
+.tfold:hover { background: var(--panel-2); border-color: var(--line-2); }
+.tfold:focus-visible { outline: 2px solid var(--info); outline-offset: 1px; }
 .tfold-all { padding: 0; background: none; border: none; color: var(--muted);
   font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
 .tfold-all:hover { color: var(--ink); }
-.tfold .chev::before { content: "\\25be"; font-size: 12px; }
+.tfold .chev::before { content: "\\25be"; font-size: 15px; line-height: 1; }
 .tfold[aria-expanded="false"] .chev::before { content: "\\25b8"; }
 .toc .tdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
   margin-right: 7px; vertical-align: 1px; }
