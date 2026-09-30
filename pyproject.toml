@@ -1,6 +1,6 @@
 [project]
 name = "runhealth"
-version = "0.7.2"
+version = "0.7.3"
 description = "System-health reports for HPC batch job logs"
 readme = "README.md"
 requires-python = ">=3.11"
