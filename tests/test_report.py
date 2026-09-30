@@ -290,7 +290,15 @@ def test_only_headings_with_entries_under_them_can_fold():
     toc.add("check-0", "First", level=2)
     html = toc.render()
     assert html.count('class="tfold"') == 1
+    assert 'class="tfold-all"' in html
     assert re.search(r'href="#checks" class="lv1 nest">.*?</a><button type="button" class="tfold"', html)
+
+
+def test_a_table_of_contents_without_nested_entries_has_no_fold_all():
+    toc = report.Toc()
+    toc.add("summary", "Summary")
+    toc.add("checks", "Checks")
+    assert "tfold-all" not in toc.render()
 
 
 def test_the_source_bar_leads_with_the_path_and_its_actions(tmp_path, parsed, assessed):

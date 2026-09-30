@@ -289,7 +289,9 @@ class Toc:
                 )
         return (
             '<aside class="toc" aria-label="On this page">'
-            '<p class="toc-h">On this page</p>'
+            '<div class="toc-top"><p class="toc-h">On this page</p>'
+            + ('<button type="button" class="tfold-all">Collapse all</button>' if "tfold" in links else "")
+            + "</div>"
             f'<nav id="toc">{links}</nav></aside>'
         )
 
@@ -455,7 +457,9 @@ a:hover { border-bottom-color: currentColor; }
 .shell { max-width: 1420px; margin: 0 auto; padding: 0 20px 90px;
   display: grid; grid-template-columns: 216px minmax(0, 1fr); gap: 34px; align-items: start; }
 .toc { position: sticky; top: calc(var(--nav-h) + 20px); padding-top: 30px; }
-.toc-h { margin: 0 0 9px; font-size: 12px; text-transform: uppercase; letter-spacing: .09em;
+.toc-top { display: flex; align-items: baseline; justify-content: space-between;
+  gap: 8px; margin-bottom: 9px; }
+.toc-h { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .09em;
   color: var(--muted); font-weight: 650; }
 /* Two columns: the links, and the fold buttons beside the headings that have them. */
 .toc nav { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 1px;
@@ -471,6 +475,9 @@ a:hover { border-bottom-color: currentColor; }
 .tfold { display: grid; place-items: center; width: 22px; height: 22px; padding: 0;
   background: none; border: none; border-radius: 4px; color: var(--muted); cursor: pointer; }
 .tfold:hover { color: var(--ink); background: var(--panel-2); }
+.tfold-all { padding: 0; background: none; border: none; color: var(--muted);
+  font: inherit; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.tfold-all:hover { color: var(--ink); }
 .tfold .chev::before { content: "\\25be"; font-size: 12px; }
 .tfold[aria-expanded="false"] .chev::before { content: "\\25b8"; }
 .toc .tdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
@@ -488,7 +495,7 @@ main > *:first-child { margin-top: 0; }
   .shell { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0 16px 80px; }
   .toc { position: sticky; top: var(--nav-h); z-index: 30; padding: 8px 0 9px;
     background: var(--bg); border-bottom: 1px solid var(--line); }
-  .toc-h { display: none; }
+  .toc-top { display: none; }
   .toc nav { display: flex; flex-direction: row; gap: 6px; overflow-x: auto; border-left: none; max-height: none;
     scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
   .toc a { border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px;
@@ -1379,24 +1386,39 @@ JS = r"""
   // headings are remembered by anchor, so every page of a report shares them.
   var FOLD_KEY = 'runhealth-toc-folded', folded = [];
   try { folded = JSON.parse(localStorage.getItem(FOLD_KEY)) || []; } catch (e) {}
+  var folds = Array.prototype.slice.call(document.querySelectorAll('.tfold'));
+  var foldAll = document.querySelector('.tfold-all');
+  function anchorOf(b) { return b.previousElementSibling.hash.slice(1); }
   function fold(b, open) {
     b.setAttribute('aria-expanded', open ? 'true' : 'false');
     for (var el = b.nextElementSibling; el && el.classList.contains('lv2'); el = el.nextElementSibling)
       el.classList.toggle('folded', !open);
+    var anchor = anchorOf(b);
+    folded = folded.filter(function (a) { return a !== anchor; });
+    if (!open) folded.push(anchor);
   }
-  document.querySelectorAll('.tfold').forEach(function (b) {
-    var anchor = b.previousElementSibling.hash.slice(1);
-    if (folded.indexOf(anchor) >= 0) fold(b, false);
+  // The shared button collapses everything unless everything is already collapsed.
+  function allShut() {
+    return folds.every(function (b) { return b.getAttribute('aria-expanded') === 'false'; });
+  }
+  function settle(save) {
+    if (foldAll) foldAll.textContent = allShut() ? 'Expand all' : 'Collapse all';
+    if (save) try { localStorage.setItem(FOLD_KEY, JSON.stringify(folded)); } catch (e) {}
+    window.dispatchEvent(new Event('scroll'));
+  }
+  folds.forEach(function (b) {
+    if (folded.indexOf(anchorOf(b)) >= 0) fold(b, false);
     b.addEventListener('click', function () {
-      var open = b.getAttribute('aria-expanded') !== 'true';
-      fold(b, open);
-      folded = folded.filter(function (a) { return a !== anchor; });
-      if (!open) folded.push(anchor);
-      try { localStorage.setItem(FOLD_KEY, JSON.stringify(folded)); } catch (e) {}
-      window.dispatchEvent(new Event('scroll'));
+      fold(b, b.getAttribute('aria-expanded') !== 'true');
+      settle(true);
     });
   });
-  if (folded.length) window.dispatchEvent(new Event('scroll'));
+  if (foldAll) foldAll.addEventListener('click', function () {
+    var open = allShut();
+    folds.forEach(function (b) { fold(b, open); });
+    settle(true);
+  });
+  if (folds.length) settle(false);
 
   // -- filter by grade: the index's rows, or a run's checks -------------
   document.querySelectorAll('.filters').forEach(function (box) {
