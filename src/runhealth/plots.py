@@ -443,6 +443,17 @@ def top_gaps(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     )
 
 
+def _gap_scale(values: list[float], p: svg.Box):
+    """A linear y scale for gaps, or a log scale when a few dwarf the rest."""
+    median = statistics.median(values)
+    if median and max(values) > 20 * median:
+        floor = min((v for v in values if v > 0), default=1.0)
+        y = svg.LogScale(floor * 0.8, max(values) * 1.3, p.bottom, p.y)
+        return y, svg.log_ticks(y.d0, y.d1)
+    y_max = max(values) * 1.14 or 1.0
+    return svg.Scale(0, y_max, p.bottom, p.y), svg.nice_ticks(0, y_max, 5)
+
+
 def io_cadence(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     live = {name: gaps for name, gaps in a.io_gaps.items() if len(gaps) >= 3}
     if not live:
@@ -452,20 +463,34 @@ def io_cadence(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     t0 = log.first_wall or 0.0
     factor = float(log.threshold("io_gap_outlier_factor", 4))
     clock = model_clock(log)
-    all_seconds = [g["seconds"] for n in names for g in live[n]]
+    # Series whose typical gaps lie far apart (hourly output, daily restarts)
+    # are split at the widest ratio, the slower ones onto a secondary axis.
+    medians = {n: statistics.median(g["seconds"] for g in live[n]) for n in names}
+    ranked = sorted(names, key=medians.get)
+    ratio, cut = max(
+        (
+            (medians[hi] / medians[lo] if medians[lo] else 0.0, i + 1)
+            for i, (lo, hi) in enumerate(zip(ranked, ranked[1:]))
+        ),
+        default=(0.0, 0),
+    )
+    right = set(ranked[cut:]) if ratio > 5 else set()
+    groups = [[n for n in names if n not in right], [n for n in names if n in right]]
 
-    ch = svg.Chart(height=266, pad=(68, 26, 20, 58), uid=uid)
+    ch = svg.Chart(height=266, pad=(68, 26, 68 if right else 20, 58), uid=uid)
     p = ch.plot
     x = svg.Scale(0, total, p.x, p.right)
-    overall_median = statistics.median(all_seconds)
-    if overall_median and max(all_seconds) > 20 * overall_median:
-        floor = min((v for v in all_seconds if v > 0), default=1.0)
-        y = svg.LogScale(floor * 0.8, max(all_seconds) * 1.3, p.bottom, p.y)
-        y_ticks = svg.log_ticks(y.d0, y.d1)
-    else:
-        y_max = max(all_seconds) * 1.14 or 1.0
-        y = svg.Scale(0, y_max, p.bottom, p.y)
-        y_ticks = svg.nice_ticks(0, y_max, 5)
+    scales = {}
+    for side, group in enumerate(groups):
+        if not group:
+            continue
+        values = [g["seconds"] for n in group for g in live[n]]
+        y, y_ticks = _gap_scale(values, p)
+        label = "gap since the previous event"
+        if right:
+            label = f"{' / '.join(n.replace('_', ' ') for n in group)} gap"
+        ch.y_axis(y, y_ticks, _dur, label, grid=not side, right=bool(side))
+        scales.update({n: y for n in group})
 
     samples = []
     legend_entries = []
@@ -475,6 +500,7 @@ def io_cadence(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         median = statistics.median(seconds)
         label = name.replace("_", " ")
         cls = f"s{i % 7}"
+        y = scales[name]
         drawn = _decimate([(x(g["wall"] - t0), y(g["seconds"])) for g in gaps], p.w)
         body = ch.path(drawn, cls=f"{cls} stroke", vector_effect="non-scaling-stroke")
         dots = ""
@@ -493,7 +519,8 @@ def io_cadence(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         )
         if dots:
             ch.points.append(svg.tag("g", dots, cls="series", data_series=str(i)))
-        legend_entries.append((cls, f"{label} ({len(gaps) + 1} events)"))
+        side = ", right axis" if name in right else ""
+        legend_entries.append((cls, f"{label} ({len(gaps) + 1} events{side})"))
         for g, v in _thin(list(zip(gaps, seconds)), MAX_HOVER_SAMPLES):
             tip = _tip(
                 label,
@@ -509,7 +536,6 @@ def io_cadence(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     ch.legend(legend_entries)
     unit, fmt = _time_fmt(total)
     ch.x_axis(x, svg.time_ticks(total), fmt, "wall clock since the first stamped line", unit=unit)
-    ch.y_axis(y, y_ticks, _dur, "gap since the previous event")
     return Figure(
         key="io_cadence",
         title="Output cadence",

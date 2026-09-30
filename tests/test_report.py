@@ -146,6 +146,26 @@ def test_io_cadence_figure_marks_the_outlier_gap():
     assert re.search(r'<g class="rh-points"><g class="series" data-series="0">', figure.svg)
 
 
+def test_io_cadence_figure_puts_a_much_slower_series_on_a_second_axis():
+    from runhealth import health
+    from runhealth.extract import RunLog
+
+    log = RunLog(
+        first_wall=0.0,
+        last_wall=6000.0,
+        series={
+            "output_write": [{"wall": 60.0 * i} for i in range(101)],
+            "restart_write": [{"wall": 1500.0 * i} for i in range(5)],
+        },
+        series_roles={"output_write": "io", "restart_write": "io"},
+    )
+    a = health.assess(log, now=6001.0)
+    figure = plots.io_cadence(log, a, "test")
+    assert "restart write (5 events, right axis)" in figure.svg
+    assert "output write (101 events)" in figure.svg
+    assert "restart write gap" in figure.svg
+
+
 def test_wall_clock_ticks_stay_distinct_at_every_span():
     from runhealth import svg
 

@@ -406,16 +406,20 @@ class Chart:
         label: str = "",
         grid: bool = True,
         box: Box | None = None,
+        right: bool = False,
     ) -> None:
+        """``right`` draws a secondary axis along the right edge of the plot."""
         p = box or self.plot
+        tick_x, anchor = (p.right + 9, "start") if right else (p.x - 9, "end")
         for t in ticks:
             y = scale(t)
             if y < p.y - 0.5 or y > p.bottom + 0.5:
                 continue
             if grid:
                 self.frame.append(self.line(p.x, y, p.right, y, cls="grid"))
-            self.frame.append(self.text(p.x - 9, y + 3.7, fmt(t), cls="tick", text_anchor="end"))
+            self.frame.append(self.text(tick_x, y + 3.7, fmt(t), cls="tick", text_anchor=anchor))
         if label:
+            label_x = self.width - 13 if right else 13
             self.frame.append(
                 self.text(
                     0,
@@ -423,7 +427,7 @@ class Chart:
                     label,
                     cls="ax-label",
                     text_anchor="middle",
-                    transform=f"translate(13,{num(p.y + p.h / 2)}) rotate(-90)",
+                    transform=f"translate({num(label_x)},{num(p.y + p.h / 2)}) rotate(-90)",
                 )
             )
 
