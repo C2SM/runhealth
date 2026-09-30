@@ -1007,82 +1007,99 @@ def _component_of(title: str, pattern: str, components: list[tuple[str, int, int
     return name or f"ranks {first}-{last}"
 
 
-def _check_coupling(log: RunLog, a: Assessment) -> list[Check]:
-    """Compare how much of its time each component spends in the coupler.
+def _outermost(rows: list[TimerRow], labels: set[str]) -> list[TimerRow]:
+    """The rows carrying one of ``labels`` that are not nested below another such row."""
+    out: list[TimerRow] = []
+    outer: int | None = None
+    for r in rows:
+        if outer is not None and r.depth <= outer:
+            outer = None
+        if outer is None and r.label in labels:
+            out.append(r)
+            outer = r.depth
+    return out
 
-    A coupled run prints one timer report per component, so the share of the
-    coupling timers is directly comparable between them. The component with
-    the much larger share is the one that arrives at the exchange first and
-    then waits for its partner, which is the usual signature of a rank split
-    that does not match the cost of the two components.
+
+def _check_coupling(log: RunLog, a: Assessment) -> list[Check]:
+    """Measure how long each component of a coupled run waits for its partner.
+
+    A blocking get returns only once the partner has delivered, so its time on
+    the fastest rank bounds the wait of the whole component from below, while
+    the spread above it is imbalance within the component. Setup, including
+    the very first get, is kept apart from the time loop.
     """
-    names = set(log.setting("coupling_timers", []) or [])
     waits = set(log.setting("coupling_wait_timers", []) or [])
-    if not (names or waits) or not a.timers:
+    if not waits or not a.timers:
         return []
+    setup = set(log.setting("coupling_setup_timers", []) or [])
+    coupler = set(log.setting("coupling_timers", []) or [])
     components = _components(log)
     pattern = log.setting("timer_group_ranks", "")
     warn_share = float(log.threshold("coupling_share_warn", 0.15))
     warn_ratio = float(log.threshold("coupling_ratio_warn", 2.0))
 
-    measured: list[tuple[float, str, str]] = []
+    # Output and restart servers print short reports of their own; only the
+    # longest report of a component covers its time loop.
+    main: dict[str, TimerGroup] = {}
     for g in a.timers:
-        # A coupling timer nested below another one is already contained in it
-        # and must not be added a second time.
-        counted: list[TimerRow] = []
-        nested: list[TimerRow] = []
-        outer: int | None = None
-        for r in g.rows:
-            if outer is not None and r.depth <= outer:
-                outer = None
-            if r.label in names or r.label in waits:
-                if outer is None:
-                    counted.append(r)
-                    outer = r.depth
-                else:
-                    nested.append(r)
-        if not counted:
+        name = _component_of(g.title, pattern, components) or g.title
+        if name not in main or g.root_seconds > main[name].root_seconds:
+            main[name] = g
+    longest = max(g.root_seconds for g in main.values())
+
+    measured: list[tuple[float, float, str, str]] = []
+    for name, g in main.items():
+        rows = _outermost(g.rows, waits)
+        if not rows or g.root_seconds < 0.5 * longest:
             continue
-        share = sum(r.share for r in counted)
-        label = _component_of(g.title, pattern, components) or g.title
-        parts = ", ".join(
-            f"{r.label} {r.share * 100:.0f}% ({format_duration(r.total)})"
-            for r in sorted(counted + nested, key=lambda r: -r.share)
+        floor = sum(r.minimum for r in rows)
+        avg = sum(r.total for r in rows)
+        parts = ", ".join(f"{r.label} {format_duration(r.total)}" for r in rows)
+        line = (
+            f"{name}: waits {format_duration(avg)} on average ({avg / g.root_seconds:.1%} "
+            f"of {g.root}), at least {format_duration(floor)} on every rank and at most "
+            f"{format_duration(sum(r.maximum for r in rows))} on one - {parts}"
         )
-        measured.append(
-            (share, label, f"{label}: {share * 100:.0f}% of {g.root} in the coupler - {parts}")
-        )
+        if setup_rows := _outermost(g.rows, setup):
+            line += f"; setup {format_duration(sum(r.total for r in setup_rows))}"
+        if coupler_rows := _outermost(g.rows, coupler):
+            line += f"; coupler in total {format_duration(sum(r.total for r in coupler_rows))}"
+        measured.append((floor / g.root_seconds, floor, name, line))
     if not measured:
         return []
 
     measured.sort(key=lambda m: -m[0])
     detail = (
-        "The coupling timers cover the exchange itself together with the wait for the "
-        "partner component. A share that is much larger in one component than in the "
-        "other means that component reaches the exchange first and then waits, which "
-        "usually calls for a different rank split. This never fails a run by itself."
+        "The wait timers are the blocking gets of the time loop. Their value on the "
+        "fastest rank is time that every rank of the component spent waiting for the "
+        "partner; the rest up to the slowest rank is imbalance within the component. "
+        "The component that waits markedly longer is the faster one, which usually "
+        "calls for moving ranks to its partner. Setup, including the very first get, "
+        "is not counted. This never fails a run by itself."
     )
+    hi, hi_s, hi_name, _ = measured[0]
     if len(measured) > 1:
-        (hi, hi_name, _), (lo, lo_name, _) = measured[0], measured[1]
-        waiting = hi >= warn_share and (lo <= 0 or hi / lo >= warn_ratio)
-        level = "warn" if waiting else ("info" if hi >= warn_share else "ok")
-        headline = (
-            f"{hi_name} spends {hi * 100:.0f}% of its time in the coupler against "
-            f"{lo * 100:.0f}% for {lo_name}"
-        )
-        if waiting:
-            headline += f": {hi_name} is waiting for {lo_name}"
+        lo, lo_s, lo_name, _ = measured[1]
+        directed = hi > 0 and (lo <= 0 or hi / lo >= warn_ratio)
+        level = "warn" if directed and hi >= warn_share else ("info" if hi >= warn_share else "ok")
+        if directed:
+            headline = (
+                f"{hi_name} waits for {lo_name}: at least {format_duration(hi_s)} "
+                f"({hi:.1%} of its run) against {format_duration(lo_s)} the other way"
+            )
+        else:
+            headline = (
+                f"Neither component waits markedly for the other: at least "
+                f"{format_duration(hi_s)} for {hi_name}, {format_duration(lo_s)} for {lo_name}"
+            )
     else:
-        hi, hi_name, _ = measured[0]
         level = "info" if hi >= warn_share else "ok"
-        headline = f"{hi_name} spends {hi * 100:.0f}% of its time in the coupler"
+        headline = f"{hi_name} waits at least {format_duration(hi_s)} ({hi:.1%} of its run)"
         detail += (
             " Only one timer report was found here, so the wait cannot be attributed "
             "to a partner component."
         )
-    return [
-        Check("coupling", "Coupling cost", level, headline, detail, [e for _, _, e in measured])
-    ]
+    return [Check("coupling", "Coupling wait", level, headline, detail, [m[3] for m in measured])]
 
 
 def _check_io(log: RunLog, a: Assessment) -> list[Check]:

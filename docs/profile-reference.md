@@ -353,8 +353,9 @@ Names and column mappings used by the analysis. All entries are optional.
 | `timer_root` | the label of its overall timer, e.g. `total` |
 | `timer_columns` | map of `total`, `min`, `max`, `min_rank`, `max_rank`, `calls`, `pes` to column names |
 | `io_timers` | timer labels that are output rather than computation |
-| `coupling_timers` | timer labels that belong to the coupler rather than to computation |
-| `coupling_wait_timers` | the subset of those on which a component blocks until its partner delivers |
+| `coupling_timers` | timer labels that cover the coupler as a whole, reported for context |
+| `coupling_wait_timers` | blocking gets of the time loop, on which a component waits until its partner delivers |
+| `coupling_setup_timers` | coupler setup, including the very first get; reported, but not counted as waiting |
 | `timer_group_ranks` | pattern matching the first and last rank in the title of a timer table, which assigns each table to a component |
 | `build_block` | the `keyvalues` block that describes the executable; the run page shows it at the top and compares it with the previous run |
 | `build_ignore` | keys of that block that describe the run rather than the binary, such as its date or host; neither shown nor compared |
@@ -385,8 +386,8 @@ Every number a check compares against. The defaults are defined in
 | `imbalance_fail` | 2.0 | ratio of slowest to fastest rank that is considered severe |
 | `drift_warn` | 0.2 | slowdown between first and last quarter |
 | `timer_share_floor` | 0.05 | ignore timers below this share of the run |
-| `coupling_share_warn` | 0.15 | share of a component's time in the coupler that is worth reporting |
-| `coupling_ratio_warn` | 2.0 | how much larger that share must be than the partner's to call it waiting |
+| `coupling_share_warn` | 0.15 | share of a component's run that all of its ranks spent waiting for the partner, worth reporting |
+| `coupling_ratio_warn` | 2.0 | how much larger that share must be than the partner's to say which component waits for which |
 | `group_warn` | 1000 | size of a message family that warrants a warning, provided that `group_share_warn` is also reached |
 | `group_share_warn` | 0.2 | fraction of the whole log that such a family must also account for |
 | `node_share_warn` | 0.25 | one node's share of a family that makes it suspect |

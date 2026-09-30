@@ -170,51 +170,138 @@ def test_status_uses_the_scheduler_when_it_can(parsed):
     assert health.assess(log, now=1e12).status == "INCOMPLETE"
 
 
-def _coupled_log(atmo: float, ocean: float, ranks: int = 8) -> RunLog:
-    """A synthetic coupled run: one timer report per component, ``coupling`` in each."""
+def _timer_table(first: int, last: int, rows: list[tuple]) -> Table:
+    """A timer report from ``(label, depth, avg, min, max)`` rows in seconds."""
+    keys = ("total avg (s)", "total min (s)", "total max (s)")
+    return Table(
+        name="timers",
+        title=f"Timer report, ranks {first}-{last}",
+        rows=[Row(label, depth, values=dict(zip(keys, v))) for label, depth, *v in rows],
+    )
 
-    def table(title: str, coupling: float) -> Table:
-        return Table(
-            name="timers",
-            title=title,
-            rows=[
-                Row("total", 0, values={"total avg (s)": 100.0}),
-                Row("integrate", 1, values={"total avg (s)": 100.0 - coupling}),
-                Row("coupling", 1, values={"total avg (s)": coupling}),
-                Row("cpl_get", 2, values={"total avg (s)": coupling * 0.9}),
-            ],
-        )
 
+def _coupled_log(tables: list[Table], **fields) -> RunLog:
     return RunLog(
-        fields={"atmo_ranks": ranks, "ocean_ranks": ranks},
-        tables={
-            "timers": [
-                table(f"Timer report, ranks 0-{ranks - 1}", atmo),
-                table(f"Timer report, ranks {ranks}-{2 * ranks - 1}", ocean),
-            ]
-        },
+        fields=fields or {"atmo_ranks": 74, "ocean_ranks": 1590},
+        tables={"timers": tables},
         settings={
             "timer_table": "timers",
             "timer_root": "total",
             "coupling_timers": ["coupling"],
-            "coupling_wait_timers": ["cpl_get"],
+            "coupling_wait_timers": ["cpl_1stget", "cpl_get"],
+            "coupling_setup_timers": ["cpl_init", "cpl_very_1stget"],
             "timer_group_ranks": r"ranks\s+(\d+)\s*-\s*(\d+)",
         },
     )
 
 
+def _job_839444() -> RunLog:
+    """The four timer reports of jcp_r2b8_icon4py job 839444, abridged."""
+    return _coupled_log(
+        [
+            _timer_table(
+                0,
+                63,
+                [
+                    ("total", 0, 871.0, 871.0, 871.0),
+                    ("integrate_nh", 1, 796.0, 794.0, 799.0),
+                    ("coupling", 1, 78.0, 75.0, 82.0),
+                    ("cpl_init", 2, 14.0, 14.0, 14.0),
+                    ("cpl_init_enddef", 3, 13.0, 13.0, 13.0),
+                    ("cpl_very_1stget", 2, 0.01, 0.0, 0.02),
+                    ("cpl_1stget", 2, 5.04, 2.60, 15.0),
+                    ("cpl_get", 2, 12.0, 0.06, 16.0),
+                    ("cpl_put", 2, 22.0, 0.28, 31.0),
+                ],
+            ),
+            # The atmosphere's output servers.
+            _timer_table(
+                64,
+                73,
+                [
+                    ("coupling", 0, 20.0, 20.0, 20.0),
+                    ("cpl_init", 1, 20.0, 20.0, 20.0),
+                ],
+            ),
+            _timer_table(
+                74,
+                1649,
+                [
+                    ("total", 0, 1004.0, 1004.0, 1005.0),
+                    ("coupling", 1, 292.0, 290.0, 296.0),
+                    ("cpl_init", 2, 81.0, 81.0, 81.0),
+                    ("cpl_init_def_comp", 3, 67.0, 67.0, 67.0),
+                    ("cpl_very_1stget", 2, 166.0, 166.0, 166.0),
+                    ("cpl_1stget", 2, 29.0, 28.0, 30.0),
+                    ("cpl_get", 2, 4.21, 0.02, 11.0),
+                    ("cpl_put", 2, 0.14, 0.01, 1.18),
+                ],
+            ),
+            # The ocean's output servers, which wait in the coupler setup.
+            _timer_table(
+                1650,
+                1663,
+                [
+                    ("coupling", 0, 114.0, 114.0, 114.0),
+                    ("cpl_init", 1, 114.0, 114.0, 114.0),
+                    ("cpl_get", 1, 2.0, 2.0, 2.0),
+                ],
+            ),
+        ]
+    )
+
+
 def test_coupling_names_the_component_that_waits():
-    a = health.assess(_coupled_log(atmo=40.0, ocean=5.0), now=1e12)
-    check = a.check("coupling")
-    assert check.level == "warn"
-    assert "atmo is waiting for ocean" in check.headline
-    assert any(e.startswith("atmo: 40%") for e in check.evidence)
-
-
-def test_coupling_is_quiet_when_the_components_are_balanced():
-    check = health.assess(_coupled_log(atmo=8.0, ocean=6.0), now=1e12).check("coupling")
+    check = health.assess(_job_839444(), now=1e12).check("coupling")
+    assert check.headline.startswith("ocean waits for atmo: at least 28s (2.8% of its run)")
     assert check.level == "ok"
-    assert "waiting" not in check.headline
+    ocean, atmo = check.evidence
+    assert ocean.startswith("ocean: waits 33s on average")
+    assert "at least 2.66s on every rank and at most 31s" in atmo
+    # Setup, the very first get included, is reported but not counted.
+    assert "setup 4m 07s" in ocean
+
+
+def test_coupling_ignores_the_output_servers():
+    evidence = health.assess(_job_839444(), now=1e12).check("coupling").evidence
+    assert len(evidence) == 2
+    assert not any("1650" in e or "64-73" in e for e in evidence)
+
+
+def test_coupling_warns_when_one_component_waits_long():
+    def report(first: int, last: int, floor: float) -> Table:
+        return _timer_table(
+            first,
+            last,
+            [
+                ("total", 0, 100.0, 100.0, 100.0),
+                ("coupling", 1, floor + 1, floor, floor + 2),
+                ("cpl_get", 2, floor + 1, floor, floor + 2),
+            ],
+        )
+
+    log = _coupled_log([report(0, 7, 30.0), report(8, 15, 1.0)], atmo_ranks=8, ocean_ranks=8)
+    check = health.assess(log, now=1e12).check("coupling")
+    assert check.level == "warn"
+    assert check.headline.startswith("atmo waits for ocean: at least 30s")
+
+
+def test_coupling_imbalance_within_a_component_is_not_a_wait():
+    def report(first: int, last: int) -> Table:
+        # A large average, but the fastest rank hardly waits at all.
+        return _timer_table(
+            first,
+            last,
+            [
+                ("total", 0, 100.0, 100.0, 100.0),
+                ("cpl_get", 1, 40.0, 0.5, 60.0),
+            ],
+        )
+
+    log = _coupled_log([report(0, 7), report(8, 15)], atmo_ranks=8, ocean_ranks=8)
+    check = health.assess(log, now=1e12).check("coupling")
+    assert check.level == "ok"
+    assert check.headline.startswith("Neither component waits markedly")
 
 
 def test_coupling_check_is_absent_without_coupling_timers(assessed):
