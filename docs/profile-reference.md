@@ -380,6 +380,7 @@ Every number a check compares against. The defaults are defined in
 | `outlier_factor` | 3 | progress interval counted as an outlier |
 | `warmup_intervals` | 1 | leading progress intervals treated as warm-up, excluded from the steady-state rate, the outlier count and the plot scale |
 | `io_gap_outlier_factor` | 4 | gap between `role: io` events counted as an outlier |
+| `io_burst_fraction` | 0.1 | `role: io` events closer than this fraction of the typical gap count as one write |
 | `imbalance_warn` | 1.25 | ratio of slowest to fastest rank that is worth reporting |
 | `imbalance_fail` | 2.0 | ratio of slowest to fastest rank that is considered severe |
 | `drift_warn` | 0.2 | slowdown between first and last quarter |

@@ -284,16 +284,23 @@ def io_cadence(log: RunLog) -> dict[str, list[dict]]:
 
     One entry per series carrying ``role: io`` (output writes, checkpoints,
     ...), so a stall between two output files shows up the same way a stall
-    between progress reports does.
+    between progress reports does. Events that follow the previous one within
+    ``io_burst_fraction`` of the typical cadence (one checkpoint reported by
+    each component, say) count as a single write.
     """
+    fraction = float(log.threshold("io_burst_fraction", 0.1))
     out: dict[str, list[dict]] = {}
     for name, role in log.series_roles.items():
         if role != "io":
             continue
-        walls = [r["wall"] for r in log.series.get(name, []) if r.get("wall") is not None]
+        walls = sorted(r["wall"] for r in log.series.get(name, []) if r.get("wall") is not None)
         if len(walls) < 2:
             continue
-        out[name] = [{"wall": b, "seconds": b - a} for a, b in zip(walls, walls[1:]) if b > a]
+        # The upper quartile stays at the cadence even when half the gaps are bursts.
+        diffs = sorted(b - a for a, b in zip(walls, walls[1:]))
+        burst = fraction * diffs[3 * len(diffs) // 4]
+        starts = [w for i, w in enumerate(walls) if i == 0 or w - walls[i - 1] > burst]
+        out[name] = [{"wall": b, "seconds": b - a} for a, b in zip(starts, starts[1:])]
     return out
 
 

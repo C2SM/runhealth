@@ -89,6 +89,13 @@ def test_io_cadence_is_measured_between_output_files():
     assert [g["seconds"] for g in gaps] == pytest.approx([150.0] * 6)
 
 
+def test_io_cadence_merges_events_written_together():
+    # Two components each report the same checkpoint a few seconds apart.
+    log = _io_log([5.0, 1400.0, 12.0, 1380.0, 0.2, 1390.0])
+    gaps = health.io_cadence(log)["output_write"]
+    assert [g["seconds"] for g in gaps] == pytest.approx([1405.0, 1392.0, 1390.2])
+
+
 def test_io_cadence_flags_a_gap_far_from_the_typical_one():
     log = _io_log([150.0] * 6 + [1200.0])
     a = health.assess(log, now=log.last_wall + 1)
