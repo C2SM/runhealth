@@ -118,6 +118,67 @@ ICONS = {
         '4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4M9 18c-4.51 2-5-2-7-2"/>'
     ),
 }
+
+# Solid section icons from Font Awesome Free 6.7.2 (https://fontawesome.com,
+# icons under CC BY 4.0), inlined for the same reason; keyed by ToC anchor.
+_FA = (
+    '<svg class="tico" viewBox="{}" fill="currentColor" aria-hidden="true" '
+    'focusable="false"><path d="{}"/></svg>'
+)
+SECTION_ICONS = {
+    "summary": (  # gauge-high
+        "0 0 512 512",
+        "M0 256a256 256 0 1 1 512 0A256 256 0 1 1 0 256zM288 96a32 32 0 1 0 -64 0 32 32 0 1 0"
+        " 64 0zM256 416c35.3 0 64-28.7 64-64c0-17.4-6.9-33.1-18.1-44.6L366 161.7c5.3-12.1-.2-"
+        "26.3-12.3-31.6s-26.3 .2-31.6 12.3L257.9 288c-.6 0-1.3 0-1.9 0c-35.3 0-64 28.7-64 64s"
+        "28.7 64 64 64zM176 144a32 32 0 1 0 -64 0 32 32 0 1 0 64 0zM96 288a32 32 0 1 0 0-64 3"
+        "2 32 0 1 0 0 64zm352-32a32 32 0 1 0 -64 0 32 32 0 1 0 64 0z",
+    ),
+    "checks": (  # list-check
+        "0 0 512 512",
+        "M152.1 38.2c9.9 8.9 10.7 24 1.8 33.9l-72 80c-4.4 4.9-10.6 7.8-17.2 7.9s-12.9-2.4-17."
+        "6-7L7 113C-2.3 103.6-2.3 88.4 7 79s24.6-9.4 33.9 0l22.1 22.1 55.1-61.2c8.9-9.9 24-10"
+        ".7 33.9-1.8zm0 160c9.9 8.9 10.7 24 1.8 33.9l-72 80c-4.4 4.9-10.6 7.8-17.2 7.9s-12.9-"
+        "2.4-17.6-7L7 273c-9.4-9.4-9.4-24.6 0-33.9s24.6-9.4 33.9 0l22.1 22.1 55.1-61.2c8.9-9."
+        "9 24-10.7 33.9-1.8zM224 96c0-17.7 14.3-32 32-32l224 0c17.7 0 32 14.3 32 32s-14.3 32-"
+        "32 32l-224 0c-17.7 0-32-14.3-32-32zm0 160c0-17.7 14.3-32 32-32l224 0c17.7 0 32 14.3 "
+        "32 32s-14.3 32-32 32l-224 0c-17.7 0-32-14.3-32-32zM160 416c0-17.7 14.3-32 32-32l288 "
+        "0c17.7 0 32 14.3 32 32s-14.3 32-32 32l-288 0c-17.7 0-32-14.3-32-32zM48 368a48 48 0 1"
+        " 1 0 96 48 48 0 1 1 0-96z",
+    ),
+    "figures": (  # chart-line
+        "0 0 512 512",
+        "M64 64c0-17.7-14.3-32-32-32S0 46.3 0 64L0 400c0 44.2 35.8 80 80 80l400 0c17.7 0 32-1"
+        "4.3 32-32s-14.3-32-32-32L80 416c-8.8 0-16-7.2-16-16L64 64zm406.6 86.6c12.5-12.5 12.5"
+        "-32.8 0-45.3s-32.8-12.5-45.3 0L320 210.7l-57.4-57.4c-12.5-12.5-32.8-12.5-45.3 0l-112"
+        " 112c-12.5 12.5-12.5 32.8 0 45.3s32.8 12.5 45.3 0L240 221.3l57.4 57.4c12.5 12.5 32.8"
+        " 12.5 45.3 0l128-128z",
+    ),
+    "detail": (  # table-list
+        "0 0 512 512",
+        "M0 96C0 60.7 28.7 32 64 32l384 0c35.3 0 64 28.7 64 64l0 320c0 35.3-28.7 64-64 64L64 "
+        "480c-35.3 0-64-28.7-64-64L0 96zm64 0l0 64 64 0 0-64L64 96zm384 0L192 96l0 64 256 0 0"
+        "-64zM64 224l0 64 64 0 0-64-64 0zm384 0l-256 0 0 64 256 0 0-64zM64 352l0 64 64 0 0-64"
+        "-64 0zm384 0l-256 0 0 64 256 0 0-64z",
+    ),
+    "overview": (  # table-columns
+        "0 0 512 512",
+        "M0 96C0 60.7 28.7 32 64 32l384 0c35.3 0 64 28.7 64 64l0 320c0 35.3-28.7 64-64 64L64 "
+        "480c-35.3 0-64-28.7-64-64L0 96zm64 64l0 256 160 0 0-256L64 160zm384 0l-160 0 0 256 1"
+        "60 0 0-256z",
+    ),
+    "runs": (  # layer-group
+        "0 0 576 512",
+        "M264.5 5.2c14.9-6.9 32.1-6.9 47 0l218.6 101c8.5 3.9 13.9 12.4 13.9 21.8s-5.4 17.9-13"
+        ".9 21.8l-218.6 101c-14.9 6.9-32.1 6.9-47 0L45.9 149.8C37.4 145.8 32 137.3 32 128s5.4"
+        "-17.9 13.9-21.8L264.5 5.2zM476.9 209.6l53.2 24.6c8.5 3.9 13.9 12.4 13.9 21.8s-5.4 17"
+        ".9-13.9 21.8l-218.6 101c-14.9 6.9-32.1 6.9-47 0L45.9 277.8C37.4 273.8 32 265.3 32 25"
+        "6s5.4-17.9 13.9-21.8l53.2-24.6 152 70.2c23.4 10.8 50.4 10.8 73.8 0l152-70.2zm-152 19"
+        "8.2l152-70.2 53.2 24.6c8.5 3.9 13.9 12.4 13.9 21.8s-5.4 17.9-13.9 21.8l-218.6 101c-1"
+        "4.9 6.9-32.1 6.9-47 0L45.9 405.8C37.4 401.8 32 393.3 32 384s5.4-17.9 13.9-21.8l53.2-"
+        "24.6 152 70.2c23.4 10.8 50.4 10.8 73.8 0z",
+    ),
+}
 THEME_LABEL = {
     "system": "Follow the system theme",
     "light": "Light theme",
@@ -213,6 +274,7 @@ class Toc:
         links = "".join(
             f'<a href="#{esc(anchor)}" class="lv{level}">'
             + (f'<span class="tdot g-{grade}" aria-hidden="true"></span>' if grade else "")
+            + (_FA.format(*SECTION_ICONS[anchor]) if level == 1 and anchor in SECTION_ICONS else "")
             + f"{esc(label)}</a>"
             for anchor, label, level, grade in self.items
         )
@@ -395,6 +457,7 @@ a:hover { border-bottom-color: currentColor; }
 .toc a.lv2 { padding-left: 25px; font-size: 13.5px; }
 .toc .tdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
   margin-right: 7px; vertical-align: 1px; }
+.toc .tico { width: 13px; height: 13px; margin-right: 8px; vertical-align: -2px; opacity: .8; }
 .tdot.g-ok { background: var(--ok); } .tdot.g-info { background: var(--info); }
 .tdot.g-warn { background: var(--warn); } .tdot.g-fail { background: var(--fail); }
 .toc a:hover { color: var(--ink); }
@@ -1731,6 +1794,8 @@ JS = r"""
 def _page(title: str, nav: str, toc: str, body: str) -> str:
     return (
         '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
+        "<!-- Section icons: Font Awesome Free 6.7.2 by @fontawesome, https://fontawesome.com, "
+        "licensed under CC BY 4.0 (https://fontawesome.com/license/free). -->\n"
         '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
         f"<title>{esc(title)}</title>\n"
         f"<script>{HEAD_JS}</script>\n"

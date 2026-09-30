@@ -393,6 +393,13 @@ def test_the_table_of_contents_tracks_live_geometry(parsed, assessed):
     assert "'scroll', onScroll" in html
 
 
+def test_the_table_of_contents_marks_only_sections_with_an_icon(parsed, assessed):
+    html = report.render_run(views(parsed, assessed, ["icon_success"])[0])
+    toc = re.search(r'<nav id="toc">(.*?)</nav>', html).group(1)
+    assert re.search(r'href="#checks" class="lv1"><svg class="tico"', toc)
+    assert not re.search(r'class="lv2">(<span[^>]*></span>)?<svg', toc)
+
+
 def test_the_summary_anchor_clamps_to_the_top_of_the_page(parsed, assessed):
     html = report.render_run(views(parsed, assessed, ["icon_success"])[0])
     assert 'href="#summary"' in html
