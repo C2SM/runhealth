@@ -271,13 +271,22 @@ class Toc:
     def render(self) -> str:
         if len(self.items) < 2:
             return ""
-        links = "".join(
-            f'<a href="#{esc(anchor)}" class="lv{level}">'
-            + (f'<span class="tdot g-{grade}" aria-hidden="true"></span>' if grade else "")
-            + (_FA.format(*SECTION_ICONS[anchor]) if level == 1 and anchor in SECTION_ICONS else "")
-            + f"{esc(label)}</a>"
-            for anchor, label, level, grade in self.items
-        )
+        links = ""
+        for i, (anchor, label, level, grade) in enumerate(self.items):
+            # A heading with entries under it gets a button that folds them away.
+            nested = level == 1 and i + 1 < len(self.items) and self.items[i + 1][2] > 1
+            links += (
+                f'<a href="#{esc(anchor)}" class="lv{level}{" nest" if nested else ""}">'
+                + (f'<span class="tdot g-{grade}" aria-hidden="true"></span>' if grade else "")
+                + (_FA.format(*SECTION_ICONS[anchor]) if level == 1 and anchor in SECTION_ICONS else "")
+                + f"{esc(label)}</a>"
+            )
+            if nested:
+                links += (
+                    f'<button type="button" class="tfold" aria-expanded="true" '
+                    f'aria-label="Show or hide the entries under {esc(label)}">'
+                    '<span class="chev" aria-hidden="true"></span></button>'
+                )
         return (
             '<aside class="toc" aria-label="On this page">'
             '<p class="toc-h">On this page</p>'
@@ -448,14 +457,22 @@ a:hover { border-bottom-color: currentColor; }
 .toc { position: sticky; top: calc(var(--nav-h) + 20px); padding-top: 30px; }
 .toc-h { margin: 0 0 9px; font-size: 12px; text-transform: uppercase; letter-spacing: .09em;
   color: var(--muted); font-weight: 650; }
-.toc nav { display: flex; flex-direction: column; gap: 1px;
-  border-left: 1px solid var(--line); overflow-y: auto; scrollbar-width: thin;
+/* Two columns: the links, and the fold buttons beside the headings that have them. */
+.toc nav { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 1px;
+  align-items: center; border-left: 1px solid var(--line); overflow-y: auto; scrollbar-width: thin;
   max-height: calc(100vh - var(--nav-h) - 100px); }
 /* Links keep their height, so a long list scrolls rather than squeezing each row. */
-.toc a { flex: none; border: none; font-size: 14px; color: var(--muted); padding: 4px 0 4px 13px;
+.toc a { flex: none; grid-column: 1 / -1; border: none; font-size: 14px; color: var(--muted); padding: 4px 0 4px 13px;
   margin-left: -1px; border-left: 2px solid transparent; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
 .toc a.lv2 { padding-left: 25px; font-size: 13.5px; }
+.toc a.nest { grid-column: 1; }
+.toc a.folded { display: none; }
+.tfold { display: grid; place-items: center; width: 22px; height: 22px; padding: 0;
+  background: none; border: none; border-radius: 4px; color: var(--muted); cursor: pointer; }
+.tfold:hover { color: var(--ink); background: var(--panel-2); }
+.tfold .chev::before { content: "\\25be"; font-size: 12px; }
+.tfold[aria-expanded="false"] .chev::before { content: "\\25b8"; }
 .toc .tdot { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
   margin-right: 7px; vertical-align: 1px; }
 .toc .tico { width: 13px; height: 13px; margin-right: 8px; vertical-align: -2px; opacity: .8; }
@@ -472,11 +489,11 @@ main > *:first-child { margin-top: 0; }
   .toc { position: sticky; top: var(--nav-h); z-index: 30; padding: 8px 0 9px;
     background: var(--bg); border-bottom: 1px solid var(--line); }
   .toc-h { display: none; }
-  .toc nav { flex-direction: row; gap: 6px; overflow-x: auto; border-left: none; max-height: none;
+  .toc nav { display: flex; flex-direction: row; gap: 6px; overflow-x: auto; border-left: none; max-height: none;
     scrollbar-width: thin; -webkit-overflow-scrolling: touch; }
   .toc a { border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px;
     margin: 0; flex: 0 0 auto; }
-  .toc a.lv2 { display: none; }
+  .toc a.lv2, .tfold { display: none; }
   .toc a[aria-current="true"] { border-color: var(--info); }
   main { padding-top: 22px; }
 }
@@ -1357,6 +1374,17 @@ JS = r"""
     window.addEventListener('resize', onScroll);
     mark();
   }
+
+  // Folding a heading hides the entries up to the next heading.
+  document.querySelectorAll('.tfold').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var open = b.getAttribute('aria-expanded') !== 'true';
+      b.setAttribute('aria-expanded', open ? 'true' : 'false');
+      for (var el = b.nextElementSibling; el && el.classList.contains('lv2'); el = el.nextElementSibling)
+        el.classList.toggle('folded', !open);
+      window.dispatchEvent(new Event('scroll'));
+    });
+  });
 
   // -- filter by grade: the index's rows, or a run's checks -------------
   document.querySelectorAll('.filters').forEach(function (box) {

@@ -283,6 +283,16 @@ def test_a_single_section_needs_no_table_of_contents():
     assert toc.render() == ""
 
 
+def test_only_headings_with_entries_under_them_can_fold():
+    toc = report.Toc()
+    toc.add("summary", "Summary")
+    toc.add("checks", "Checks")
+    toc.add("check-0", "First", level=2)
+    html = toc.render()
+    assert html.count('class="tfold"') == 1
+    assert re.search(r'href="#checks" class="lv1 nest">.*?</a><button type="button" class="tfold"', html)
+
+
 def test_the_source_bar_leads_with_the_path_and_its_actions(tmp_path, parsed, assessed):
     view = views(parsed, assessed, ["icon_success"])[0]
     view.source = "santis:/scratch/run/LOG.demo.1.o"
@@ -396,7 +406,7 @@ def test_the_table_of_contents_tracks_live_geometry(parsed, assessed):
 def test_the_table_of_contents_marks_only_sections_with_an_icon(parsed, assessed):
     html = report.render_run(views(parsed, assessed, ["icon_success"])[0])
     toc = re.search(r'<nav id="toc">(.*?)</nav>', html).group(1)
-    assert re.search(r'href="#checks" class="lv1"><svg class="tico"', toc)
+    assert re.search(r'href="#checks" class="lv1[^"]*"><svg class="tico"', toc)
     assert not re.search(r'class="lv2">(<span[^>]*></span>)?<svg', toc)
 
 
