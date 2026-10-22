@@ -32,7 +32,8 @@ from .report import RunView
 
 CACHE_VERSION = 5
 DEFAULT_GLOB = "LOG.*.o"
-LOG_GLOBS = [DEFAULT_GLOB, "slurm-*.out", "*.log", "*.out", "*.o[0-9]*"]
+# run_script.<job id>.o is how Sirocco names the log of every task.
+LOG_GLOBS = [DEFAULT_GLOB, "slurm-*.out", "run_script.*.o", "*.log", "*.out", "*.o[0-9]*"]
 SINCE_RE = re.compile(r"^(\d+(?:\.\d+)?)([smhdw])$")
 SINCE_UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400, "w": 604800}
 MAX_EMBED_LOG = 8 << 20  # copy the raw log next to the report below this size
