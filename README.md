@@ -74,6 +74,8 @@ The full documentation is published at **<https://c2sm.github.io/runhealth/>**:
   running job, output formats, sharing a report, performance
 - [Running as a SLURM job](https://c2sm.github.io/runhealth/slurm.html): check
   every model job automatically once it has ended
+- [Running in a Sirocco workflow](https://c2sm.github.io/runhealth/sirocco.html):
+  check every ICON task of a workflow and stop it after a failed run
 - [Reading the report](https://c2sm.github.io/runhealth/report.html): what each
   check means, how to read the figures
 - [Profiles](https://c2sm.github.io/runhealth/profiles.html) and the

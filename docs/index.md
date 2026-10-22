@@ -126,6 +126,7 @@ schema.
 install
 usage
 slurm
+sirocco
 report
 profiles
 logging

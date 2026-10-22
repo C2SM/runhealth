@@ -14,6 +14,13 @@ def test_discover_prefers_one_naming_shape(tmp_path):
     assert names == ["LOG.demo.1.o"]
 
 
+def test_discover_finds_the_logs_of_sirocco_tasks(tmp_path):
+    (tmp_path / "run_script.12345.o").write_text("x\n")
+    (tmp_path / "notes.log").write_text("y\n")
+    names = [f.name for f in cli.discover([tmp_path], None)]
+    assert names == ["run_script.12345.o"]
+
+
 def test_discover_honours_an_explicit_pattern(tmp_path):
     (tmp_path / "LOG.demo.1.o").write_text("x\n")
     (tmp_path / "notes.log").write_text("y\n")

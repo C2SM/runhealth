@@ -1,8 +1,8 @@
 # Troubleshooting
 
 **"no logs matched"**
-: Directories are scanned for `LOG.*.o`, `slurm-*.out`, `*.log` and `*.out` in
-  that order, using the first pattern that matches. Use `--glob` for any other
+: Directories are scanned for `LOG.*.o`, `slurm-*.out`, `run_script.*.o`
+  (Sirocco), `*.log`, `*.out` and `*.o<digits>` in that order, using the first pattern that matches. Use `--glob` for any other
   naming scheme, and `--list` to see which files would be read. Empty files are
   skipped.
 
