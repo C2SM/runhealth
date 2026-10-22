@@ -72,6 +72,8 @@ The full documentation is published at **<https://c2sm.github.io/runhealth/>**:
 - [Install](https://c2sm.github.io/runhealth/install.html)
 - [Usage](https://c2sm.github.io/runhealth/usage.html): recipes, following a
   running job, output formats, sharing a report, performance
+- [Running as a SLURM job](https://c2sm.github.io/runhealth/slurm.html): check
+  every model job automatically once it has ended
 - [Reading the report](https://c2sm.github.io/runhealth/report.html): what each
   check means, how to read the figures
 - [Profiles](https://c2sm.github.io/runhealth/profiles.html) and the
