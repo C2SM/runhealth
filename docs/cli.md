@@ -28,7 +28,7 @@ runhealth [PATH ...] [-o OUTDIR] [-f html|md|pdf]
 | `--no-cache`, `--no-squeue` | skip the parse cache; do not query SLURM (`squeue` or `sacct`) at all |
 | `--no-sacct` | do not read the SLURM accounting records of the jobs |
 | `--embed-logs` | embed logs smaller than 8 MB as a page the figures can link into |
-| `--output-dir DIR` | read the model output in `DIR` as well; see [Diagnosing the model output](usage.md#diagnosing-the-model-output) |
+| `--output-dir DIR` | read the model output in `DIR` as well, or with `auto` in the directory each run's log names; see [Diagnosing the model output](usage.md#diagnosing-the-model-output) |
 | `--output-glob` | which files in `--output-dir` to read (default from the profile, else `*.nc`) |
 | `--grid FILE` | grid file whose `cell_area` weights the means of output on the native grid |
 | `--fail-on` | `never` (default), `warn` or `fail`: exit with code 3 when any run is graded at or above this level; see [Exit codes](#exit-codes) |

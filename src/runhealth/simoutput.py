@@ -19,21 +19,30 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+AUTO = "auto"  # --output-dir value that reads each run's directory from its log
 DEFAULT_GLOB = "*.nc"
 EPOCH = "seconds since 1970-01-01 00:00:00"
 LATLON = ("lat", "lon")
 MISSING = "the output diagnostics need the optional dependencies: pip install 'runhealth[output]'"
 
 
-def config(profiles, options: dict) -> dict:
-    """The output section of the selected profiles, completed by the command line."""
+def config(profiles, options: dict, log: dict) -> dict:
+    """The output section of the selected profiles, completed by the command line.
+
+    ``options["dir"]`` set to ``auto`` takes each run's directory from the field
+    of its log that the ``output_dir_field`` setting names.
+    """
     spec: dict[str, Any] = {"variables": {}}
     for p in profiles:
         section = getattr(p, "output", None) or {}
         spec.update({k: v for k, v in section.items() if k != "variables"})
         spec["variables"].update(section.get("variables") or {})
+    where = options["dir"]
+    if where == AUTO:
+        field = (log.get("settings") or {}).get("output_dir_field", "")
+        where = (log.get("fields") or {}).get(field)
     return {
-        "dir": str(Path(options["dir"]).resolve()),
+        "dir": str(Path(where).resolve()) if where else None,
         "glob": options.get("glob") or spec.get("files") or DEFAULT_GLOB,
         "grid": str(Path(options["grid"]).resolve()) if options.get("grid") else None,
         "variables": spec["variables"],
@@ -47,6 +56,10 @@ def collect(cfg: dict, prev: dict | None = None) -> dict:
         import xarray  # noqa: F401
     except ImportError:
         return {**cfg, "error": MISSING, "files": {}}
+    if not cfg["dir"]:
+        return {**cfg, "error": "the log does not name an output directory", "files": {}}
+    if not Path(cfg["dir"]).is_dir():
+        return {**cfg, "error": f"{cfg['dir']} is not reachable from this machine", "files": {}}
     key = json.dumps([cfg["variables"], cfg["grid"]], sort_keys=True)
     old = (prev or {}).get("files", {}) if (prev or {}).get("key") == key else {}
     area = _Area(cfg["grid"])
@@ -127,10 +140,20 @@ def _scan(path: Path, variables: dict, area: _Area) -> dict:
         tname = "time" if "time" in ds.variables else None
         rec: dict[str, Any] = {"steps": _times(ds[tname]) if tname else [], "vars": {}}
         for name, spec in variables.items():
-            sources = spec.get("from") or [name]
-            if all(s in ds.data_vars for s in sources):
+            sources = _sources(spec.get("names") or [name], ds)
+            if sources:
                 rec["vars"][name] = _stats([ds[s] for s in sources], ds, tname, area)
+                rec["vars"][name]["source"] = ", ".join(sources)
         return rec
+
+
+def _sources(names: list, ds) -> list[str]:
+    """The first alternative a file holds; a list of names is the components of a magnitude."""
+    for alt in names:
+        parts = alt if isinstance(alt, list) else [alt]
+        if all(p in ds.data_vars for p in parts):
+            return parts
+    return []
 
 
 def _times(var) -> list[tuple[str, float]]:

@@ -286,7 +286,9 @@ def parse_cached(
             True,
         )
     found = (
-        simoutput.collect(simoutput.config(picked, output), payload.get("output")) if output else {}
+        simoutput.collect(simoutput.config(picked, output, payload), payload.get("output"))
+        if output
+        else {}
     )
     if found != payload.get("output", {}):
         payload, fresh = {**payload, "output": found}, True
@@ -615,7 +617,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--output-dir",
         metavar="DIR",
-        help="directory of the model output files to diagnose (needs runhealth[output])",
+        help="directory of the model output to diagnose, or 'auto' to take each run's "
+        "from its log (needs runhealth[output])",
     )
     p.add_argument(
         "--output-glob",

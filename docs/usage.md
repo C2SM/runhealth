@@ -97,6 +97,7 @@ vertical wind:
 uv sync --extra output    # xarray and netCDF4, needed only for this
 runhealth LOG.exp.12345.o --output-dir /scratch/run/exp -o report/ \
     --grid /store/grids/icon_grid_0026_R03B07_G.nc
+runhealth /scratch/run/logs --output-dir auto --output-glob '*_3d_pl_*.nc' -o report/
 ```
 
 For every variable and output step, `runhealth` records the minimum, the
@@ -117,14 +118,28 @@ grid is weighted by the cosine of latitude, and anything else is averaged
 without weights. Values equal to a variable's fill value are left out, so a
 `NaN` that is counted is one the model wrote.
 
+- `--output-dir auto` takes each run's directory from its log, so one report
+  can cover runs of several experiments. The ICON profile reads it from the
+  shell trace of the job script, `+ EXPDIR=...`, which appears when the script
+  runs with `set -x`; another profile names its own field with the
+  `output_dir_field` setting. A run whose log names no directory, or whose
+  directory does not exist on this machine, is reported for information. Logs
+  synced from a cluster with `host:/path` therefore need `runhealth` to run on
+  that cluster to diagnose their output.
 - `--output-glob` selects the files to read, `*.nc` by default. When several
   output streams hold the same variable at the same times, select one of them,
   as the second copy would otherwise count as duplicate steps.
 - The directory applies to every run of the report, so combine it with
   [`--job-id`](cli.md) or a single log when a directory holds the logs of
   several runs.
+- Each variable is found under the first of its names that a file holds:
+  ICON's own (`temp`, `pres`, `u`, `v`) or the CMIP-style names of an output on
+  pressure levels (`ta`, `pres_sfc`, `ua`, `va`).
 - Fields are read one level at a time, so memory stays small even for a global
-  field at kilometer scale. The summary of each file is cached with the log, so
+  field at kilometer scale. Every value of the diagnosed variables is read,
+  however, which for a global run at kilometer scale amounts to several GB per
+  output step; run such a check as a [SLURM job](slurm.md) rather than on a
+  login node, and select a stream with `--output-glob`. The summary of each file is cached with the log, so
   a repeated pass, for example with `--watch`, reads only new or changed files.
 
 The statistics also appear in [`summary.json`](#output-formats) under `output`.

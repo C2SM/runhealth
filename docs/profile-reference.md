@@ -357,6 +357,7 @@ Names and column mappings used by the analysis. All entries are optional.
 | `coupling_wait_timers` | blocking gets of the time loop, on which a component waits until its partner delivers |
 | `coupling_setup_timers` | coupler setup, including the very first get; reported, but not counted as waiting |
 | `timer_group_ranks` | pattern matching the first and last rank in the title of a timer table, which assigns each table to a component |
+| `output_dir_field` | the field holding the run's output directory, read by `--output-dir auto` |
 | `build_block` | the `keyvalues` block that describes the executable; the run page shows it at the top and compares it with the previous run |
 | `build_ignore` | keys of that block that describe the run rather than the binary, such as its date or host; neither shown nor compared |
 | `counter_table`, `ratio_table` | network counter blocks |
@@ -378,12 +379,13 @@ output:
     temp:
       label: Temperature
       unit: K
+      names: [temp, ta]
       fail_below: 150
       fail_above: 350
     wind:
       label: Wind speed
       unit: m/s
-      from: [u, v]
+      names: [[u, v], [ua, va]]
       warn_above: 400
       fail_above: 1000
 ```
@@ -391,9 +393,9 @@ output:
 | Key | Meaning |
 | --- | --- |
 | `files` | pattern of the output files in `--output-dir`; `--output-glob` overrides it |
-| `variables` | one entry per diagnosed variable, keyed by its name in the files |
+| `variables` | one entry per diagnosed variable |
 | `label`, `unit` | how the report names the variable and its unit |
-| `from` | variables whose magnitude, `sqrt(a^2 + b^2 + ...)`, forms this one, such as a wind speed from its components |
+| `names` | the names under which a file may hold the variable, tried in order; a list of names stands for the components of a magnitude, `sqrt(a^2 + b^2 + ...)`, such as a wind speed. Defaults to the key of the entry |
 | `warn_below`, `fail_below` | a minimum below this value warns or fails |
 | `warn_above`, `fail_above` | a maximum above this value warns or fails |
 

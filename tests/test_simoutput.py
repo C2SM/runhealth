@@ -12,7 +12,9 @@ FIXTURES = Path(__file__).parent / "fixtures"
 NLEV, NCELLS = 5, 8
 
 
-def icon_output(path: Path, days: list[float], temp=None, fill: bool = False) -> Path:
+def icon_output(
+    path: Path, days: list[float], temp=None, fill: bool = False, cmip: bool = False
+) -> Path:
     """A small file shaped like ICON output on the native grid, with ICON's time axis."""
     nt = len(days)
     t = np.full((nt, NLEV, NCELLS), 250.0) if temp is None else temp
@@ -37,6 +39,8 @@ def icon_output(path: Path, days: list[float], temp=None, fill: bool = False) ->
     )
     if fill:
         ds["temp"].encoding["_FillValue"] = -999.0
+    if cmip:  # the names of an ICON output on pressure levels
+        ds = ds.rename({"temp": "ta", "u": "ua", "v": "va"}).drop_vars("pres")
     ds.to_netcdf(path)
     return path
 
@@ -50,7 +54,7 @@ def grid_file(path: Path) -> Path:
 
 def collect(out_dir: Path, grid: Path | None = None, prev=None) -> dict:
     icon = profile.load_all()["icon"]
-    cfg = simoutput.config([icon], {"dir": out_dir, "grid": grid})
+    cfg = simoutput.config([icon], {"dir": out_dir, "grid": grid}, {})
     return simoutput.collect(cfg, prev)
 
 
@@ -159,3 +163,35 @@ def test_a_gap_in_the_output_warns(tmp_path):
     _, run, _ = _run(tmp_path, tmp_path)
     check = next(c for c in run["checks"] if c["key"] == "output_completeness")
     assert check["level"] == "warn" and "gap" in check["headline"]
+
+
+def test_cmip_style_names_are_found(tmp_path):
+    icon_output(tmp_path / "a.nc", [20200101.0], cmip=True)
+    out = collect(tmp_path)
+    found = simoutput.series(out)
+    assert set(found) == {"temp", "wind", "w"}
+    assert found["wind"][0]["max"] == 5.0
+    assert out["files"]["a.nc"]["vars"]["wind"]["source"] == "ua, va"
+
+
+def test_auto_takes_the_output_directory_from_the_log(tmp_path):
+    out_dir = tmp_path / "exp"
+    out_dir.mkdir()
+    icon_output(out_dir / "a.nc", [20200101.0])
+    log = tmp_path / "LOG.exp.12345.o"
+    text = (FIXTURES / "icon_success.log").read_text()
+    log.write_text(text + f"2026-01-05T10:01:01.600: + EXPDIR={out_dir}\n")
+    report = tmp_path / "report"
+    assert cli.main([str(log), "-o", str(report), "--no-squeue", "--output-dir", "auto"]) == 0
+    run = json.loads((report / summary.SUMMARY_FILE).read_text())["runs"][0]
+    assert run["output"]["temp"]["max"] == [254.0]
+
+
+def test_an_unreachable_output_directory_is_information(tmp_path):
+    icon = profile.load_all()["icon"]
+    log = {"settings": {"output_dir_field": "output_dir"}, "fields": {}}
+    out = simoutput.collect(simoutput.config([icon], {"dir": "auto"}, log))
+    assert out["error"] == "the log does not name an output directory"
+    log["fields"]["output_dir"] = str(tmp_path / "elsewhere")
+    out = simoutput.collect(simoutput.config([icon], {"dir": "auto"}, log))
+    assert out["error"].endswith("is not reachable from this machine")
