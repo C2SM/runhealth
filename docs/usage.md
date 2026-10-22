@@ -7,6 +7,7 @@
 | Analyze everything in a directory | `runhealth /path/to/logs -o report/` |
 | Analyze logs on a remote cluster from a local machine | `runhealth santis:/path/to/logs -o report/ --open` |
 | Analyze a single log and open the report | `runhealth LOG.myjob.12345.o -o report/ --open` |
+| Check one job as a workflow step, failing if the run failed | `runhealth /path/to/logs --job-id 12345 --fail-on fail -o report/` |
 | Read it in a browser from a login node | `runhealth /path/to/logs -o report/ --serve` |
 | Only the most recent logs | `runhealth /path/to/logs --last 5 --since 7d -o report/` |
 | Follow a job that is running now | `runhealth /path/to/logs --watch 60 -o report/` |

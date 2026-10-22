@@ -725,6 +725,12 @@ def _cast(raw: str, kind: str | None):
     return raw.strip() if isinstance(raw, str) else raw
 
 
+def job_id_of_name(name: str) -> str | None:
+    """The SLURM job id in a log file name, such as ``LOG.exp.4242.o`` or ``slurm-4242.out``."""
+    m = JOB_ID_NAME_RE.search(name)
+    return (m.group(1) or m.group(2)) if m else None
+
+
 def parse(
     path: Path,
     profiles: list[Profile],
@@ -760,9 +766,9 @@ def parse(
     ex.log.offset = st.st_size
     if not ex.log.fields.get("job_id"):
         # A job killed before it printed its environment still has its id in the name.
-        m = JOB_ID_NAME_RE.search(path.name)
-        if m:
-            ex.log.fields["job_id"] = m.group(1) or m.group(2)
+        job_id = job_id_of_name(path.name)
+        if job_id:
+            ex.log.fields["job_id"] = job_id
     if ex.log.attempts > 1:
         ex.log.notes.append(
             f"This file holds {ex.log.attempts} job attempts; only the last is analyzed."

@@ -168,6 +168,24 @@ def test_fail_on_turns_the_grade_into_the_exit_code(tmp_path):
     assert rc("icon_success.log", "--fail-on", "warn") == cli.EXIT_GRADE
 
 
+def test_job_id_selects_logs_by_their_name(tmp_path):
+    for job in ("12345", "67890"):
+        (tmp_path / f"slurm-{job}.out").write_bytes((FIXTURES / "slurm_generic.log").read_bytes())
+    out = tmp_path / "report"
+    assert cli.main([str(tmp_path), "-o", str(out), "--no-squeue", "--job-id", "12345"]) == 0
+    runs = json.loads((out / "summary.json").read_text())["runs"]
+    assert [r["name"] for r in runs] == ["slurm-12345.out"]
+
+
+def test_job_id_selects_logs_by_their_content(tmp_path):
+    out = tmp_path / "report"
+    args = [str(FIXTURES), "--glob", "*.log", "-o", str(out), "--no-squeue", "--job-id"]
+    assert cli.main([*args, "4243"]) == 0
+    runs = json.loads((out / "summary.json").read_text())["runs"]
+    assert [r["name"] for r in runs] == ["icon_hang.log"]
+    assert cli.main([*args, "1"]) == 1
+
+
 def test_explicit_profile_limits_the_analysis(tmp_path):
     out = tmp_path / "report"
     cli.main(

@@ -3,7 +3,7 @@
 ```text
 runhealth [PATH ...] [-o OUTDIR] [-f html|md|pdf]
           [--profile NAME[,NAME]] [--profile-dir DIR] [--list-profiles]
-          [--glob PATTERN] [--last N] [--since 7d] [--list]
+          [--glob PATTERN] [--last N] [--since 7d] [--job-id ID[,ID]] [--list]
           [--watch SECONDS] [--stall-seconds N] [--jobs N]
           [--no-plots] [--no-cache] [--no-squeue] [--no-sacct] [--embed-logs]
           [--fail-on never|warn|fail] [--title TEXT] [--open] [--serve PORT]
@@ -17,6 +17,7 @@ runhealth [PATH ...] [-o OUTDIR] [-f html|md|pdf]
 | `-f, --format` | `html` (default), `md` or `pdf` |
 | `--glob` | file name pattern used when scanning directories |
 | `--last N`, `--since` | keep the N most recent logs, or those newer than e.g. `7d`, `12h` |
+| `--job-id ID[,ID]` | analyze only the logs of these SLURM jobs, recognized by the job id in the file name or, failing that, in the log |
 | `--profile`, `--profile-dir` | pin profiles by name; add a directory of your own profiles |
 | `--list`, `--list-profiles` | show which files would be read, or which profiles exist |
 | `--watch N` | re-render every N seconds |
