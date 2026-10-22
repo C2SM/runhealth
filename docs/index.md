@@ -125,6 +125,7 @@ schema.
 
 install
 usage
+slurm
 report
 profiles
 logging
