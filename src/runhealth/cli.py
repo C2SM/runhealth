@@ -24,7 +24,7 @@ from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, wait
 from pathlib import Path
 
-from . import __version__, accounting, diag, plots, profile, progress, report, search
+from . import __version__, accounting, diag, plots, profile, progress, report, search, summary
 from .extract import RunLog, parse
 from .health import LEVEL_RANK, assess
 from .logfile import format_duration
@@ -444,6 +444,7 @@ def write_report(args, views: list[RunView], outdir: Path, sources: list[str]) -
             standalone=args.format == "md",
         )
     title = args.title or "Run health"
+    summary.write(views, outdir, page=args.format != "md")
     if args.format == "md":
         path = outdir / "report.md"
         path.write_text(report.render_markdown(views, sources, title))
@@ -639,7 +640,7 @@ def _once(args, outdir: Path) -> tuple[Path, str] | None:
     dest = _publish_dest(args)
     if dest:
         publish(outdir, dest, args.publish_url)
-    return path, max((v.assessment.grade for v in views), key=LEVEL_RANK.get, default="ok")
+    return path, summary.worst(views)
 
 
 def main(argv: list[str] | None = None) -> int:

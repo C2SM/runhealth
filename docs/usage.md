@@ -104,6 +104,48 @@ stopped, so following a growing 100 MB log costs no more than the new lines.
   it to be printed instead of failing. WeasyPrint is not a hard dependency
   because it is large and printing from a browser is equally suitable.
 
+Whatever the format, `summary.json` is written beside the report. It holds the
+verdict on every run for a workflow manager or a script to read, together with
+[`--fail-on`](cli.md#exit-codes):
+
+```json
+{
+ "schema_version": 1,
+ "runhealth": "1.0.0",
+ "generated": "2026-10-22T13:09:37+00:00",
+ "grade": "warn",
+ "runs": [
+  {
+   "name": "LOG.exp1.4242.o",
+   "log": "/scratch/run/LOG.exp1.4242.o",
+   "job_id": "4242",
+   "job_name": "exp1",
+   "page": "LOG.exp1.4242.html",
+   "status": "SUCCESS",
+   "grade": "warn",
+   "started": "2026-01-05T10:00:00.100000+00:00",
+   "ended": "2026-01-05T10:01:01.520000+00:00",
+   "model_start": "2020-01-01T00:00:00",
+   "model_end": "2020-01-01T00:33:20",
+   "stats": {"wall_seconds": 61.4, "nodes": 2, "sypd": 0.136, "sypd_steady": 0.137,
+             "sim_seconds": 2000.0, "progress_last": 100},
+   "checks": [{"key": "outcome", "title": "Outcome", "level": "ok",
+               "headline": "The run reported success"}]
+  }
+ ]
+}
+```
+
+- `grade` is the worst grade of all runs; each run's `grade` is the worst level
+  of its checks: `ok`, `info`, `warn` or `fail`.
+- `status` is one of `SUCCESS`, `FAILED`, `STALLED`, `RUNNING`, `QUEUED`,
+  `INCOMPLETE` or `UNKNOWN`.
+- Wall-clock times are in UTC; model times are in the model's own calendar and
+  carry no time zone. Any value that the log does not provide is `null`, and
+  `page` is `null` for `--format md`.
+- Fields may be added in later versions. A field is only removed or changed
+  together with an increase of `schema_version`.
+
 ## Sharing a report
 
 A report is a directory of plain files with no server behind it, so there are
