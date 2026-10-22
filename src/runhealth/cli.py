@@ -25,7 +25,7 @@ from concurrent.futures import ProcessPoolExecutor, wait
 from pathlib import Path
 
 from . import __version__, accounting, diag, plots, profile, progress, report, search, summary
-from .extract import RunLog, parse
+from .extract import RunLog, job_id_of_name, parse
 from .health import LEVEL_RANK, assess
 from .logfile import format_duration
 from .report import RunView
@@ -387,6 +387,9 @@ def build(
         follow = (lambda n: bar.advance(n=n)) if bar.enabled else None
         named = (lambda f: bar.advance(f.name, n=0)) if bar.enabled else None
         logs = parse_all(files, names, profile_dirs, cache, jobs, follow, named)
+    if args.job_id:
+        # A log whose name carries no job id is only known after parsing.
+        logs = [rl for rl in logs if str(rl.fields.get("job_id") or "") in args.job_id]
 
     # Keyed by host (None for this machine), as job ids are only unique per cluster.
     records: dict[str | None, dict[str, dict]] = {}
@@ -544,6 +547,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--glob", default=None, help=f"filename pattern (default: {DEFAULT_GLOB} etc.)")
     p.add_argument("--last", type=int, default=0, help="keep only the N newest logs (0 = all)")
     p.add_argument("--since", default="", help="skip logs older than this, e.g. 7d or 12h")
+    p.add_argument(
+        "--job-id",
+        type=lambda text: {i.strip() for i in text.split(",") if i.strip()},
+        default=set(),
+        metavar="ID[,ID]",
+        help="analyze only the logs of these SLURM jobs",
+    )
     p.add_argument("--profile", default="", help="profiles to apply, comma separated")
     p.add_argument("--profile-dir", action="append", help="extra directory of profiles")
     p.add_argument("--list-profiles", action="store_true", help="show known profiles and exit")
@@ -608,6 +618,8 @@ def _select(args, outdir: Path) -> tuple[list[Path], list[tuple[str, Path]]]:
         else:
             cutoff = time.time() - window
             files = [f for f in files if f.stat().st_mtime >= cutoff]
+    if args.job_id:
+        files = [f for f in files if job_id_of_name(f.name) in args.job_id | {None}]
     return (files[: args.last] if args.last else files), remotes
 
 
@@ -631,6 +643,9 @@ def _once(args, outdir: Path) -> tuple[Path, str] | None:
         states = slurm_states()
         log(f"runhealth: SLURM knows the state of {len(states)} of your job(s)")
     views = build(args, files, outdir, states, remotes)
+    if not views:
+        log(f"runhealth: no log of job(s) {', '.join(sorted(args.job_id))}")
+        return None
     # Named the same way a run page names its log, so both read alike.
     here = socket.gethostname()
     sources = [p if is_remote(p) else f"{here}:{Path(p).resolve()}" for p in args.paths]
