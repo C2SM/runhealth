@@ -212,6 +212,36 @@ thresholds:
   max_w_warn: 100
   max_w_fail: 1000
 
+# Model output read with --output-dir: the variables to diagnose and the
+# limits their extremes are graded against. Wind speed is computed from u and
+# v; the limits on wind repeat those of the peaks ICON prints, and the limits
+# on temperature lie far outside anything physical.
+output:
+  files: "*.nc"
+  variables:
+    temp:
+      label: Temperature
+      unit: K
+      fail_below: 150
+      fail_above: 350
+    pres:
+      label: Pressure
+      unit: Pa
+      fail_below: 0
+    wind:
+      label: Wind speed
+      unit: m/s
+      from: [u, v]
+      warn_above: 400
+      fail_above: 1000
+    w:
+      label: Vertical wind
+      unit: m/s
+      warn_below: -100
+      warn_above: 100
+      fail_below: -1000
+      fail_above: 1000
+
 groups:
   icon_warning:
     re: 'WARNING PE:\s+(\d+)\s+(\S+)'

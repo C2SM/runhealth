@@ -24,13 +24,24 @@ from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor, wait
 from pathlib import Path
 
-from . import __version__, accounting, diag, plots, profile, progress, report, search, summary
+from . import (
+    __version__,
+    accounting,
+    diag,
+    plots,
+    profile,
+    progress,
+    report,
+    search,
+    simoutput,
+    summary,
+)
 from .extract import RunLog, job_id_of_name, parse
 from .health import LEVEL_RANK, assess
 from .logfile import format_duration
 from .report import RunView
 
-CACHE_VERSION = 5
+CACHE_VERSION = 6
 DEFAULT_GLOB = "LOG.*.o"
 # run_script.<job id>.o is how Sirocco names the log of every task.
 LOG_GLOBS = [DEFAULT_GLOB, "slurm-*.out", "run_script.*.o", "*.log", "*.out", "*.o[0-9]*"]
@@ -217,7 +228,12 @@ def _cache_file(cache_dir: Path, path: Path) -> Path:
 
 
 def parse_cached(
-    path: Path, names: list[str], dirs: list[str], cache_dir: str | None, reports=None
+    path: Path,
+    names: list[str],
+    dirs: list[str],
+    cache_dir: str | None,
+    reports=None,
+    output: dict | None = None,
 ) -> dict:
     """Parse one log, reusing and updating an on-disk cache. Runs in a worker.
 
@@ -225,12 +241,14 @@ def parse_cached(
     megabytes, which is how the parent process follows a file it is not
     reading itself. The summary of the run's diagnostics directory is cached
     with the log and read again only when a file in that directory changes.
+    ``output`` names the run's output (``dir``, ``glob``, ``grid``), whose
+    summary is cached the same way, one file at a time.
     """
     profiles = profile.load_all([Path(d) for d in dirs])
     picked = profile.select(names, profiles) if names else profile.detect(path, profiles)
     cache = _cache_file(Path(cache_dir), path) if cache_dir else None
     report = reports.put if reports is not None else None
-    state, start = None, 0
+    state, start, payload = None, 0, None
     stat = path.stat()
     if cache and cache.is_file():
         try:
@@ -247,23 +265,33 @@ def parse_cached(
                 report(stat.st_size)  # nothing to read, but the file is accounted for
             cached = RunLog.from_dict(blob["state"])
             where = diag.locate(cached)
-            sig = diag.signature(where)
-            if sig == blob.get("diag_sig", ""):
-                return blob["state"]
-            cached.diag = diag.collect(cached, where)
-            payload = RunLog.to_dict(cached)
-            _store(cache, picked, stat, cached.offset, payload, sig)
-            return payload
-        if same and blob.get("offset"):
+            sig, offset, fresh = diag.signature(where), cached.offset, False
+            payload = blob["state"]
+            if sig != blob.get("diag_sig", ""):
+                cached.diag = diag.collect(cached, where)
+                payload, fresh = RunLog.to_dict(cached), True
+        elif same and blob.get("offset"):
             # Job logs only ever grow, so continue where the last pass stopped.
             state, start = blob["state"], int(blob["offset"])
-    if report and start:
-        report(start)
-    result = parse(path, picked, start=start, state=state, on_read=report)
-    where = diag.locate(result)
-    result.diag = diag.collect(result, where)
-    payload = RunLog.to_dict(result)
-    _store(cache, picked, stat, result.offset, payload, diag.signature(where))
+    if payload is None:
+        if report and start:
+            report(start)
+        result = parse(path, picked, start=start, state=state, on_read=report)
+        where = diag.locate(result)
+        result.diag = diag.collect(result, where)
+        payload, offset, sig, fresh = (
+            RunLog.to_dict(result),
+            result.offset,
+            diag.signature(where),
+            True,
+        )
+    found = (
+        simoutput.collect(simoutput.config(picked, output), payload.get("output")) if output else {}
+    )
+    if found != payload.get("output", {}):
+        payload, fresh = {**payload, "output": found}, True
+    if fresh:
+        _store(cache, picked, stat, offset, payload, sig)
     return payload
 
 
@@ -307,6 +335,7 @@ def parse_all(
     jobs: int,
     on_read: Callable[[int], None] | None = None,
     on_done: Callable[[Path], None] | None = None,
+    output: dict | None = None,
 ) -> list[RunLog]:
     """Parse every log, following the bytes read and the files finished.
 
@@ -319,7 +348,7 @@ def parse_all(
     blobs: list[dict] = [{} for _ in files]
     if len(files) == 1 or jobs == 1:
         for i, a in enumerate(args):
-            blobs[i] = parse_cached(*a, _Sink(on_read) if on_read else None)
+            blobs[i] = parse_cached(*a, _Sink(on_read) if on_read else None, output)
             if on_done:
                 on_done(files[i])
         return [RunLog.from_dict(b) for b in blobs]
@@ -327,7 +356,7 @@ def parse_all(
         # A queue the workers can reach, since the parent cannot see how far
         # into a file another process has read.
         reports = manager.Queue() if on_read else None
-        pending = {pool.submit(_worker, (*a, reports)): i for i, a in enumerate(args)}
+        pending = {pool.submit(_worker, (*a, reports, output)): i for i, a in enumerate(args)}
         waiting = set(pending)
         while waiting:
             finished, waiting = wait(waiting, timeout=POLL_SECONDS)
@@ -387,7 +416,17 @@ def build(
         # only set up when there is a bar to show for it.
         follow = (lambda n: bar.advance(n=n)) if bar.enabled else None
         named = (lambda f: bar.advance(f.name, n=0)) if bar.enabled else None
-        logs = parse_all(files, names, profile_dirs, cache, jobs, follow, named)
+        output = {"dir": args.output_dir, "glob": args.output_glob, "grid": args.grid}
+        logs = parse_all(
+            files,
+            names,
+            profile_dirs,
+            cache,
+            jobs,
+            follow,
+            named,
+            output if args.output_dir else None,
+        )
     if args.job_id:
         # A log whose name carries no job id is only known after parsing.
         logs = [rl for rl in logs if str(rl.fields.get("job_id") or "") in args.job_id]
@@ -573,6 +612,17 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="embed logs under 8 MB as a linkable page the figures can jump into",
     )
+    p.add_argument(
+        "--output-dir",
+        metavar="DIR",
+        help="directory of the model output files to diagnose (needs runhealth[output])",
+    )
+    p.add_argument(
+        "--output-glob",
+        metavar="PATTERN",
+        help="which files in --output-dir to read (default: from the profile, else *.nc)",
+    )
+    p.add_argument("--grid", metavar="FILE", help="grid file with the cell areas of the output")
     p.add_argument(
         "--fail-on",
         choices=["never", "warn", "fail"],

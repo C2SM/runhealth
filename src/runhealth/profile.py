@@ -124,6 +124,8 @@ class Profile:
     boundary: list[Rule] = field(default_factory=list)
     settings: dict[str, Any] = field(default_factory=dict)
     thresholds: dict[str, Any] = field(default_factory=dict)
+    # Files and variables of the model output, read by :mod:`runhealth.simoutput`.
+    output: dict[str, Any] = field(default_factory=dict)
     always: bool = False
 
     @classmethod
@@ -135,6 +137,7 @@ class Profile:
             priority=int(data.get("priority", 0)),
             settings=data.get("settings", {}) or {},
             thresholds=data.get("thresholds", {}) or {},
+            output=data.get("output", {}) or {},
             always=bool(data.get("always", False)),
         )
         p.detect = [

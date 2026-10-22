@@ -86,6 +86,49 @@ runhealth /path/to/logs --watch 60 -o report/
 re-renders at a fixed interval. Each pass resumes where the previous one
 stopped, so following a growing 100 MB log costs no more than the new lines.
 
+## Diagnosing the model output
+
+A log tells how the job ran; the output tells what the model computed. With
+`--output-dir`, `runhealth` also reads the model output of the run and checks
+the variables its profile names, for ICON temperature, pressure, wind speed and
+vertical wind:
+
+```bash
+uv sync --extra output    # xarray and netCDF4, needed only for this
+runhealth LOG.exp.12345.o --output-dir /scratch/run/exp -o report/ \
+    --grid /store/grids/icon_grid_0026_R03B07_G.nc
+```
+
+For every variable and output step, `runhealth` records the minimum, the
+maximum and the number of values that are not finite over the whole
+three-dimensional field, and the mean on the first, the middle and the last
+level. This yields two checks and one figure per variable:
+
+- **Output values** fails a run whose output holds a `NaN` or an infinite value,
+  or an extreme beyond a limit of the profile, and names the first output step
+  and level at which it occurred.
+- **Output completeness** warns about gaps or duplicate steps on the time axis,
+  files that are empty or cannot be read, and output that stops before the end
+  of the simulated period.
+
+The means are weighted by the cell areas of `--grid`, an ICON grid file, when
+its number of cells matches the output; output on a regular latitude-longitude
+grid is weighted by the cosine of latitude, and anything else is averaged
+without weights. Values equal to a variable's fill value are left out, so a
+`NaN` that is counted is one the model wrote.
+
+- `--output-glob` selects the files to read, `*.nc` by default. When several
+  output streams hold the same variable at the same times, select one of them,
+  as the second copy would otherwise count as duplicate steps.
+- The directory applies to every run of the report, so combine it with
+  [`--job-id`](cli.md) or a single log when a directory holds the logs of
+  several runs.
+- Fields are read one level at a time, so memory stays small even for a global
+  field at kilometer scale. The summary of each file is cached with the log, so
+  a repeated pass, for example with `--watch`, reads only new or changed files.
+
+The statistics also appear in [`summary.json`](#output-formats) under `output`.
+
 ## Output formats
 
 `--format html`
@@ -131,7 +174,11 @@ verdict on every run for a workflow manager or a script to read, together with
    "stats": {"wall_seconds": 61.4, "nodes": 2, "sypd": 0.136, "sypd_steady": 0.137,
              "sim_seconds": 2000.0, "progress_last": 100},
    "checks": [{"key": "outcome", "title": "Outcome", "level": "ok",
-               "headline": "The run reported success"}]
+               "headline": "The run reported success"}],
+   "output": {"temp": {"time": ["2020-01-01T00:00:00", "2020-01-01T06:00:00"],
+                       "min": [188.2, 187.9], "max": [309.6, 310.1], "nonfinite": [0, 0],
+                       "means": {"height 1": [203.4, 203.6], "height 45": [248.1, 248.0],
+                                 "height 90": [289.7, 289.9]}}}
   }
  ]
 }
@@ -144,6 +191,9 @@ verdict on every run for a workflow manager or a script to read, together with
 - Wall-clock times are in UTC; model times are in the model's own calendar and
   carry no time zone. Any value that the log does not provide is `null`, and
   `page` is `null` for `--format md`.
+- `output` holds the [model output diagnostics](#diagnosing-the-model-output),
+  one entry per variable with one value per output step; it is empty without
+  `--output-dir`.
 - Fields may be added in later versions. A field is only removed or changed
   together with an increase of `schema_version`.
 

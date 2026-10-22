@@ -365,6 +365,41 @@ Names and column mappings used by the analysis. All entries are optional.
 | `congestion_groups` | message groups that indicate fabric congestion |
 | `congestion_keys` | the keys within those groups that actually indicate congestion |
 
+## `output`
+
+The model output read with
+[`--output-dir`](usage.md#diagnosing-the-model-output), and the limits its
+extremes are graded against. The ICON profile defines:
+
+```yaml
+output:
+  files: "*.nc"
+  variables:
+    temp:
+      label: Temperature
+      unit: K
+      fail_below: 150
+      fail_above: 350
+    wind:
+      label: Wind speed
+      unit: m/s
+      from: [u, v]
+      warn_above: 400
+      fail_above: 1000
+```
+
+| Key | Meaning |
+| --- | --- |
+| `files` | pattern of the output files in `--output-dir`; `--output-glob` overrides it |
+| `variables` | one entry per diagnosed variable, keyed by its name in the files |
+| `label`, `unit` | how the report names the variable and its unit |
+| `from` | variables whose magnitude, `sqrt(a^2 + b^2 + ...)`, forms this one, such as a wind speed from its components |
+| `warn_below`, `fail_below` | a minimum below this value warns or fails |
+| `warn_above`, `fail_above` | a maximum above this value warns or fails |
+
+A variable missing from a file is skipped in that file. Values that are not
+finite always fail a run.
+
 (profile-thresholds)=
 
 ## `thresholds`

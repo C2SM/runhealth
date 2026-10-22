@@ -144,6 +144,8 @@ check is always found in the same place.
 | **Wall time** | How much of the requested limit was used, and whether the scheduler cut the job off. |
 | **Errors** | Lines that look like errors, collapsed by shape, with digits masked so the same message from a thousand ranks becomes one row. |
 | **Numerical stability** | Values the model reports about its own state: for ICON, the global maxima of horizontal and vertical wind printed on every dynamics substep, and the CFL numbers, CFL watch mode entries and substep increases printed while the CFL number is high. A value that is not finite, or beyond its failure limit, fails the run; the check names the first report that was, with its level and model time, and the report before it. A crash that follows, such as an illegal memory access or an overflowing CFL number, is then most likely a consequence. Values above the warning limit warn. ICON prints the level with `msg_level >= 7` and the rank with `msg_level >= 13`. |
+| **Output values** | Minimum, maximum and non-finite values of each variable in the model output, over the whole three-dimensional field at every output step; see [Diagnosing the model output](usage.md#diagnosing-the-model-output). A value that is not finite, or an extreme beyond a `fail_` limit of the profile, fails the run and names the first output step and level at which it occurred. Extremes beyond a `warn_` limit warn. |
+| **Output completeness** | Gaps and duplicate steps on the time axis of the model output, files that are empty or cannot be read, and output that stops before the end of the simulated period. |
 | **Hang backtraces** | The gdb backtraces of the main thread taken during a hang, grouped by the innermost frame and the innermost frame with a source location. A rank in uninterruptible sleep, blocked in the kernel, warns. |
 | **Kernel messages** | GPU Xid events and out-of-memory kills in the nodes' kernel logs. Xid codes that indicate a hardware fault, and out-of-memory kills, fail the run. |
 | **GPU health** | From the GPU monitor in the diagnostics directory: uncorrected ECC errors fail the run; hardware slowdown, thermal slowdown and power brake warn, because they make their node the slowest of the run. Peak temperature, power and memory are listed. |
@@ -204,8 +206,9 @@ successive output or checkpoint writes, one line per kind of event), the
 over the run, with values beyond the failure limit pinned to the top edge in
 red and CFL watch mode entries and substep increases as dots along the
 bottom),
-**load imbalance** per timer, and the **network counter spread** between the
-least and the most loaded NIC.
+**load imbalance** per timer, the **network counter spread** between the
+least and the most loaded NIC, and, with `--output-dir`, one figure per
+**output variable** with its range and its mean on three levels over model time.
 
 A figure is omitted rather than approximated when the log does not contain what
 it requires, and `--no-plots` leaves out all of them.

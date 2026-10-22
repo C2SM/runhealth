@@ -11,12 +11,13 @@ dependencies = [
 
 [project.optional-dependencies]
 pdf = ["weasyprint>=61"]
+output = ["xarray>=2024.1", "netCDF4>=1.6"]
 
 [project.scripts]
 runhealth = "runhealth.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "xarray>=2024.1", "netCDF4>=1.6"]
 docs = [
     "sphinx>=7.3",
     "furo>=2024.5",
