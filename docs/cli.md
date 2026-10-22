@@ -6,7 +6,7 @@ runhealth [PATH ...] [-o OUTDIR] [-f html|md|pdf]
           [--glob PATTERN] [--last N] [--since 7d] [--list]
           [--watch SECONDS] [--stall-seconds N] [--jobs N]
           [--no-plots] [--no-cache] [--no-squeue] [--no-sacct] [--embed-logs]
-          [--title TEXT] [--open] [--serve PORT]
+          [--fail-on never|warn|fail] [--title TEXT] [--open] [--serve PORT]
           [--publish DEST] [--publish-url URL]
 ```
 
@@ -26,10 +26,24 @@ runhealth [PATH ...] [-o OUTDIR] [-f html|md|pdf]
 | `--no-cache`, `--no-squeue` | skip the parse cache; do not query SLURM (`squeue` or `sacct`) at all |
 | `--no-sacct` | do not read the SLURM accounting records of the jobs |
 | `--embed-logs` | embed logs smaller than 8 MB as a page the figures can link into |
+| `--fail-on` | `never` (default), `warn` or `fail`: exit with code 3 when any run is graded at or above this level; see [Exit codes](#exit-codes) |
 | `--open` | open the report when it is written |
 | `--serve [PORT]` | serve the report on `127.0.0.1:PORT` (default 8000) until interrupted |
 | `--publish [DEST]` | transfer the report to `DEST` with `rsync`; falls back to `$RUNHEALTH_PUBLISH` |
 | `--publish-url URL` | the address at which the published report is reachable, printed after the transfer |
+
+## Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| `0` | the report was written, and no run reached the `--fail-on` level |
+| `1` | no report was written, for example because no log matched, or the server could not start |
+| `2` | invalid arguments |
+| `3` | the report was written, and at least one run is graded at or above the `--fail-on` level |
+
+A workflow manager can thus distinguish a failed simulation (`3`) from a failure
+of `runhealth` itself (`1`, `2`). With `--watch`, the code reflects the last
+report written before the interruption.
 
 ## Environment variables
 

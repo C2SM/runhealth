@@ -26,7 +26,7 @@ from pathlib import Path
 
 from . import __version__, accounting, diag, plots, profile, progress, report, search
 from .extract import RunLog, parse
-from .health import assess
+from .health import LEVEL_RANK, assess
 from .logfile import format_duration
 from .report import RunView
 
@@ -43,6 +43,9 @@ RSYNC_FLAGS = ["-rlptz", "--chmod=D755,F644"]
 # Working state of the output directory, not part of the report: the parse cache
 # and the raw logs synced from a cluster.
 PUBLISH_EXCLUDES = ["--exclude=/.cache/", "--exclude=/.remote-cache/"]
+# Returned when a run is graded at or above --fail-on, distinct from 1 (runhealth
+# itself could not produce a report) and 2 (invalid arguments).
+EXIT_GRADE = 3
 
 
 def log(msg: str) -> None:
@@ -558,6 +561,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="embed logs under 8 MB as a linkable page the figures can jump into",
     )
+    p.add_argument(
+        "--fail-on",
+        choices=["never", "warn", "fail"],
+        default="never",
+        help=f"exit with {EXIT_GRADE} when a run is graded at or above this level",
+    )
     p.add_argument("--title", default="", help="report title")
     p.add_argument("--open", action="store_true", help="open the report when it is written")
     p.add_argument(
@@ -607,7 +616,8 @@ def _publish_dest(args) -> str:
     return args.publish or os.environ.get("RUNHEALTH_PUBLISH", "")
 
 
-def _once(args, outdir: Path) -> Path | None:
+def _once(args, outdir: Path) -> tuple[Path, str] | None:
+    """Write the report once; return its path and the worst grade among the runs."""
     log(f"runhealth: scanning {', '.join(args.paths)}")
     files, remotes = _select(args, outdir)
     if not files:
@@ -629,7 +639,7 @@ def _once(args, outdir: Path) -> Path | None:
     dest = _publish_dest(args)
     if dest:
         publish(outdir, dest, args.publish_url)
-    return path
+    return path, max((v.assessment.grade for v in views), key=LEVEL_RANK.get, default="ok")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -652,9 +662,10 @@ def main(argv: list[str] | None = None) -> int:
         log("runhealth: --publish needs a destination, or $RUNHEALTH_PUBLISH set")
         return 2
 
-    path = _once(args, outdir)
-    if path is None:
+    result = _once(args, outdir)
+    if result is None:
         return 1
+    path, grade = result
 
     server = None
     if args.serve is not None:
@@ -675,7 +686,8 @@ def main(argv: list[str] | None = None) -> int:
             log(f"runhealth: watching, refreshing every {args.watch:g}s (Ctrl-C to stop)")
             while True:
                 time.sleep(args.watch)
-                _once(args, outdir)
+                result = _once(args, outdir) or result
+                grade = result[1]
         elif server:
             threading.Event().wait()
     except KeyboardInterrupt:
@@ -683,6 +695,8 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         if server:
             server.shutdown()
+    if args.fail_on != "never" and LEVEL_RANK[grade] >= LEVEL_RANK[args.fail_on]:
+        return EXIT_GRADE
     return 0
 
 

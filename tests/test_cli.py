@@ -158,6 +158,16 @@ def test_no_matching_logs_returns_failure(tmp_path):
     assert cli.main([str(tmp_path), "-o", str(tmp_path / "r"), "--no-squeue"]) == 1
 
 
+def test_fail_on_turns_the_grade_into_the_exit_code(tmp_path):
+    def rc(log, *extra):
+        return cli.main([str(FIXTURES / log), "-o", str(tmp_path / "r"), "--no-squeue", *extra])
+
+    assert rc("icon_hang.log") == 0  # the report alone never fails
+    assert rc("icon_hang.log", "--fail-on", "fail") == cli.EXIT_GRADE
+    assert rc("icon_success.log", "--fail-on", "fail") == 0
+    assert rc("icon_success.log", "--fail-on", "warn") == cli.EXIT_GRADE
+
+
 def test_explicit_profile_limits_the_analysis(tmp_path):
     out = tmp_path / "report"
     cli.main(
