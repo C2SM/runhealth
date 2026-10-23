@@ -1734,6 +1734,11 @@ def _check_output_completeness(log: RunLog, a: Assessment) -> Check | None:
         level = "warn"
         heads.append(f"{len(broken)} of {len(files)} file(s) could not be read")
         ev.extend(f"{name}: {error}" for name, error in sorted(broken.items())[:12])
+    hollow = sorted(n for n, f in files.items() if "steps" in f and not f["steps"])
+    if hollow:
+        level = "warn"
+        heads.append(f"{len(hollow)} file(s) hold no output step")
+        ev.extend(f"{name}: created, but no step was written" for name in hollow[:12])
     times = simoutput.steps(out)
     ts = [t for t, _ in times]
     diffs = [b - a for a, b in zip(ts, ts[1:])]
@@ -1775,10 +1780,10 @@ def _check_output_completeness(log: RunLog, a: Assessment) -> Check | None:
     return Check(
         "output_completeness",
         "Output completeness",
-        level if times or broken else "info",
+        level if times or broken or hollow else "info",
         head[:1].upper() + head[1:],
         f"The output steps found in {out['glob']} under {out['dir']}, checked for gaps, "
-        "duplicates, unreadable files and an end before the end of the simulated period.",
+        "duplicates, unreadable or empty files and an end before the end of the simulated period.",
         ev,
     )
 

@@ -79,7 +79,12 @@ def plan(cfg: dict, prev: dict | None = None) -> tuple[dict, list[Path]]:
             continue
         st = path.stat()
         rec = old.get(path.name)
-        if rec and rec["size"] == st.st_size and rec["mtime"] == st.st_mtime:
+        # A file that failed is tried again, as the failure may have been passing.
+        if (
+            rec
+            and not rec.get("error")
+            and (rec["size"], rec["mtime"]) == (st.st_size, st.st_mtime)
+        ):
             files[path.name] = rec
         elif not st.st_size:
             files[path.name] = {"size": 0, "mtime": st.st_mtime, "error": "the file is empty"}
@@ -186,6 +191,8 @@ def _times(var) -> list[tuple[str, float]]:
 
     units = var.attrs.get("units", "")
     values = np.atleast_1d(var.values).astype("float64")
+    if not values.size:  # created, but the run stopped before writing a step
+        return []
     if units.startswith("day as %Y%m%d"):
         # ICON's absolute time axis: the date as digits, the time of day as a fraction.
         out = []

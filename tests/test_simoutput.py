@@ -269,3 +269,25 @@ def test_outside_a_job_the_output_is_read_in_one(tmp_path, monkeypatch):
     )
     assert f"--output={tmp_path}/runhealth.%j.out" in sent
     assert not (tmp_path / "report").exists()  # the job writes it
+
+
+def test_a_file_without_a_time_step_warns(tmp_path):
+    icon_output(tmp_path / ATM, [20200101.0, 20200101.25])
+    units = {"units": "minutes since 2020-1-1 00:00:00", "calendar": "gregorian"}
+    hollow = xr.Dataset(
+        {"temp": (("time", "ncells"), np.zeros((0, NCELLS)))},
+        coords={"time": ("time", np.zeros(0), units)},
+    )
+    hollow.to_netcdf(tmp_path / "exp_atm_2d_20200102.nc")
+    assert collect(tmp_path)["files"]["exp_atm_2d_20200102.nc"]["steps"] == []
+    _, run, _ = _run(tmp_path, tmp_path)
+    check = next(c for c in run["checks"] if c["key"] == "output_completeness")
+    assert check["level"] == "warn" and "1 file(s) hold no output step" in check["headline"]
+
+
+def test_a_file_that_failed_is_read_again(tmp_path):
+    (tmp_path / ATM).write_bytes(b"not netcdf")
+    first = collect(tmp_path)
+    assert first["files"][ATM]["error"].startswith("cannot be read")
+    _, todo = simoutput.plan(first, json.loads(json.dumps(first)))
+    assert [p.name for p in todo] == [ATM]
