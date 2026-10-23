@@ -278,7 +278,11 @@ class Toc:
             links += (
                 f'<a href="#{esc(anchor)}" class="lv{level}{" nest" if nested else ""}">'
                 + (f'<span class="tdot g-{grade}" aria-hidden="true"></span>' if grade else "")
-                + (_FA.format(*SECTION_ICONS[anchor]) if level == 1 and anchor in SECTION_ICONS else "")
+                + (
+                    _FA.format(*SECTION_ICONS[anchor])
+                    if level == 1 and anchor in SECTION_ICONS
+                    else ""
+                )
                 + f"{esc(label)}</a>"
             )
             if nested:
@@ -290,7 +294,11 @@ class Toc:
         return (
             '<aside class="toc" aria-label="On this page">'
             '<div class="toc-top"><p class="toc-h">On this page</p>'
-            + ('<button type="button" class="tfold-all">Collapse all</button>' if "tfold" in links else "")
+            + (
+                '<button type="button" class="tfold-all">Collapse all</button>'
+                if "tfold" in links
+                else ""
+            )
             + "</div>"
             f'<nav id="toc">{links}</nav></aside>'
         )
