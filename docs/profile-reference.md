@@ -374,7 +374,7 @@ extremes are graded against. The ICON profile defines:
 
 ```yaml
 output:
-  files: "*.nc"
+  files: "*_atm_*.nc"
   variables:
     temp:
       label: Temperature

@@ -19,6 +19,10 @@ sbatch --dependency=afterany:12345 runhealth.sbatch 12345 /scratch/run/logs
   single log; add the `--account` and `--partition` your site requires.
 - It selects the log with [`--job-id`](cli.md), so a directory full of earlier
   logs costs nothing.
+- It reads no model output. With
+  [`--output-dir`](usage.md#diagnosing-the-model-output) added, raise the time
+  and cores to suit the size of the output, which at kilometer scale takes
+  hours rather than minutes.
 - It runs with [`--fail-on fail`](cli.md#exit-codes), so the job itself fails
   when the model run failed, while warnings such as load imbalance leave it
   successful.

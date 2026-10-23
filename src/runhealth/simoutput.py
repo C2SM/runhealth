@@ -8,7 +8,9 @@ at kilometer scale never has to fit into memory at once.
 
 Reading NetCDF needs the optional dependencies ``runhealth[output]``. The
 summary of each file is kept with the parsed log and read again only when the
-file changes, which makes a repeated pass over a growing run cheap.
+file changes, which makes a repeated pass over a growing run cheap. :func:`plan` and
+:func:`read` split :func:`collect` so that a caller can read the files of
+several directories in parallel and follow its progress.
 """
 
 from __future__ import annotations
@@ -51,35 +53,50 @@ def config(profiles, options: dict, log: dict) -> dict:
 
 def collect(cfg: dict, prev: dict | None = None) -> dict:
     """Summarize every output file, reusing the summary of a file that has not changed."""
+    out, todo = plan(cfg, prev)
+    for path in todo:
+        out["files"][path.name] = read(path, cfg)
+    return out
+
+
+def plan(cfg: dict, prev: dict | None = None) -> tuple[dict, list[Path]]:
+    """The summary of every file unchanged since ``prev``, and the files still to read."""
     try:
         import numpy  # noqa: F401
         import xarray  # noqa: F401
     except ImportError:
-        return {**cfg, "error": MISSING, "files": {}}
+        return {**cfg, "error": MISSING, "files": {}}, []
     if not cfg["dir"]:
-        return {**cfg, "error": "the log does not name an output directory", "files": {}}
+        return {**cfg, "error": "the log does not name an output directory", "files": {}}, []
     if not Path(cfg["dir"]).is_dir():
-        return {**cfg, "error": f"{cfg['dir']} is not reachable from this machine", "files": {}}
+        return {**cfg, "error": f"{cfg['dir']} is not reachable from this machine", "files": {}}, []
     key = json.dumps([cfg["variables"], cfg["grid"]], sort_keys=True)
     old = (prev or {}).get("files", {}) if (prev or {}).get("key") == key else {}
-    area = _Area(cfg["grid"])
     files: dict[str, dict] = {}
+    todo: list[Path] = []
     for path in sorted(Path(cfg["dir"]).glob(cfg["glob"])):
         if not path.is_file():
             continue
         st = path.stat()
         rec = old.get(path.name)
-        if not (rec and rec["size"] == st.st_size and rec["mtime"] == st.st_mtime):
-            rec = {"size": st.st_size, "mtime": st.st_mtime}
-            if not st.st_size:
-                rec["error"] = "the file is empty"
-            else:
-                try:
-                    rec.update(_scan(path, cfg["variables"], area))
-                except Exception as exc:  # one broken file must not hide the others
-                    rec["error"] = f"cannot be read: {exc}"
-        files[path.name] = rec
-    return {**cfg, "key": key, "files": files}
+        if rec and rec["size"] == st.st_size and rec["mtime"] == st.st_mtime:
+            files[path.name] = rec
+        elif not st.st_size:
+            files[path.name] = {"size": 0, "mtime": st.st_mtime, "error": "the file is empty"}
+        else:
+            todo.append(path)
+    return {**cfg, "key": key, "files": files}, todo
+
+
+def read(path: Path, cfg: dict) -> dict:
+    """The summary of one file; a file that cannot be read yields an error, not an exception."""
+    st = path.stat()
+    rec: dict[str, Any] = {"size": st.st_size, "mtime": st.st_mtime}
+    try:
+        rec.update(_scan(path, cfg["variables"], _area(cfg["grid"])))
+    except Exception as exc:  # one broken file must not hide the others
+        rec["error"] = f"cannot be read: {exc}"
+    return rec
 
 
 def series(output: dict) -> dict[str, list[dict]]:
@@ -129,6 +146,13 @@ class _Area:
             with xr.open_dataset(self.grid, decode_times=False) as ds:
                 self._values = ds["cell_area"].values.astype("float64")
         return self._values
+
+
+_AREAS: dict[str | None, _Area] = {}  # per process, so a worker reads each grid once
+
+
+def _area(grid: str | None) -> _Area:
+    return _AREAS.setdefault(grid, _Area(grid))
 
 
 def _scan(path: Path, variables: dict, area: _Area) -> dict:

@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ xr = pytest.importorskip("xarray")
 
 FIXTURES = Path(__file__).parent / "fixtures"
 NLEV, NCELLS = 5, 8
+ATM = "exp_atm_3d_pl_20200101.nc"  # a name the ICON profile reads
 
 
 def icon_output(
@@ -40,7 +42,7 @@ def icon_output(
     if fill:
         ds["temp"].encoding["_FillValue"] = -999.0
     if cmip:  # the names of an ICON output on pressure levels
-        ds = ds.rename({"temp": "ta", "u": "ua", "v": "va"}).drop_vars("pres")
+        ds = ds.rename({"temp": "ta", "u": "ua", "v": "va", "w": "wa"}).drop_vars("pres")
     ds.to_netcdf(path)
     return path
 
@@ -59,7 +61,7 @@ def collect(out_dir: Path, grid: Path | None = None, prev=None) -> dict:
 
 
 def test_statistics_per_step_and_level(tmp_path):
-    icon_output(tmp_path / "out_0001.nc", [20200101.0, 20200101.25])
+    icon_output(tmp_path / "exp_atm_0001.nc", [20200101.0, 20200101.25])
     out = collect(tmp_path)
     s = simoutput.series(out)
     assert set(s) == {"temp", "pres", "wind", "w"}
@@ -69,7 +71,7 @@ def test_statistics_per_step_and_level(tmp_path):
     assert temp[0]["max_level"] == "height 5" and temp[0]["nonfinite"] == 0
     assert temp[0]["means"] == {"height 1": 250.0, "height 3": 252.0, "height 5": 254.0}
     assert s["wind"][0]["max"] == 5.0  # sqrt(3^2 + 4^2)
-    assert out["files"]["out_0001.nc"]["vars"]["temp"]["weights"] == "unweighted"
+    assert out["files"]["exp_atm_0001.nc"]["vars"]["temp"]["weights"] == "unweighted"
 
 
 def test_means_are_weighted_by_cell_area(tmp_path):
@@ -77,16 +79,16 @@ def test_means_are_weighted_by_cell_area(tmp_path):
     t[:, :, :2] = 260.0  # the two large cells are warmer
     out_dir = tmp_path / "out"
     out_dir.mkdir()
-    icon_output(out_dir / "a.nc", [20200101.0], temp=t)
+    icon_output(out_dir / ATM, [20200101.0], temp=t)
     out = collect(out_dir, grid=grid_file(tmp_path / "grid.nc"))
     mean = simoutput.series(out)["temp"][0]["means"]["height 1"]
     assert mean == pytest.approx((2 * 10 * 260 + 6 * 250) / 26)
-    assert out["files"]["a.nc"]["vars"]["temp"]["weights"] == "cell area"
+    assert out["files"][ATM]["vars"]["temp"]["weights"] == "cell area"
 
 
 def test_nonfinite_values_are_counted_but_fill_values_are_not(tmp_path):
     netcdf = pytest.importorskip("netCDF4")
-    path = icon_output(tmp_path / "a.nc", [20200101.0], fill=True)
+    path = icon_output(tmp_path / ATM, [20200101.0], fill=True)
     # Written directly, since xarray would store a NaN as the fill value.
     with netcdf.Dataset(path, "r+") as nc:
         nc.set_auto_mask(False)
@@ -98,23 +100,23 @@ def test_nonfinite_values_are_counted_but_fill_values_are_not(tmp_path):
 
 
 def test_unchanged_files_are_not_read_again(tmp_path, monkeypatch):
-    icon_output(tmp_path / "a.nc", [20200101.0])
+    icon_output(tmp_path / ATM, [20200101.0])
     first = collect(tmp_path)
-    icon_output(tmp_path / "b.nc", [20200102.0])
+    icon_output(tmp_path / "exp_atm_b.nc", [20200102.0])
     read = []
     scan = simoutput._scan
     monkeypatch.setattr(simoutput, "_scan", lambda p, *a: read.append(p.name) or scan(p, *a))
     second = collect(tmp_path, prev=json.loads(json.dumps(first)))
-    assert read == ["b.nc"]
+    assert read == ["exp_atm_b.nc"]
     assert [t for t, _ in simoutput.steps(second)] == [1577836800.0, 1577923200.0]
 
 
 def test_broken_and_empty_files_are_reported(tmp_path):
-    (tmp_path / "empty.nc").write_bytes(b"")
-    (tmp_path / "broken.nc").write_bytes(b"not netcdf")
+    (tmp_path / "exp_atm_empty.nc").write_bytes(b"")
+    (tmp_path / "exp_atm_broken.nc").write_bytes(b"not netcdf")
     files = collect(tmp_path)["files"]
-    assert files["empty.nc"]["error"] == "the file is empty"
-    assert files["broken.nc"]["error"].startswith("cannot be read")
+    assert files["exp_atm_empty.nc"]["error"] == "the file is empty"
+    assert files["exp_atm_broken.nc"]["error"].startswith("cannot be read")
 
 
 def _run(tmp_path, out_dir, *extra):
@@ -127,6 +129,7 @@ def _run(tmp_path, out_dir, *extra):
             "--no-squeue",
             "--output-dir",
             str(out_dir),
+            "--no-submit",
             *extra,
         ]
     )
@@ -137,7 +140,7 @@ def _run(tmp_path, out_dir, *extra):
 def test_end_to_end_checks_figures_and_summary(tmp_path):
     out_dir = tmp_path / "out"
     out_dir.mkdir()
-    icon_output(out_dir / "a.nc", [20200101.0 + i / 96 for i in range(4)])  # every 15 minutes
+    icon_output(out_dir / ATM, [20200101.0 + i / 96 for i in range(4)])  # every 15 minutes
     rc, run, report = _run(tmp_path, out_dir)
     assert rc == 0
     checks = {c["key"]: c for c in run["checks"]}
@@ -150,7 +153,7 @@ def test_end_to_end_checks_figures_and_summary(tmp_path):
 def test_a_blown_up_field_fails_the_run(tmp_path):
     t = np.full((2, NLEV, NCELLS), 250.0)
     t[1, 2, 5] = np.inf
-    icon_output(tmp_path / "a.nc", [20200101.0, 20200101.25], temp=t)
+    icon_output(tmp_path / ATM, [20200101.0, 20200101.25], temp=t)
     rc, run, _ = _run(tmp_path, tmp_path, "--fail-on", "fail")
     check = next(c for c in run["checks"] if c["key"] == "output_values")
     assert rc == cli.EXIT_GRADE and check["level"] == "fail"
@@ -159,30 +162,32 @@ def test_a_blown_up_field_fails_the_run(tmp_path):
 
 def test_a_gap_in_the_output_warns(tmp_path):
     days = [20200101.0 + i / 96 for i in (0, 1, 2, 5, 6)]
-    icon_output(tmp_path / "a.nc", days)
+    icon_output(tmp_path / ATM, days)
     _, run, _ = _run(tmp_path, tmp_path)
     check = next(c for c in run["checks"] if c["key"] == "output_completeness")
     assert check["level"] == "warn" and "gap" in check["headline"]
 
 
 def test_cmip_style_names_are_found(tmp_path):
-    icon_output(tmp_path / "a.nc", [20200101.0], cmip=True)
+    icon_output(tmp_path / ATM, [20200101.0], cmip=True)
     out = collect(tmp_path)
     found = simoutput.series(out)
     assert set(found) == {"temp", "wind", "w"}
     assert found["wind"][0]["max"] == 5.0
-    assert out["files"]["a.nc"]["vars"]["wind"]["source"] == "ua, va"
+    assert out["files"][ATM]["vars"]["wind"]["source"] == "ua, va"
+    assert out["files"][ATM]["vars"]["w"]["source"] == "wa"
 
 
 def test_auto_takes_the_output_directory_from_the_log(tmp_path):
     out_dir = tmp_path / "exp"
     out_dir.mkdir()
-    icon_output(out_dir / "a.nc", [20200101.0])
+    icon_output(out_dir / ATM, [20200101.0])
     log = tmp_path / "LOG.exp.12345.o"
     text = (FIXTURES / "icon_success.log").read_text()
     log.write_text(text + f"2026-01-05T10:01:01.600: + EXPDIR={out_dir}\n")
     report = tmp_path / "report"
-    assert cli.main([str(log), "-o", str(report), "--no-squeue", "--output-dir", "auto"]) == 0
+    args = [str(log), "-o", str(report), "--no-squeue", "--output-dir", "auto", "--no-submit"]
+    assert cli.main(args) == 0
     run = json.loads((report / summary.SUMMARY_FILE).read_text())["runs"][0]
     assert run["output"]["temp"]["max"] == [254.0]
 
@@ -195,3 +200,72 @@ def test_an_unreachable_output_directory_is_information(tmp_path):
     log["fields"]["output_dir"] = str(tmp_path / "elsewhere")
     out = simoutput.collect(simoutput.config([icon], {"dir": "auto"}, log))
     assert out["error"].endswith("is not reachable from this machine")
+
+
+def test_the_icon_profile_leaves_out_ocean_output_and_input_files(tmp_path):
+    icon_output(tmp_path / ATM, [20200101.0])
+    icon_output(tmp_path / "exp_oce_3d_full_20200101.nc", [20200101.0])
+    icon_output(tmp_path / "ifs2icon.nc", [20200101.0])
+    assert list(collect(tmp_path)["files"]) == [ATM]
+
+
+def test_a_directory_shared_by_several_runs_is_read_once(tmp_path, monkeypatch):
+    monkeypatch.setenv("SLURM_JOB_ID", "1")  # inside a job, the output is read right away
+    out_dir = tmp_path / "exp"
+    out_dir.mkdir()
+    icon_output(out_dir / ATM, [20200101.0])
+    text = (FIXTURES / "icon_success.log").read_text()
+    logs = []
+    for job in ("12345", "12346"):
+        logs.append(tmp_path / f"LOG.exp.{job}.o")
+        logs[-1].write_text(text + f"2026-01-05T10:01:01.600: + EXPDIR={out_dir}\n")
+    read = []
+    scan = simoutput._scan
+    monkeypatch.setattr(simoutput, "_scan", lambda p, *a: read.append(p.name) or scan(p, *a))
+    report = tmp_path / "report"
+    args = [
+        *map(str, logs),
+        "-o",
+        str(report),
+        "--no-squeue",
+        "--output-dir",
+        "auto",
+        "--jobs",
+        "1",
+    ]
+    assert cli.main(args) == 0
+    runs = json.loads((report / summary.SUMMARY_FILE).read_text())["runs"]
+    assert read == [ATM]
+    assert [r["output"]["temp"]["max"] for r in runs] == [[254.0], [254.0]]
+    assert cli.main(args) == 0
+    assert read == [ATM]  # the second pass finds the summary in the cache
+
+
+def test_outside_a_job_the_output_is_read_in_one(tmp_path, monkeypatch):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    sbatch = bin_dir / "sbatch"
+    sbatch.write_text(f'#!/bin/sh\nprintf "%s\\n" "$@" > {tmp_path}/args\necho 4242\n')
+    sbatch.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+    monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    monkeypatch.chdir(tmp_path)
+    log = str(FIXTURES / "icon_success.log")
+    args = [
+        log,
+        "-o",
+        "report",
+        "--output-dir",
+        "out",
+        "--sbatch",
+        "--account=cwd01 --time=03:00:00",
+    ]
+    assert cli.main(args) == 0
+    sent = (tmp_path / "args").read_text().splitlines()
+    assert sent[-4:-2] == ["--account=cwd01", "--time=03:00:00"]
+    assert sent[-2] == "--wrap" and sent[-1].endswith(
+        f"-m runhealth {log} -o report --output-dir out "
+        "--sbatch '--account=cwd01 --time=03:00:00'"
+    )
+    assert f"--output={tmp_path}/runhealth.%j.out" in sent
+    assert not (tmp_path / "report").exists()  # the job writes it
