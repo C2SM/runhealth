@@ -226,9 +226,10 @@ thresholds:
 # The limits on wind repeat those of the peaks ICON prints, and the limits on
 # temperature lie far outside anything physical.
 output:
-  # The atmosphere streams of an experiment; its directory also holds the
-  # ocean output, which carries u and v as well, and the input files.
-  files: "*_atm_*.nc"
+  # The atmosphere streams of a coupled experiment, whose directory also holds
+  # the ocean output, which carries u and v as well, and the input files; and
+  # the domains of an ICON-NWP or ICON-LAM run.
+  files: ["*_atm_*.nc", "*_DOM[0-9]*_*.nc"]
   variables:
     temp:
       label: Temperature

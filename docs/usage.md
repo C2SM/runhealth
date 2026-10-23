@@ -127,10 +127,11 @@ without weights. Values equal to a variable's fill value are left out, so a
   synced from a cluster with `host:/path` therefore need `runhealth` to run on
   that cluster to diagnose their output.
 - `--output-glob` selects the files to read. The ICON profile reads the
-  atmosphere streams, `*_atm_*.nc`, which leaves out the ocean output and the
-  input files beside it; a profile without a pattern reads `*.nc`. When several
-  output streams hold the same variable at the same times, select one of them,
-  as the second copy would otherwise count as duplicate steps.
+  atmosphere streams of a coupled run, `*_atm_*.nc`, which leaves out the ocean
+  output and the input files beside it, and the domains of an ICON-NWP or
+  ICON-LAM run, `*_DOM[0-9]*_*.nc`; a profile without a pattern reads `*.nc`.
+  When several output streams hold the same variable at the same times, select
+  one of them, as the second copy would otherwise count as duplicate steps.
 - A directory shared by several runs of the report, such as the jobs of one
   experiment, is read once, and every one of these runs is checked against all
   of its output; combine `--output-dir` with [`--job-id`](cli.md) or a single
@@ -143,17 +144,22 @@ without weights. Values equal to a variable's fill value are left out, so a
   however, which for a global run at kilometer scale amounts to several GB per
   output step; select a stream with `--output-glob` to read less. The files are read in
   parallel, as many at once as [`--jobs`](cli.md) allows, and the progress
-  counts the gigabytes read; when the output is redirected, as in a job log,
+  counts the gigabytes of the diagnosed variables, so a file that holds none of
+  them counts for nothing; when the output is redirected, as in a job log,
   each file read is reported on a line of its own. The summary of each file is
   cached as soon as it is read, so a repeated or interrupted pass, for example
   with `--watch`, reads only new or changed files.
 - Reading the output is too heavy for a login node, so outside a SLURM job
   `runhealth` submits the same command as a job of its own and returns once it
-  is queued. It prints the job id, the job's log `runhealth.<job id>.out` in
-  the working directory, and where the report will be written. The job asks
+  is queued. It prints the job id, the job's log
+  `<report>/.cache/runhealth.<job id>.out`, which is not published, and where
+  the report will be written. `--open`, `--serve` and `--watch` concern this
+  machine rather than the job and are refused with it. The job asks
   for one node, 16 cores and one hour; `--sbatch` adds options or overrides
   these, for example `--sbatch '--account=<project> --time=03:00:00'`, and
   `SBATCH_ACCOUNT` or `SBATCH_PARTITION` set in the environment apply as well.
+  With a [uenv](https://docs.cscs.ch/software/uenv/) loaded, the job mounts the
+  same one (`--uenv-passthrough=use`), as Alps otherwise refuses to submit it.
   Within a job, such as the [check after a model job](slurm.md), the output is
   read right away, and `--no-submit` does the same on a login node for a small
   output.

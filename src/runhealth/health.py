@@ -1660,7 +1660,7 @@ def _check_output_values(log: RunLog) -> Check | None:
             "Output values",
             "warn",
             "None of the expected variables is in the output",
-            f"Looked for {', '.join(variables) or 'nothing'} in {out['glob']} under {out['dir']}.",
+            f"Looked for {', '.join(variables) or 'nothing'} in {simoutput.patterns(out)} under {out['dir']}.",
         )
     levels: list[str] = []
     heads: list[str] = []
@@ -1726,7 +1726,7 @@ def _check_output_completeness(log: RunLog, a: Assessment) -> Check | None:
             "Output completeness",
             "warn",
             "No output files found",
-            f"Nothing matched {out['glob']} in {out['dir']}.",
+            f"Nothing matched {simoutput.patterns(out)} in {out['dir']}.",
         )
     level, heads, ev = "ok", [], []
     broken = {name: f["error"] for name, f in files.items() if f.get("error")}
@@ -1782,7 +1782,7 @@ def _check_output_completeness(log: RunLog, a: Assessment) -> Check | None:
         "Output completeness",
         level if times or broken or hollow else "info",
         head[:1].upper() + head[1:],
-        f"The output steps found in {out['glob']} under {out['dir']}, checked for gaps, "
+        f"The output steps found in {simoutput.patterns(out)} under {out['dir']}, checked for gaps, "
         "duplicates, unreadable or empty files and an end before the end of the simulated period.",
         ev,
     )

@@ -374,7 +374,7 @@ extremes are graded against. The ICON profile defines:
 
 ```yaml
 output:
-  files: "*_atm_*.nc"
+  files: ["*_atm_*.nc", "*_DOM[0-9]*_*.nc"]
   variables:
     temp:
       label: Temperature
@@ -392,7 +392,7 @@ output:
 
 | Key | Meaning |
 | --- | --- |
-| `files` | pattern of the output files in `--output-dir`; `--output-glob` overrides it |
+| `files` | pattern, or list of patterns, of the output files in `--output-dir`; a file matching any of them is read, and `--output-glob` overrides them |
 | `variables` | one entry per diagnosed variable |
 | `label`, `unit` | how the report names the variable and its unit |
 | `names` | the names under which a file may hold the variable, tried in order; a list of names stands for the components of a magnitude, `sqrt(a^2 + b^2 + ...)`, such as a wind speed. Defaults to the key of the entry |

@@ -249,6 +249,7 @@ def test_outside_a_job_the_output_is_read_in_one(tmp_path, monkeypatch):
     sbatch.chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    monkeypatch.delenv("UENV_MOUNT_LIST", raising=False)
     monkeypatch.chdir(tmp_path)
     log = str(FIXTURES / "icon_success.log")
     args = [
@@ -267,8 +268,12 @@ def test_outside_a_job_the_output_is_read_in_one(tmp_path, monkeypatch):
         f"-m runhealth {log} -o report --output-dir out "
         "--sbatch '--account=cwd01 --time=03:00:00'"
     )
-    assert f"--output={tmp_path}/runhealth.%j.out" in sent
-    assert not (tmp_path / "report").exists()  # the job writes it
+    assert f"--output={tmp_path}/report/.cache/runhealth.%j.out" in sent
+    assert not (tmp_path / "report" / "index.html").exists()  # the job writes it
+    assert not any(a.startswith("--uenv") for a in sent)
+    monkeypatch.setenv("UENV_MOUNT_LIST", "/store.squashfs:/user-environment")
+    assert cli.main(args) == 0
+    assert "--uenv-passthrough=use" in (tmp_path / "args").read_text().splitlines()
 
 
 def test_a_file_without_a_time_step_warns(tmp_path):
@@ -291,3 +296,26 @@ def test_a_file_that_failed_is_read_again(tmp_path):
     assert first["files"][ATM]["error"].startswith("cannot be read")
     _, todo = simoutput.plan(first, json.loads(json.dumps(first)))
     assert [p.name for p in todo] == [ATM]
+
+
+def test_a_list_of_patterns_reads_the_files_of_each(tmp_path):
+    icon_output(tmp_path / ATM, [20200101.0])
+    icon_output(tmp_path / "lam_DOM01_ML_0001.nc", [20200101.0])
+    icon_output(tmp_path / "lam_oce_0001.nc", [20200101.0])
+    assert sorted(collect(tmp_path)["files"]) == [ATM, "lam_DOM01_ML_0001.nc"]
+
+
+def test_the_volume_counts_only_the_diagnosed_variables(tmp_path):
+    cfg = simoutput.config([profile.load_all()["icon"]], {"dir": tmp_path}, {})
+    icon_output(tmp_path / ATM, [20200101.0])
+    # temp, pres, u and v on NLEV levels and w on NLEV + 1, each value 8 bytes
+    assert simoutput.volume(tmp_path / ATM, cfg) == 8 * NCELLS * (4 * NLEV + NLEV + 1)
+    (tmp_path / "exp_atm_broken.nc").write_bytes(b"not netcdf")
+    assert simoutput.volume(tmp_path / "exp_atm_broken.nc", cfg) == 0
+
+
+@pytest.mark.parametrize("flag", [["--open"], ["--serve"], ["--watch", "60"]])
+def test_flags_for_this_machine_do_not_go_into_the_job(tmp_path, monkeypatch, flag):
+    monkeypatch.delenv("SLURM_JOB_ID", raising=False)
+    log = str(FIXTURES / "icon_success.log")
+    assert cli.main([log, "-o", str(tmp_path / "r"), "--output-dir", str(tmp_path), *flag]) == 2

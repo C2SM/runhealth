@@ -312,32 +312,37 @@ def read_outputs(logs: list[RunLog], cache_dir: Path | None, jobs: int) -> None:
     """
     configs = {_output_key(rl.output): rl.output for rl in logs if rl.output}
     found: dict[str, dict] = {}
-    todo: list[tuple[str, Path, int]] = []
+    owner: dict[Path, str] = {}
     for key, cfg in configs.items():
         found[key], paths = simoutput.plan(cfg, _load_output(cache_dir, key))
-        todo += [(key, path, path.stat().st_size) for path in paths]
-    if todo:
-        jobs = max(1, min(len(todo), jobs))
+        owner.update((path, key) for path in paths)
+    if owner:
+        jobs = max(1, min(len(owner), jobs))
+        tasks = [(path, configs[key]) for path, key in owner.items()]
+        # Weighted by the diagnosed variables, as a file holding none is only opened.
+        cost = {path: n for (path, _), n in _each(simoutput.volume, tasks, jobs)}
         label = f"reading output on {jobs} core(s)" if jobs > 1 else "reading output"
-        size = sum(n for *_, n in todo)
-        done = f"read {len(todo)} output file(s) in {{t}}"
-        with progress.Progress(label, size, done, progress.gigabytes, each=True) as bar:
-            for i, ((key, path, n), rec) in enumerate(_each(todo, configs, jobs), 1):
+        done = f"read {len(tasks)} output file(s) in {{t}}"
+        with progress.Progress(
+            label, sum(cost.values()), done, progress.gigabytes, each=True
+        ) as bar:
+            for i, ((path, _), rec) in enumerate(_each(simoutput.read, tasks, jobs), 1):
+                key = owner[path]
                 found[key]["files"][path.name] = rec
                 _store_output(cache_dir, key, found[key])
-                bar.advance(f"{i}/{len(todo)} {Path(path).parent.name}/{path.name}", n=n)
+                bar.advance(f"{i}/{len(tasks)} {path.parent.name}/{path.name}", n=cost[path])
     for rl in logs:
         if rl.output:
             rl.output = found[_output_key(rl.output)]
 
 
-def _each(todo: list, configs: dict, jobs: int):
-    """Each file to read with its summary, as the summaries come in."""
+def _each(fn: Callable, tasks: list[tuple], jobs: int):
+    """Each task with ``fn(*task)``, in worker processes when ``jobs`` > 1, as results come in."""
     if jobs == 1:
-        yield from ((t, simoutput.read(t[1], configs[t[0]])) for t in todo)
+        yield from ((t, fn(*t)) for t in tasks)
         return
     with ProcessPoolExecutor(max_workers=jobs) as pool:
-        pending = {pool.submit(simoutput.read, t[1], configs[t[0]]): t for t in todo}
+        pending = {pool.submit(fn, *t): t for t in tasks}
         for future in as_completed(pending):
             yield pending[future], future.result()
 
@@ -803,12 +808,16 @@ def submit(args, argv: list[str]) -> int:
         log("runhealth: --output-dir runs as a SLURM job, but sbatch is not on PATH;")
         log("runhealth: add --no-submit to read the output on this machine")
         return 1
-    joblog = Path.cwd() / "runhealth.%j.out"
+    # Beside the report, but in its working state, which is not published.
+    joblog = Path(args.outdir).resolve() / ".cache" / "runhealth.%j.out"
+    joblog.parent.mkdir(parents=True, exist_ok=True)
     command = [
         "sbatch",
         "--parsable",
         *SBATCH_DEFAULTS,
         f"--output={joblog}",
+        # Alps refuses sbatch from within a uenv unless told what to do with it.
+        *(["--uenv-passthrough=use"] if os.environ.get("UENV_MOUNT_LIST") else []),
         *shlex.split(args.sbatch),
         "--wrap",
         shlex.join([sys.executable, "-m", "runhealth", *argv]),
@@ -849,6 +858,12 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if args.output_dir and not args.no_submit and "SLURM_JOB_ID" not in os.environ:
+        flags = {"--open": args.open, "--serve": args.serve is not None, "--watch": args.watch}
+        here = [flag for flag, on in flags.items() if on]
+        if here:
+            log(f"runhealth: {', '.join(here)} cannot run in the SLURM job that reads the output;")
+            log("runhealth: add --no-submit to read it here, or open the report once the job ends")
+            return 2
         return submit(args, sys.argv[1:] if argv is None else argv)
 
     result = _once(args, outdir)

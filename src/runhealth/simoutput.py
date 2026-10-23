@@ -45,7 +45,7 @@ def config(profiles, options: dict, log: dict) -> dict:
         where = (log.get("fields") or {}).get(field)
     return {
         "dir": str(Path(where).resolve()) if where else None,
-        "glob": options.get("glob") or spec.get("files") or DEFAULT_GLOB,
+        "glob": _patterns(options.get("glob") or spec.get("files") or DEFAULT_GLOB),
         "grid": str(Path(options["grid"]).resolve()) if options.get("grid") else None,
         "variables": spec["variables"],
     }
@@ -74,7 +74,7 @@ def plan(cfg: dict, prev: dict | None = None) -> tuple[dict, list[Path]]:
     old = (prev or {}).get("files", {}) if (prev or {}).get("key") == key else {}
     files: dict[str, dict] = {}
     todo: list[Path] = []
-    for path in sorted(Path(cfg["dir"]).glob(cfg["glob"])):
+    for path in sorted({p for g in cfg["glob"] for p in Path(cfg["dir"]).glob(g)}):
         if not path.is_file():
             continue
         st = path.stat()
@@ -93,6 +93,21 @@ def plan(cfg: dict, prev: dict | None = None) -> tuple[dict, list[Path]]:
     return {**cfg, "key": key, "files": files}, todo
 
 
+def volume(path: Path, cfg: dict) -> int:
+    """The bytes of the diagnosed variables in a file, which is what reading it costs."""
+    import xarray as xr
+
+    try:
+        with xr.open_dataset(path, decode_times=False, mask_and_scale=False, cache=False) as ds:
+            return sum(
+                ds[s].size * ds[s].dtype.itemsize
+                for name, spec in cfg["variables"].items()
+                for s in _sources(spec.get("names") or [name], ds)
+            )
+    except Exception:  # read will report it
+        return 0
+
+
 def read(path: Path, cfg: dict) -> dict:
     """The summary of one file; a file that cannot be read yields an error, not an exception."""
     st = path.stat()
@@ -102,6 +117,11 @@ def read(path: Path, cfg: dict) -> dict:
     except Exception as exc:  # one broken file must not hide the others
         rec["error"] = f"cannot be read: {exc}"
     return rec
+
+
+def patterns(output: dict) -> str:
+    """The file patterns of an output, as a report names them."""
+    return ", ".join(output.get("glob") or [])
 
 
 def series(output: dict) -> dict[str, list[dict]]:
@@ -136,6 +156,10 @@ def steps(output: dict) -> list[tuple[float, str]]:
 
 
 # -- reading --------------------------------------------------------------
+
+
+def _patterns(value) -> list[str]:
+    return [value] if isinstance(value, str) else list(value)
 
 
 class _Area:
