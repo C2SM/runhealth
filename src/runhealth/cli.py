@@ -13,6 +13,7 @@ import multiprocessing
 import os
 import queue
 import re
+import shlex
 import shutil
 import socket
 import subprocess
@@ -21,16 +22,27 @@ import threading
 import time
 import webbrowser
 from collections.abc import Callable
-from concurrent.futures import ProcessPoolExecutor, wait
+from concurrent.futures import ProcessPoolExecutor, as_completed, wait
 from pathlib import Path
 
-from . import __version__, accounting, diag, plots, profile, progress, report, search, summary
+from . import (
+    __version__,
+    accounting,
+    diag,
+    plots,
+    profile,
+    progress,
+    report,
+    search,
+    simoutput,
+    summary,
+)
 from .extract import RunLog, job_id_of_name, parse
 from .health import LEVEL_RANK, assess
 from .logfile import format_duration
 from .report import RunView
 
-CACHE_VERSION = 5
+CACHE_VERSION = 7
 DEFAULT_GLOB = "LOG.*.o"
 # run_script.<job id>.o is how Sirocco names the log of every task.
 LOG_GLOBS = [DEFAULT_GLOB, "slurm-*.out", "run_script.*.o", "*.log", "*.out", "*.o[0-9]*"]
@@ -47,6 +59,15 @@ PUBLISH_EXCLUDES = ["--exclude=/.cache/", "--exclude=/.remote-cache/"]
 # Returned when a run is graded at or above --fail-on, distinct from 1 (runhealth
 # itself could not produce a report) and 2 (invalid arguments).
 EXIT_GRADE = 3
+# Reading the model output takes hours at kilometer scale, so outside a job it
+# runs as one; --sbatch adds to these and overrides them.
+SBATCH_DEFAULTS = [
+    "--job-name=runhealth",
+    "--nodes=1",
+    "--ntasks=1",
+    "--cpus-per-task=16",
+    "--time=01:00:00",
+]
 
 
 def log(msg: str) -> None:
@@ -217,7 +238,12 @@ def _cache_file(cache_dir: Path, path: Path) -> Path:
 
 
 def parse_cached(
-    path: Path, names: list[str], dirs: list[str], cache_dir: str | None, reports=None
+    path: Path,
+    names: list[str],
+    dirs: list[str],
+    cache_dir: str | None,
+    reports=None,
+    output: dict | None = None,
 ) -> dict:
     """Parse one log, reusing and updating an on-disk cache. Runs in a worker.
 
@@ -225,12 +251,15 @@ def parse_cached(
     megabytes, which is how the parent process follows a file it is not
     reading itself. The summary of the run's diagnostics directory is cached
     with the log and read again only when a file in that directory changes.
+    ``output`` names the run's output (``dir``, ``glob``, ``grid``); the
+    result carries where it lies and what to read there, which
+    :func:`read_outputs` then reads.
     """
     profiles = profile.load_all([Path(d) for d in dirs])
     picked = profile.select(names, profiles) if names else profile.detect(path, profiles)
     cache = _cache_file(Path(cache_dir), path) if cache_dir else None
     report = reports.put if reports is not None else None
-    state, start = None, 0
+    state, start, payload = None, 0, None
     stat = path.stat()
     if cache and cache.is_file():
         try:
@@ -247,24 +276,96 @@ def parse_cached(
                 report(stat.st_size)  # nothing to read, but the file is accounted for
             cached = RunLog.from_dict(blob["state"])
             where = diag.locate(cached)
-            sig = diag.signature(where)
-            if sig == blob.get("diag_sig", ""):
-                return blob["state"]
-            cached.diag = diag.collect(cached, where)
-            payload = RunLog.to_dict(cached)
-            _store(cache, picked, stat, cached.offset, payload, sig)
-            return payload
-        if same and blob.get("offset"):
+            sig, offset, fresh = diag.signature(where), cached.offset, False
+            payload = blob["state"]
+            if sig != blob.get("diag_sig", ""):
+                cached.diag = diag.collect(cached, where)
+                payload, fresh = RunLog.to_dict(cached), True
+        elif same and blob.get("offset"):
             # Job logs only ever grow, so continue where the last pass stopped.
             state, start = blob["state"], int(blob["offset"])
-    if report and start:
-        report(start)
-    result = parse(path, picked, start=start, state=state, on_read=report)
-    where = diag.locate(result)
-    result.diag = diag.collect(result, where)
-    payload = RunLog.to_dict(result)
-    _store(cache, picked, stat, result.offset, payload, diag.signature(where))
+    if payload is None:
+        if report and start:
+            report(start)
+        result = parse(path, picked, start=start, state=state, on_read=report)
+        where = diag.locate(result)
+        result.diag = diag.collect(result, where)
+        payload, offset, sig, fresh = (
+            RunLog.to_dict(result),
+            result.offset,
+            diag.signature(where),
+            True,
+        )
+    if fresh:
+        _store(cache, picked, stat, offset, payload, sig)
+    if output:
+        payload = {**payload, "output": simoutput.config(picked, output, payload)}
     return payload
+
+
+def read_outputs(logs: list[RunLog], cache_dir: Path | None, jobs: int) -> None:
+    """Summarize the output of every run, reading a directory once however many runs share it.
+
+    The files are read in parallel, and the summary of each directory is
+    cached after every file, so an interrupted pass loses at most the files
+    being read at that moment.
+    """
+    configs = {_output_key(rl.output): rl.output for rl in logs if rl.output}
+    found: dict[str, dict] = {}
+    owner: dict[Path, str] = {}
+    for key, cfg in configs.items():
+        found[key], paths = simoutput.plan(cfg, _load_output(cache_dir, key))
+        owner.update((path, key) for path in paths)
+    if owner:
+        jobs = max(1, min(len(owner), jobs))
+        tasks = [(path, configs[key]) for path, key in owner.items()]
+        # Weighted by the diagnosed variables, as a file holding none is only opened.
+        cost = {path: n for (path, _), n in _each(simoutput.volume, tasks, jobs)}
+        label = f"reading output on {jobs} core(s)" if jobs > 1 else "reading output"
+        done = f"read {len(tasks)} output file(s) in {{t}}"
+        with progress.Progress(
+            label, sum(cost.values()), done, progress.gigabytes, each=True
+        ) as bar:
+            for i, ((path, _), rec) in enumerate(_each(simoutput.read, tasks, jobs), 1):
+                key = owner[path]
+                found[key]["files"][path.name] = rec
+                _store_output(cache_dir, key, found[key])
+                bar.advance(f"{i}/{len(tasks)} {path.parent.name}/{path.name}", n=cost[path])
+    for rl in logs:
+        if rl.output:
+            rl.output = found[_output_key(rl.output)]
+
+
+def _each(fn: Callable, tasks: list[tuple], jobs: int):
+    """Each task with ``fn(*task)``, in worker processes when ``jobs`` > 1, as results come in."""
+    if jobs == 1:
+        yield from ((t, fn(*t)) for t in tasks)
+        return
+    with ProcessPoolExecutor(max_workers=jobs) as pool:
+        pending = {pool.submit(fn, *t): t for t in tasks}
+        for future in as_completed(pending):
+            yield pending[future], future.result()
+
+
+def _output_key(cfg: dict) -> str:
+    return json.dumps(cfg, sort_keys=True)
+
+
+def _output_cache(cache_dir: Path, key: str) -> Path:
+    return cache_dir / f"output.{hashlib.sha1(key.encode()).hexdigest()[:12]}.json"
+
+
+def _load_output(cache_dir: Path | None, key: str) -> dict | None:
+    try:
+        return json.loads(_output_cache(cache_dir, key).read_text()) if cache_dir else None
+    except (OSError, ValueError):
+        return None
+
+
+def _store_output(cache_dir: Path | None, key: str, found: dict) -> None:
+    if cache_dir:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        _output_cache(cache_dir, key).write_text(json.dumps(found))
 
 
 def profile_signature(picked) -> list[str]:
@@ -307,6 +408,7 @@ def parse_all(
     jobs: int,
     on_read: Callable[[int], None] | None = None,
     on_done: Callable[[Path], None] | None = None,
+    output: dict | None = None,
 ) -> list[RunLog]:
     """Parse every log, following the bytes read and the files finished.
 
@@ -319,7 +421,7 @@ def parse_all(
     blobs: list[dict] = [{} for _ in files]
     if len(files) == 1 or jobs == 1:
         for i, a in enumerate(args):
-            blobs[i] = parse_cached(*a, _Sink(on_read) if on_read else None)
+            blobs[i] = parse_cached(*a, _Sink(on_read) if on_read else None, output)
             if on_done:
                 on_done(files[i])
         return [RunLog.from_dict(b) for b in blobs]
@@ -327,7 +429,7 @@ def parse_all(
         # A queue the workers can reach, since the parent cannot see how far
         # into a file another process has read.
         reports = manager.Queue() if on_read else None
-        pending = {pool.submit(_worker, (*a, reports)): i for i, a in enumerate(args)}
+        pending = {pool.submit(_worker, (*a, reports, output)): i for i, a in enumerate(args)}
         waiting = set(pending)
         while waiting:
             finished, waiting = wait(waiting, timeout=POLL_SECONDS)
@@ -387,10 +489,22 @@ def build(
         # only set up when there is a bar to show for it.
         follow = (lambda n: bar.advance(n=n)) if bar.enabled else None
         named = (lambda f: bar.advance(f.name, n=0)) if bar.enabled else None
-        logs = parse_all(files, names, profile_dirs, cache, jobs, follow, named)
+        output = {"dir": args.output_dir, "glob": args.output_glob, "grid": args.grid}
+        logs = parse_all(
+            files,
+            names,
+            profile_dirs,
+            cache,
+            jobs,
+            follow,
+            named,
+            output if args.output_dir else None,
+        )
     if args.job_id:
         # A log whose name carries no job id is only known after parsing.
         logs = [rl for rl in logs if str(rl.fields.get("job_id") or "") in args.job_id]
+    if args.output_dir:
+        read_outputs(logs, cache, min(args.jobs or os.cpu_count() or 4, 16))
 
     # Keyed by host (None for this machine), as job ids are only unique per cluster.
     records: dict[str | None, dict[str, dict]] = {}
@@ -561,7 +675,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--list", action="store_true", help="show matching logs and exit")
     p.add_argument("--watch", type=float, default=0, help="re-render every N seconds")
     p.add_argument("--stall-seconds", type=float, default=0, help="override the stall threshold")
-    p.add_argument("--jobs", type=int, default=0, help="parallel parsers (0 = auto)")
+    p.add_argument(
+        "--jobs",
+        type=int,
+        default=0,
+        help="parallel processes for parsing logs and reading output (0 = auto)",
+    )
     p.add_argument("--no-plots", action="store_true", help="skip the figures")
     p.add_argument("--no-cache", action="store_true", help="ignore and do not write the cache")
     p.add_argument("--no-squeue", action="store_true", help="do not ask SLURM for job states")
@@ -572,6 +691,30 @@ def build_parser() -> argparse.ArgumentParser:
         "--embed-logs",
         action="store_true",
         help="embed logs under 8 MB as a linkable page the figures can jump into",
+    )
+    p.add_argument(
+        "--output-dir",
+        metavar="DIR",
+        help="directory of the model output to diagnose, or 'auto' to take each run's "
+        "from its log (needs runhealth[output])",
+    )
+    p.add_argument(
+        "--output-glob",
+        metavar="PATTERN",
+        help="which files in --output-dir to read (default: from the profile, else *.nc)",
+    )
+    p.add_argument("--grid", metavar="FILE", help="grid file with the cell areas of the output")
+    p.add_argument(
+        "--sbatch",
+        metavar="OPTIONS",
+        default="",
+        help="extra sbatch options for the job that reads the output, "
+        "e.g. '--account=cwd01 --time=03:00:00'",
+    )
+    p.add_argument(
+        "--no-submit",
+        action="store_true",
+        help="read the output here rather than in a SLURM job",
     )
     p.add_argument(
         "--fail-on",
@@ -659,6 +802,41 @@ def _once(args, outdir: Path) -> tuple[Path, str] | None:
     return path, summary.worst(views)
 
 
+def submit(args, argv: list[str]) -> int:
+    """Run this same command as a SLURM job and return once it is queued."""
+    if shutil.which("sbatch") is None:
+        log("runhealth: --output-dir runs as a SLURM job, but sbatch is not on PATH;")
+        log("runhealth: add --no-submit to read the output on this machine")
+        return 1
+    # Beside the report, but in its working state, which is not published.
+    joblog = Path(args.outdir).resolve() / ".cache" / "runhealth.%j.out"
+    joblog.parent.mkdir(parents=True, exist_ok=True)
+    command = [
+        "sbatch",
+        "--parsable",
+        *SBATCH_DEFAULTS,
+        f"--output={joblog}",
+        # Alps refuses sbatch from within a uenv unless told what to do with it.
+        *(["--uenv-passthrough=use"] if os.environ.get("UENV_MOUNT_LIST") else []),
+        *shlex.split(args.sbatch),
+        "--wrap",
+        shlex.join([sys.executable, "-m", "runhealth", *argv]),
+    ]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=60)
+    except (OSError, subprocess.SubprocessError) as exc:
+        log(f"runhealth: sbatch failed: {exc}")
+        return 1
+    if result.returncode != 0:
+        log(f"runhealth: sbatch failed: {result.stderr.strip()[:400]}")
+        return 1
+    job = result.stdout.strip().split(";")[0]
+    log(f"runhealth: reading the model output in SLURM job {job}")
+    log(f"runhealth: its log is {str(joblog).replace('%j', job)}")
+    log(f"runhealth: the report will be in {Path(args.outdir).resolve()}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if args.list_profiles:
@@ -678,6 +856,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.publish is not None and not _publish_dest(args):
         log("runhealth: --publish needs a destination, or $RUNHEALTH_PUBLISH set")
         return 2
+
+    if args.output_dir and not args.no_submit and "SLURM_JOB_ID" not in os.environ:
+        flags = {"--open": args.open, "--serve": args.serve is not None, "--watch": args.watch}
+        here = [flag for flag, on in flags.items() if on]
+        if here:
+            log(f"runhealth: {', '.join(here)} cannot run in the SLURM job that reads the output;")
+            log("runhealth: add --no-submit to read it here, or open the report once the job ends")
+            return 2
+        return submit(args, sys.argv[1:] if argv is None else argv)
 
     result = _once(args, outdir)
     if result is None:

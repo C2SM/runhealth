@@ -47,3 +47,12 @@ uv sync --extra pdf
 ```
 
 See [Output formats](usage.md#output-formats).
+
+Reading the model output requires `xarray` and `netCDF4`, likewise only when it
+is used:
+
+```bash
+uv sync --extra output
+```
+
+See [Diagnosing the model output](usage.md#diagnosing-the-model-output).

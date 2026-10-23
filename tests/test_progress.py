@@ -61,3 +61,15 @@ def test_a_message_clears_the_bar_that_is_on_screen():
 def test_the_item_is_shortened_to_the_room_that_is_left():
     assert progress._short("LOG.very-long-name.log", 8) == "LOG.ver…"
     assert progress._short("short.log", 40) == "short.log"
+
+
+def test_a_redirected_stream_can_get_a_line_per_item():
+    out = io.StringIO()
+    with progress.Progress(
+        "reading", 2e9, "read {n} in {t}", progress.gigabytes, out, each=True
+    ) as bar:
+        bar.advance("a.nc", n=1e9)
+    lines = out.getvalue().splitlines()
+    assert lines[0].startswith("runhealth: reading 0.0/2.0 GB")
+    assert lines[1].startswith("runhealth: reading 1.0/2.0 GB") and lines[1].endswith("a.nc")
+    assert lines[2].startswith("runhealth: read ")

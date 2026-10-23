@@ -291,7 +291,9 @@ def test_only_headings_with_entries_under_them_can_fold():
     html = toc.render()
     assert html.count('class="tfold"') == 1
     assert 'class="tfold-all"' in html
-    assert re.search(r'href="#checks" class="lv1 nest">.*?</a><button type="button" class="tfold"', html)
+    assert re.search(
+        r'href="#checks" class="lv1 nest">.*?</a><button type="button" class="tfold"', html
+    )
 
 
 def test_a_table_of_contents_without_nested_entries_has_no_fold_all():
@@ -458,7 +460,9 @@ def test_run_menu_groups_runs_of_one_kind(parsed, assessed):
     assert "LOG." not in menu and ">jcp_r2b10<" in menu
     # A divider separates the two kinds, and only them.
     assert menu.count('<hr class="grp">') == 1
-    assert menu.index(f'href="{vs[1].page}"') < menu.index("<hr") < menu.index(f'href="{vs[0].page}"')
+    assert (
+        menu.index(f'href="{vs[1].page}"') < menu.index("<hr") < menu.index(f'href="{vs[0].page}"')
+    )
 
 
 def test_index_groups_runs_of_one_kind(parsed, assessed):

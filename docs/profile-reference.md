@@ -357,6 +357,7 @@ Names and column mappings used by the analysis. All entries are optional.
 | `coupling_wait_timers` | blocking gets of the time loop, on which a component waits until its partner delivers |
 | `coupling_setup_timers` | coupler setup, including the very first get; reported, but not counted as waiting |
 | `timer_group_ranks` | pattern matching the first and last rank in the title of a timer table, which assigns each table to a component |
+| `output_dir_field` | the field holding the run's output directory, read by `--output-dir auto` |
 | `build_block` | the `keyvalues` block that describes the executable; the run page shows it at the top and compares it with the previous run |
 | `build_ignore` | keys of that block that describe the run rather than the binary, such as its date or host; neither shown nor compared |
 | `counter_table`, `ratio_table` | network counter blocks |
@@ -364,6 +365,42 @@ Names and column mappings used by the analysis. All entries are optional.
 | `counter_watch` | counter names worth reporting |
 | `congestion_groups` | message groups that indicate fabric congestion |
 | `congestion_keys` | the keys within those groups that actually indicate congestion |
+
+## `output`
+
+The model output read with
+[`--output-dir`](usage.md#diagnosing-the-model-output), and the limits its
+extremes are graded against. The ICON profile defines:
+
+```yaml
+output:
+  files: ["*_atm_*.nc", "*_DOM[0-9]*_*.nc"]
+  variables:
+    temp:
+      label: Temperature
+      unit: K
+      names: [temp, ta]
+      fail_below: 150
+      fail_above: 350
+    wind:
+      label: Wind speed
+      unit: m/s
+      names: [[u, v], [ua, va]]
+      warn_above: 400
+      fail_above: 1000
+```
+
+| Key | Meaning |
+| --- | --- |
+| `files` | pattern, or list of patterns, of the output files in `--output-dir`; a file matching any of them is read, and `--output-glob` overrides them |
+| `variables` | one entry per diagnosed variable |
+| `label`, `unit` | how the report names the variable and its unit |
+| `names` | the names under which a file may hold the variable, tried in order; a list of names stands for the components of a magnitude, `sqrt(a^2 + b^2 + ...)`, such as a wind speed. Defaults to the key of the entry |
+| `warn_below`, `fail_below` | a minimum below this value warns or fails |
+| `warn_above`, `fail_above` | a maximum above this value warns or fails |
+
+A variable missing from a file is skipped in that file. Values that are not
+finite always fail a run.
 
 (profile-thresholds)=
 

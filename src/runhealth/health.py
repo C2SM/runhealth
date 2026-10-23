@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
-from . import diag
+from . import diag, simoutput
 from .accounting import ACTIVE_STATES, FAILED_STATES, base_state
 from .extract import RunLog, beyond, magnitude
 from .logfile import format_duration, format_sim_span, format_stamp, parse_walltime
@@ -395,6 +395,8 @@ def assess(
     a.checks.append(_check_errors(log, a))
     a.checks.extend(_check_groups(log, a))
     a.checks.append(_check_stability(log))
+    a.checks.append(_check_output_values(log))
+    a.checks.append(_check_output_completeness(log, a))
     a.checks.append(_check_dumps(log))
     a.checks.append(_check_kernel(log))
     a.checks.append(_check_gpu_health(log))
@@ -1618,6 +1620,172 @@ PROC_STATES = {
     "T": "stopped",
     "Z": "zombie",
 }
+
+
+def _model_time(text: str) -> str:
+    return text.replace("T", " ")
+
+
+def _output_breach(records: list[dict], spec: dict, level: str) -> tuple[dict, str] | None:
+    """The first output step whose extremes pass the ``<level>_below`` or ``_above`` limit."""
+    below, above = spec.get(f"{level}_below"), spec.get(f"{level}_above")
+    for r in records:
+        if below is not None and r["min"] is not None and r["min"] < below:
+            return r, f"fell to {value_text(r['min'])}, below {below:g}, at {r['min_level']}"
+        if above is not None and r["max"] is not None and r["max"] > above:
+            return r, f"reached {value_text(r['max'])}, above {above:g}, at {r['max_level']}"
+    return None
+
+
+def _check_output_values(log: RunLog) -> Check | None:
+    """Extremes and non-finite values of the model output, per variable.
+
+    A non-finite value, or an extreme beyond a ``fail_`` limit of the profile,
+    fails the run and names the first output step at which it occurred.
+    """
+    out = log.output
+    if not out:
+        return None
+    if out.get("error"):
+        return Check(
+            "output_values", "Output values", "info", "The output was not read", out["error"]
+        )
+    found = simoutput.series(out)
+    variables = out.get("variables") or {}
+    if not found:
+        if not any(not f.get("error") for f in out.get("files", {}).values()):
+            return None  # the completeness check reports missing and unreadable files
+        return Check(
+            "output_values",
+            "Output values",
+            "warn",
+            "None of the expected variables is in the output",
+            f"Looked for {', '.join(variables) or 'nothing'} in {simoutput.patterns(out)} under {out['dir']}.",
+        )
+    levels: list[str] = []
+    heads: list[str] = []
+    ev: list[str] = []
+    for name, records in found.items():
+        spec = variables.get(name, {})
+        label = spec.get("label", name)
+        unit = f" {spec['unit']}" if spec.get("unit") else ""
+        valid = [r for r in records if r["min"] is not None]
+        if valid:
+            lo = min(valid, key=lambda r: r["min"])
+            hi = max(valid, key=lambda r: r["max"])
+            weights = out["files"][records[0]["file"]]["vars"][name].get("weights", "")
+            ev.append(
+                f"{label}: {value_text(lo['min'])} to {value_text(hi['max'])}{unit}, "
+                f"lowest at {_model_time(lo['time'])} ({lo['min_level']}), "
+                f"highest at {_model_time(hi['time'])} ({hi['max_level']}); means {weights}"
+            )
+        bad = next((r for r in records if r["nonfinite"]), None)
+        if bad:
+            levels.append("fail")
+            heads.append(
+                f"{label} has {bad['nonfinite']:,} non-finite value(s) at model time "
+                f"{_model_time(bad['time'])}, first at {bad['bad_level']}"
+            )
+            ev.append(f"{label}: first non-finite values in {bad['file']}")
+            continue
+        for level in ("fail", "warn"):
+            breach = _output_breach(records, spec, level)
+            if breach:
+                r, what = breach
+                levels.append(level)
+                heads.append(f"{label} {what}{unit} at model time {_model_time(r['time'])}")
+                break
+        else:
+            levels.append("ok")
+    steps = len(simoutput.steps(out))
+    return Check(
+        "output_values",
+        "Output values",
+        _worst(levels),
+        (
+            "; ".join(heads)
+            if heads
+            else f"{len(found)} variable(s) within their limits over {steps} output step(s)"
+        ),
+        "Minimum, maximum and non-finite values over each three-dimensional field at every "
+        "output step, graded against the limits of the profile. Values marked as missing "
+        "by the file's fill value are left out.",
+        ev,
+    )
+
+
+def _check_output_completeness(log: RunLog, a: Assessment) -> Check | None:
+    """Missing, duplicate or unreadable output steps, and output that stops early."""
+    out = log.output
+    if not out or out.get("error"):
+        return None
+    files = out.get("files", {})
+    if not files:
+        return Check(
+            "output_completeness",
+            "Output completeness",
+            "warn",
+            "No output files found",
+            f"Nothing matched {simoutput.patterns(out)} in {out['dir']}.",
+        )
+    level, heads, ev = "ok", [], []
+    broken = {name: f["error"] for name, f in files.items() if f.get("error")}
+    if broken:
+        level = "warn"
+        heads.append(f"{len(broken)} of {len(files)} file(s) could not be read")
+        ev.extend(f"{name}: {error}" for name, error in sorted(broken.items())[:12])
+    hollow = sorted(n for n, f in files.items() if "steps" in f and not f["steps"])
+    if hollow:
+        level = "warn"
+        heads.append(f"{len(hollow)} file(s) hold no output step")
+        ev.extend(f"{name}: created, but no step was written" for name in hollow[:12])
+    times = simoutput.steps(out)
+    ts = [t for t, _ in times]
+    diffs = [b - a for a, b in zip(ts, ts[1:])]
+    step = statistics.median(diffs) if diffs else None
+    if step:
+        gaps = [i for i, d in enumerate(diffs) if d > 1.5 * step]
+        if gaps:
+            level = "warn"
+            heads.append(f"{len(gaps)} gap(s) in the output")
+            ev.extend(
+                f"no output between {_model_time(times[i][1])} and {_model_time(times[i + 1][1])}"
+                for i in gaps[:12]
+            )
+    for name, records in simoutput.series(out).items():
+        dup = sum(1 for p, r in zip(records, records[1:]) if p["t"] == r["t"])
+        if dup:
+            level = "warn"
+            heads.append(f"{dup} output step(s) of {name} written twice")
+    clock = model_clock(log)
+    if clock and step and times and a.status == "SUCCESS":
+        try:
+            last = datetime.fromisoformat(times[-1][1])
+        except ValueError:  # a calendar datetime cannot express, such as 360 days
+            last = None
+        if last and (clock.end - last).total_seconds() > 1.5 * step:
+            level = "warn"
+            heads.append(
+                f"the output ends at {_model_time(times[-1][1])}, "
+                f"while the model reached {clock.end:%Y-%m-%d %H:%M:%S}"
+            )
+    if times:
+        every = f" every {format_duration(step)}" if step else ""
+        ev.insert(
+            0,
+            f"{len(times)} output step(s){every} in {len(files)} file(s), "
+            f"{_model_time(times[0][1])} to {_model_time(times[-1][1])}",
+        )
+    head = "; ".join(heads) if heads else ev[0] if ev else "No output step has a time"
+    return Check(
+        "output_completeness",
+        "Output completeness",
+        level if times or broken or hollow else "info",
+        head[:1].upper() + head[1:],
+        f"The output steps found in {simoutput.patterns(out)} under {out['dir']}, checked for gaps, "
+        "duplicates, unreadable or empty files and an end before the end of the simulated period.",
+        ev,
+    )
 
 
 def _check_dumps(log: RunLog) -> Check | None:

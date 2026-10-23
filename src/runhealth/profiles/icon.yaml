@@ -21,6 +21,7 @@ attempt_boundary:
 
 settings:
   progress_label: time steps
+  output_dir_field: output_dir
   throughput_label: SYPD
   model_time_field: model_time
   progress_series: timestep
@@ -50,6 +51,12 @@ settings:
   build_ignore: [date, time, user, host]
 
 fields:
+  # The experiment directory, as a job script run with `set -x` traces it;
+  # `--output-dir auto` reads the output there.
+  output_dir:
+    re: '^\+ EXPDIR=[''"]?([^''"\s]+)'
+    contains: 'EXPDIR='
+    keep: last
   model_version:
     re: '^\s*version: (\S+)'
     contains: 'version:'
@@ -211,6 +218,44 @@ thresholds:
   max_vn_fail: 1000
   max_w_warn: 100
   max_w_fail: 1000
+
+# Model output read with --output-dir: the variables to diagnose and the
+# limits their extremes are graded against. Each variable is found under the
+# first of its names a file holds, ICON's own or the CMIP-style ones of an
+# output on pressure levels; wind speed is the magnitude of its components.
+# The limits on wind repeat those of the peaks ICON prints, and the limits on
+# temperature lie far outside anything physical.
+output:
+  # The atmosphere streams of a coupled experiment, whose directory also holds
+  # the ocean output, which carries u and v as well, and the input files; and
+  # the domains of an ICON-NWP or ICON-LAM run.
+  files: ["*_atm_*.nc", "*_DOM[0-9]*_*.nc"]
+  variables:
+    temp:
+      label: Temperature
+      unit: K
+      names: [temp, ta]
+      fail_below: 150
+      fail_above: 350
+    pres:
+      label: Pressure
+      unit: Pa
+      names: [pres, pres_sfc]
+      fail_below: 0
+    wind:
+      label: Wind speed
+      unit: m/s
+      names: [[u, v], [ua, va]]
+      warn_above: 400
+      fail_above: 1000
+    w:
+      label: Vertical wind
+      unit: m/s
+      names: [w, wa]
+      warn_below: -100
+      warn_above: 100
+      fail_below: -1000
+      fail_above: 1000
 
 groups:
   icon_warning:

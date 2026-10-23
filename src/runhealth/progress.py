@@ -3,7 +3,8 @@
 A report over a directory of large logs takes a while, so every stage that
 runs once per log reports how far it has come. On a terminal this is a bar
 that rewrites itself in place; when the output is redirected it degrades to
-one line per stage, so a log file stays readable.
+one line per stage, so a log file stays readable, or to one line per item for
+a stage slow enough that a job log should show where it stands.
 """
 
 from __future__ import annotations
@@ -47,6 +48,11 @@ def megabytes(n: float, total: float) -> str:
     return f"{n / 1e6:.0f}/{total / 1e6:.0f} MB" if total else f"{n / 1e6:.0f} MB"
 
 
+def gigabytes(n: float, total: float) -> str:
+    """``1.2/5.5 GB``, for a stage that reads files far larger than a log."""
+    return f"{n / 1e9:.1f}/{total / 1e9:.1f} GB" if total else f"{n / 1e9:.1f} GB"
+
+
 class Progress:
     """Counts completed units of one stage and draws them as a bar.
 
@@ -56,7 +62,8 @@ class Progress:
 
     ``done`` is the closing message, with ``{n}`` the number of units and
     ``{t}`` the time they took; ``counter`` formats the counts shown in the
-    bar itself, which is how a byte count becomes megabytes.
+    bar itself, which is how a byte count becomes megabytes. ``each`` prints a
+    line per item when the stream is not a terminal.
     """
 
     def __init__(
@@ -67,6 +74,7 @@ class Progress:
         counter: Callable[[float, float], str] | None = None,
         stream=None,
         enabled: bool | None = None,
+        each: bool = False,
     ):
         self.label = label
         self.done = done or f"{label} {{n}} in {{t}}"
@@ -74,6 +82,7 @@ class Progress:
         self.total = max(0, total)
         self.stream = stream if stream is not None else sys.stderr
         self.enabled = self.stream.isatty() if enabled is None else enabled
+        self.each = each and not self.enabled
         self.count = 0
         self.start = time.time()
         self._width = 0
@@ -83,6 +92,8 @@ class Progress:
         _active = self
         if self.enabled:
             self._draw("")
+        elif self.each:
+            self._line("")
         return self
 
     def __exit__(
@@ -102,6 +113,8 @@ class Progress:
         self.count += n
         if self.enabled:
             self._draw(item)
+        elif self.each and item:
+            self._line(item)
 
     def wrap(self, items: Iterable, name: Callable | None = None) -> Iterator:
         """Iterate ``items`` as one stage, advancing after each one is handled."""
@@ -144,6 +157,13 @@ class Progress:
             f"{_seconds(self.elapsed)}, {_seconds(eta)} left"
             if eta >= 1
             else _seconds(self.elapsed)
+        )
+
+    def _line(self, item: str) -> None:
+        counter = self.counter(self.count, self.total)
+        tail = f"  {item}" if item else ""
+        print(
+            f"runhealth: {self.label} {counter}  {self._eta()}{tail}", file=self.stream, flush=True
         )
 
     def _draw(self, item: str) -> None:

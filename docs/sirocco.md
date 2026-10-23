@@ -35,10 +35,11 @@ cycles:
                 outputs:
                   finish_status: [finish]
                   restart_out: [restart]
-                  output_streams: [atm_2d]
+                  output_streams: [atm_3d]
         - runhealth:
             inputs:
               status: [finish]
+              stream: [atm_3d]
 
 tasks:
   # ...
@@ -50,13 +51,13 @@ tasks:
       cores_per_proc: 4
       command: >-
         uv run --project $HOME/runhealth runhealth $(dirname {PORT::status})
-        --fail-on fail -o report
+        --output-dir {PORT::stream} --fail-on fail -o report
 
 data:
   generated:
     - finish: {}
     - restart: {}
-    - atm_2d: {}
+    - atm_3d: {}
 ```
 
 - Sirocco places the input's path where `{PORT::status}` stands, and the
@@ -69,6 +70,11 @@ data:
   collect the reports of all cycles in one place instead, use
   `-o /path/to/reports/$SIROCCO_START_DATE`; Sirocco sets that variable in
   every task of a cycle with dates.
+- Sirocco writes each ICON output stream into its own subdirectory of the run
+  directory, so `{PORT::stream}` is the directory of one stream and
+  `--output-dir` reads exactly that stream; see
+  [Diagnosing the model output](usage.md#diagnosing-the-model-output). Leave out
+  the `stream` input and `--output-dir` to check the log alone.
 - `uv run --project ...` starts a checkout installed as described in
   [Install](install.md); a `uenv` and `view` on the task may provide `runhealth`
   instead.

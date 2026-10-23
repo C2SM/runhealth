@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 
-from . import health, style, svg
+from . import health, simoutput, style, svg
 from .extract import RunLog
 from .health import STATUS_LEVEL, Assessment, ModelClock, counter_rows, model_clock, rate_text
 from .logfile import format_duration, format_sim_span, format_stamp
@@ -719,6 +719,112 @@ def _stability_figure(
     )
 
 
+def output_series(log: RunLog, a: Assessment, uid: str) -> list[Figure]:
+    """One figure per output variable: its range and its mean on a few levels over model time."""
+    out = log.output or {}
+    variables = out.get("variables") or {}
+    figures = []
+    for i, (name, records) in enumerate(simoutput.series(out).items()):
+        weights = out["files"][records[0]["file"]]["vars"][name].get("weights", "")
+        figure = _output_figure(name, variables.get(name, {}), records, weights, f"{uid}-{i}")
+        if figure:
+            figures.append(figure)
+    return figures
+
+
+def _output_figure(
+    name: str, spec: dict, records: list[dict], weights: str, uid: str
+) -> Figure | None:
+    valid = [r for r in records if r["min"] is not None]
+    if not valid:
+        return None
+    label = spec.get("label", name)
+    unit = spec.get("unit", "")
+    t0 = records[0]["t"]
+    span = (records[-1]["t"] - t0) or 1.0
+    levels = list(valid[0]["means"])
+    values = [v for r in valid for v in (r["min"], r["max"], *r["means"].values()) if v is not None]
+    lo, hi = min(values), max(values)
+    pad = (hi - lo) * 0.08 or abs(hi) * 0.05 or 1.0
+    lo, hi = lo - pad, hi + pad
+
+    ch = svg.Chart(height=266, pad=(68, 26, 20, 58), uid=uid)
+    p = ch.plot
+    x = svg.Scale(0, span, p.x, p.right)
+    y = svg.Scale(lo, hi, p.bottom, p.y)
+    upper = [(x(r["t"] - t0), y(r["max"])) for r in valid]
+    lower = [(x(r["t"] - t0), y(r["min"])) for r in valid]
+    ch.geometry.append(ch.path(upper + lower[::-1], cls="s0 area", close=True))
+    for edge in (upper, lower):
+        ch.geometry.append(ch.path(edge, cls="s0 stroke", vector_effect="non-scaling-stroke"))
+    legend = [("s0", "minimum to maximum")]
+    for j, level in enumerate(levels, start=1):
+        line = [
+            (x(r["t"] - t0), y(r["means"][level])) for r in valid if r["means"][level] is not None
+        ]
+        if line:
+            ch.geometry.append(
+                ch.path(line, cls=f"s{j % 7} stroke", vector_effect="non-scaling-stroke")
+            )
+            legend.append((f"s{j % 7}", f"mean, {level}"))
+    suffix = f" {unit}" if unit else ""
+    dots = ""
+    for r in _thin(records, 240):
+        bad = r["nonfinite"]
+        tip = _tip(
+            f"{label} at {r['time'].replace('T', ' ')}",
+            f"{bad:,} non-finite value(s), first at {r['bad_level']}" if bad else "",
+            (
+                f"minimum {health.value_text(r['min'])}{suffix} ({r['min_level']})"
+                if r["min"] is not None
+                else ""
+            ),
+            (
+                f"maximum {health.value_text(r['max'])}{suffix} ({r['max_level']})"
+                if r["max"] is not None
+                else ""
+            ),
+            *(
+                f"mean {health.value_text(v)}{suffix} ({k})"
+                for k, v in r["means"].items()
+                if v is not None
+            ),
+            r["file"],
+        )
+        cy = p.y + 4 if bad or r["max"] is None else y(r["max"])
+        dots += ch.circle(
+            x(r["t"] - t0),
+            cy,
+            3.4 if bad else 2.4,
+            **_mark("lv-fail fill" if bad else "s0 fill", tip),
+        )
+    ch.points.append(svg.tag("g", dots, cls="series", data_series="0"))
+    ch.legend(legend)
+    tunit, fmt = _time_fmt(span)
+    start = records[0]["time"].replace("T", " ")
+    ch.x_axis(x, svg.time_ticks(span), fmt, f"model time since {start}", unit=tunit)
+    ticks = svg.nice_ticks(lo, hi, 5)
+    ch.y_axis(y, ticks, svg.si_ticks(ticks), unit)
+    weighting = {
+        "cell area": "area-weighted",
+        "cos(latitude)": "weighted by the cosine of latitude",
+    }
+    return Figure(
+        key=f"output_{name}",
+        title=f"Output: {label}",
+        note=f"{len(records):,} output steps",
+        caption=(
+            f"The range of {label.lower()} over the whole three-dimensional field at each output "
+            f"step, and its mean on the first, the middle and the last level of the vertical "
+            f"axis, {weighting.get(weights, 'unweighted')}. Levels are named by the vertical "
+            "coordinate of the file; in ICON's native output, height 1 is the model top. A step "
+            "with values that are not finite is marked red along the top edge. Click a legend "
+            "entry to hide that series."
+        ),
+        svg=ch.render(f"{label} in the model output, range and level means over model time"),
+    )
+
+
 def timer_breakdown(log: RunLog, a: Assessment, uid: str) -> Figure | None:
     picks = []
     for group in a.timers:
@@ -1022,6 +1128,7 @@ MAKERS = [
     top_gaps,
     io_cadence,
     stability,
+    output_series,
     timer_breakdown,
     imbalance,
     warning_rate,

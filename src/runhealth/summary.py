@@ -12,7 +12,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import __version__
+from . import __version__, simoutput
 from .health import LEVEL_RANK
 from .report import RunView
 
@@ -51,7 +51,20 @@ def run(view: RunView, page: bool = True) -> dict:
             {"key": c.key, "title": c.title, "level": c.level, "headline": c.headline}
             for c in a.checks
         ],
+        "output": _output(log),
     }
+
+
+def _output(log) -> dict:
+    """Each output variable's statistics per output step, as parallel lists."""
+    out = {}
+    for name, records in simoutput.series(log.output).items():
+        out[name] = {
+            "time": [r["time"] for r in records],
+            **{k: [r[k] for r in records] for k in ("min", "max", "nonfinite")},
+            "means": {level: [r["means"][level] for r in records] for level in records[0]["means"]},
+        }
+    return out
 
 
 def build(views: list[RunView], page: bool = True) -> dict:
