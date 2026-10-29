@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from runhealth import health
-from runhealth.extract import RunLog
+from runhealth.extract import GroupStat, RunLog
 from runhealth.tables import Row, Table
 
 
@@ -347,3 +347,15 @@ def test_rate_text_gives_days_per_day():
 def test_network_timeouts_are_graded_by_count(count, want):
     log = _progress_log([10.0] * 6, network_timeouts=count)
     assert health.assess(log, now=log.last_wall + 1).check("network").level == want
+
+
+@pytest.mark.parametrize("dropped", [3000, 600000])
+def test_dropped_flow_control_messages_warn_but_never_fail(dropped):
+    log = _progress_log([60.0] * 30)
+    log.settings.update(congestion_groups=["libfabric"], congestion_keys=["cxip_fc_notify_cb"])
+    log.groups["libfabric"] = GroupStat(
+        label="libfabric messages", total=dropped, keys={"cxip_fc_notify_cb": dropped}
+    )
+    check = health.assess(log, now=log.last_wall + 1).check("network")
+    assert check.level == "warn"
+    assert "dropped flow-control messages" in check.headline
