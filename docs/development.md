@@ -12,7 +12,9 @@ run that hangs in its coupling setup, two attempts in one file, a generic SLURM
 job from an unknown code, output without timestamps, and the degenerate cases
 (empty, truncated, and not a log file at all). No real log is committed, since
 such files are too large; the figures in this documentation are generated from
-`examples/demo.log`.
+`examples/demo.log`, except the timeline on the front page, which comes from a
+log with stretched setup phases written by `examples/make_timeline.py`; its
+docstring shows how to regenerate the figure.
 
 ## Module layout
 

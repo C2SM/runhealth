@@ -13,13 +13,13 @@ runhealth /path/to/logs -o report/ --open
 ```
 
 ```{figure} images/timeline.svg
-:alt: A run timeline: short setup phases, then one time loop phase filling almost the whole job, with evenly spaced output writes below it
+:alt: A run timeline: labeled phases from job setup, model init and coupling setup through the time loop to the timer report and cleanup, with a red silence bar above the coupling setup and evenly spaced output writes below the time loop
 :width: 820px
 :align: center
 
-A healthy run in one figure: a coupled ICON-ESM run at R02B08 that needs eight
-minutes to set up, then spends 98 % of its 8.5 hours in the time loop and
-writes output at an even pace until the end.
+A run in one figure: where the wall clock went, phase by phase, where the log
+went quiet, and when output was written. The run is synthetic, with its setup
+phases stretched so that each one is visible.
 ```
 
 `runhealth` is **model-agnostic**. The core interprets batch logs in general:
