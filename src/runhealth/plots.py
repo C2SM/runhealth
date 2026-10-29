@@ -204,7 +204,8 @@ def phase_timeline(log: RunLog, a: Assessment, uid: str) -> Figure | None:
         if log.series_roles.get(name) != "io":
             continue
         for record in series:
-            if record.get("wall") is None or len(seen) > 400:
+            # One mark per pixel column, so the plot width bounds their number.
+            if record.get("wall") is None:
                 continue
             column = int(x(record["wall"] - t0))
             if column in seen:
