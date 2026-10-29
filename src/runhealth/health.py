@@ -1279,6 +1279,8 @@ def _check_network(log: RunLog, a: Assessment) -> list[Check]:
             ev.append(f"{row.label}: " + " / ".join(vals))
 
     # Fabric chatter: a retry storm shows up as libfabric warnings per minute.
+    # With FI_LOG_LEVEL=warn libfabric reports such storms routinely and the
+    # fabric recovers from them, so they warn but never fail a run.
     watch_keys = set(log.setting("congestion_keys", []) or [])
     for name in log.setting("congestion_groups", []) or []:
         stat = log.groups.get(name)
@@ -1291,7 +1293,7 @@ def _check_network(log: RunLog, a: Assessment) -> list[Check]:
         hot = sum(v for k, v in stat.keys.items() if k in watch_keys) if watch_keys else 0
         rate = hot / minutes
         if hot and rate > 10:
-            level = "fail" if rate > 1000 else "warn"
+            level = max(level, "warn", key=LEVEL_RANK.get)
             headline = f"{_fmt_count(hot)} dropped flow-control messages"
             peak = _peak_minute(stat)
             if peak:
