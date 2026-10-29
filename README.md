@@ -24,12 +24,12 @@ Any `host:/path` argument is accepted, provided that `ssh host` already works;
 `runhealth` first copies the matching logs with `rsync`.
 
 <p align="center">
-  <img src="docs/images/timeline.svg" alt="A run timeline: one blue phase filling the whole allocation, with a red silence bar above it" width="820">
+  <img src="docs/images/timeline.svg" alt="A run timeline: short setup phases, then one time loop phase filling almost the whole job, with evenly spaced output writes below it" width="820">
 </p>
 
-<p align="center"><em>A single figure is sufficient for the diagnosis: the job
-spent its entire allocation in the coupling setup and wrote no further
-output.</em></p>
+<p align="center"><em>A healthy run in one figure: a coupled ICON-ESM run at R02B08
+that needs eight minutes to set up, then spends 98 % of its 8.5 hours in the
+time loop and writes output at an even pace until the end.</em></p>
 
 `runhealth` is **model-agnostic**. The core interprets batch logs in general:
 timestamps, SLURM records, silence and error signatures. Everything specific to
@@ -75,7 +75,8 @@ The full documentation is published at **<https://c2sm.github.io/runhealth/>**:
 - [Running as a SLURM job](https://c2sm.github.io/runhealth/slurm.html): check
   every model job automatically once it has ended
 - [Running in a Sirocco workflow](https://c2sm.github.io/runhealth/sirocco.html):
-  check every ICON task of a workflow and stop it after a failed run
+  check every ICON task of a workflow, stop it after a failed run, and read
+  the report by workflow and restart chunk
 - [Reading the report](https://c2sm.github.io/runhealth/report.html): what each
   check means, how to read the figures
 - [Profiles](https://c2sm.github.io/runhealth/profiles.html) and the
