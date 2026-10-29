@@ -79,6 +79,37 @@ data:
   [Install](install.md); a `uenv` and `view` on the task may provide `runhealth`
   instead.
 
+## How the report shows a workflow
+
+A log in a Sirocco task directory, such as
+`run/icon__date_2020-01-01T00-00-00/run_script.<job id>.o`, is read as one chunk
+of the workflow whose root holds `sirocco.yaml`, `sirocco.resolved.yaml` or
+`sirocco.log`. The report then
+
+- names the run after its task and cycle, for example
+  `icon · 2020-01-01 → 01-02 · chunk 1/2 · cold start`, with the period and the
+  start and stop dates taken from `sirocco.resolved.yaml`;
+- groups the runs of each workflow root in the run table and in the run
+  switcher, in cycle order, with a dot per chunk, including chunks that have
+  no run in the report yet;
+- lists every workflow at the top of the index, with its task settings, what
+  `state.yaml` and `sirocco.log` record for each chunk, and the events of
+  `sirocco.log`; the paths given on the command line are folded away below;
+- links each run page to the chunks before and after it, and notes when the
+  workflow ran the chunk again as another job, or when the chunk it restarts
+  from did not complete;
+- adds the workflow, the chunk and the job the workflow last ran it as to
+  `summary.json`, under `sirocco`;
+- takes Sirocco's record of a job (completed, failed or canceled) as the
+  run's outcome when the log ends without one and SLURM accounting no longer
+  knows the job.
+
+Workflows with the same name in different directories stay apart, each labeled
+with its path. A copy of a workflow that kept only `sirocco.log` and
+`state.yaml` beside its task directories is shown with the chunks those two
+files know of; its configuration is not looked up elsewhere, since the original
+may have changed since the copy was made.
+
 ## What the exit code does
 
 With [`--fail-on fail`](cli.md#exit-codes), a run graded as failed makes

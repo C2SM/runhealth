@@ -35,6 +35,7 @@ from . import (
     report,
     search,
     simoutput,
+    sirocco,
     summary,
 )
 from .extract import RunLog, job_id_of_name, parse
@@ -520,6 +521,7 @@ def build(
                 log(f"runhealth: SLURM accounting{where} knows {known} of the job(s)")
 
     views: list[RunView] = []
+    workflows: dict = {}
     step = progress.Progress("analyzing", len(logs), "analyzed {n} run(s) in {t}")
     for rl in step.wrap(logs, lambda rl: rl.name):
         if args.stall_seconds:
@@ -530,8 +532,10 @@ def build(
         accounting.fill_times(rl, record)
         # squeue only speaks for this machine.
         state = "" if host else states.get(job_id, "")
-        a = assess(rl, slurm_state=state, accounting=record)
-        v = RunView(log=rl, assessment=a, source=source_of(Path(rl.path), remotes))
+        chunk = sirocco.chunk_of(rl.path, workflows)
+        done = chunk.job_state(job_id) if chunk and job_id else ""
+        a = assess(rl, slurm_state=state, accounting=record, workflow_state=done)
+        v = RunView(log=rl, assessment=a, source=source_of(Path(rl.path), remotes), chunk=chunk)
         v.page = f"{slug(Path(rl.path).stem)}.html"
         if not args.no_plots:
             # Markdown needs a figure it can point at; HTML inlines the same
@@ -582,6 +586,11 @@ def write_report(args, views: list[RunView], outdir: Path, sources: list[str]) -
     return index
 
 
+def _name(v: RunView) -> str:
+    c = v.chunk
+    return f"{v.log.name} ({c.workflow.name}, {c.label})" if c else v.log.name
+
+
 def summarise(views: list[RunView]) -> None:
     for v in sorted(views, key=lambda v: v.log.first_wall or 0, reverse=True):
         a = v.assessment
@@ -589,7 +598,7 @@ def summarise(views: list[RunView]) -> None:
         log(
             f"  {a.grade.upper():<5} {a.status:<10} "
             f"{format_duration(a.stats.get('wall_seconds')):>12}  "
-            f"{v.log.name}" + (f"  - {worst.headline[:70]}" if worst and a.grade != "ok" else "")
+            f"{_name(v)}" + (f"  - {worst.headline[:70]}" if worst and a.grade != "ok" else "")
         )
 
 

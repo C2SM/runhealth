@@ -52,6 +52,25 @@ def run(view: RunView, page: bool = True) -> dict:
             for c in a.checks
         ],
         "output": _output(log),
+        "sirocco": _sirocco(view),
+    }
+
+
+def _sirocco(view: RunView) -> dict | None:
+    """The Sirocco workflow and chunk the run belongs to, if any."""
+    c = view.chunk
+    if c is None:
+        return None
+    return {
+        "workflow": c.workflow.name,
+        "root": str(c.workflow.root),
+        "workflow_status": c.workflow.status(),
+        "task": c.task,
+        "date": c.date or None,
+        "chunk": c.index + 1 if c.index is not None else None,
+        "chunks": c.count,
+        "restart": c.restart,
+        "workflow_job_id": c.workflow_job() or None,
     }
 
 
