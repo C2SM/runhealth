@@ -367,11 +367,13 @@ def assess(
     now: float | None = None,
     slurm_state: str = "",
     accounting: dict | None = None,
+    workflow_state: str = "",
 ) -> Assessment:
     """Run every applicable check and return the verdict.
 
     ``accounting`` is the job's record from :func:`runhealth.accounting.query`,
-    if SLURM still has one.
+    if SLURM still has one. ``workflow_state`` is what a workflow manager such
+    as Sirocco recorded for the job (``COMPLETED``, ``FAILED`` or ``CANCELED``).
     """
     now = time.time() if now is None else now
     acct = accounting or {}
@@ -382,11 +384,11 @@ def assess(
     a.timers = timer_groups(log)
     stall_seconds = float(log.threshold("stall_seconds", 300))
 
-    a.status = _status(log, now, stall_seconds, slurm_state, acct)
+    a.status = _status(log, now, stall_seconds, slurm_state, acct, workflow_state)
     a.stats = _stats(log, a, acct)
 
     # Three blocks: whether the run finished, what went wrong, how well it ran.
-    a.checks.append(_check_outcome(log, a, slurm_state, acct))
+    a.checks.append(_check_outcome(log, a, slurm_state, acct, workflow_state))
     a.checks.append(_check_accounting(log, acct))
     a.checks.append(_check_watchdog(log))
     a.checks.append(_check_stall(log, a, stall_seconds))
@@ -426,7 +428,9 @@ def assess(
     return a
 
 
-def _status(log: RunLog, now: float, stall_seconds: float, slurm_state: str, acct: dict) -> str:
+def _status(
+    log: RunLog, now: float, stall_seconds: float, slurm_state: str, acct: dict, workflow: str = ""
+) -> str:
     """SUCCESS, FAILED, QUEUED, RUNNING, STALLED or INCOMPLETE.
 
     STALLED means the scheduler still believes the job is running while its log
@@ -434,7 +438,7 @@ def _status(log: RunLog, now: float, stall_seconds: float, slurm_state: str, acc
     A log that simply stops without a verdict and is no longer in the queue is
     INCOMPLETE: the job has ended, and the silence check explains what
     happened. SLURM accounting, when available, settles the verdict of a log
-    that ends without one.
+    that ends without one, and without it the workflow manager's record does.
     """
     acct_state = base_state(acct.get("state", ""))
     live = slurm_state or (acct_state if acct_state in ACTIVE_STATES else "")
@@ -448,6 +452,8 @@ def _status(log: RunLog, now: float, stall_seconds: float, slurm_state: str, acc
         return "FAILED"
     if acct_state == "COMPLETED":
         return "SUCCESS" if acct.get("exit_code") == "0:0" else "FAILED"
+    if not acct_state and not live and workflow:
+        return "SUCCESS" if workflow == "COMPLETED" else "FAILED"
     age = now - (log.last_wall or log.mtime or now)
     limit = max(stall_seconds, _setup_allowance(log) or 0.0)
     if live == "RUNNING":
@@ -503,7 +509,9 @@ def _stats(log: RunLog, a: Assessment, acct: dict) -> dict[str, Any]:
     return stats
 
 
-def _check_outcome(log: RunLog, a: Assessment, slurm_state: str, acct: dict) -> Check:
+def _check_outcome(
+    log: RunLog, a: Assessment, slurm_state: str, acct: dict, workflow: str = ""
+) -> Check:
     ev = []
     if log.outcome:
         ev.append(log.outcome.text)
@@ -514,15 +522,28 @@ def _check_outcome(log: RunLog, a: Assessment, slurm_state: str, acct: dict) -> 
         ev.append(f"SLURM reports the job as {slurm_state}")
     if acct.get("state"):
         ev.append(f"SLURM accounting: {acct['state']}, exit code {acct.get('exit_code', '?')}")
+    if workflow:
+        ev.append(f"Sirocco recorded the task as {workflow}")
     verdict = log.outcome and log.outcome.level in {"ok", "fail"}
+    by_workflow = not verdict and not acct.get("state") and workflow
     if a.status == "SUCCESS":
-        headline = "The run reported success" if verdict else "SLURM recorded the job as completed"
+        headline = (
+            "The run reported success"
+            if verdict
+            else (
+                "Sirocco recorded the task as completed"
+                if by_workflow
+                else "SLURM recorded the job as completed"
+            )
+        )
         return Check("outcome", "Outcome", "ok", headline, "", ev)
     if a.status == "FAILED":
         if verdict:
             headline = log.outcome.text
         elif acct.get("state"):
             headline = f"SLURM recorded the job as {acct['state']}"
+        elif by_workflow:
+            headline = f"Sirocco recorded the task as {workflow}"
         else:
             headline = "The run failed"
         return Check(

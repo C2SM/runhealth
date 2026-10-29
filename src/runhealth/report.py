@@ -15,12 +15,14 @@ charts that share a wall-clock axis.
 from __future__ import annotations
 
 import html
+import os
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
 from . import __version__, style
+from .sirocco import EVENT_LEVEL, TASK_KEYS, Chunk, Workflow
 from .diff import Diff, compare, run_kind
 from .extract import RunLog
 from .health import DAYS_PER_YEAR, STATUS_LEVEL, Assessment, Check, counter_rows
@@ -46,6 +48,7 @@ class RunView:
     page: str = ""
     log_href: str = ""
     source: str = ""
+    chunk: Chunk | None = None
 
 
 def esc(text: object) -> str:
@@ -682,6 +685,31 @@ tr.grp-hd th > * { vertical-align: middle; }
 .grp-tg .cnt { color: var(--muted); font-size: 12.5px; font-weight: 500; }
 tr.grp-hd .dots { display: inline-flex; gap: 4px; flex-wrap: wrap; }
 tbody.shut tr:not(.grp-hd) { display: none; }
+tr.grp-hd .muted { margin-right: 10px; font-size: 13px; font-weight: 400; }
+tr.grp-hd .badge { margin-right: 10px; }
+
+/* -- Sirocco workflows: the panels on the index and the chunk chain of a run -- */
+.muted { color: var(--muted); }
+.dot.hollow { background: none; border: 1.5px solid var(--d-status); }
+.chunk-dot { display: inline-flex; padding: 2px; border-radius: 50%; }
+.chunk-dot[aria-current] { outline: 2px solid var(--ink); }
+details.wf > summary, details.paths > summary { font-size: 15px; align-items: center; }
+details.paths { margin-top: 10px; }
+details.paths > summary { font-weight: 500; color: var(--muted); }
+.wf-hd { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.wf-hd .muted, .wf-hd .cnt { font-size: 13px; font-weight: 400; color: var(--muted); }
+.wf-hd .dots, .chain .dots { display: inline-flex; gap: 3px; flex-wrap: wrap; align-items: center; }
+details.wf table { margin-top: 12px; font-size: 13.5px; }
+details.wf .badge, table.events .badge { font-size: 12px; }
+table.events tr.cur td { background: var(--panel-2); font-weight: 600; }
+.nav .jump .wf-t { display: flex; flex-direction: column; padding: 8px 9px 2px;
+  font-size: 12.5px; font-weight: 650; }
+.nav .jump .wf-t .meta { font-weight: 400; }
+.chain { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0 8px;
+  font-size: 14px; }
+.chain .nm { font-weight: 650; }
+.chain .step { font-size: 13.5px; }
+.chain-note { margin: 4px 0; color: var(--warn); font-size: 14px; }
 
 details { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   padding: 0 16px; margin-bottom: 9px; box-shadow: var(--shadow); }
@@ -1881,11 +1909,261 @@ def _page(title: str, nav: str, toc: str, body: str) -> str:
     )
 
 
-def _run_label(log: RunLog) -> tuple[str, str]:
+def run_name(v: RunView) -> str:
+    """What a run is: its chunk of a Sirocco workflow, or else its job name."""
+    return v.chunk.label if v.chunk else run_kind(v.log)
+
+
+def group_key(v: RunView) -> str:
+    """Runs of one Sirocco workflow belong together, others by their name."""
+    return str(v.chunk.workflow.root) if v.chunk else run_kind(v.log)
+
+
+def _group_order(v: RunView) -> tuple:
+    # Chunks follow the cycles; other runs stay newest first.
+    return v.chunk.key + (v.log.first_wall or 0,) if v.chunk else (-(v.log.first_wall or 0),)
+
+
+def _run_label(v: RunView) -> tuple[str, str]:
     """The run's name and the job and start date that tell two runs apart."""
-    started = format_stamp(log.first_wall)[:10]
-    job_id = log.fields.get("job_id")
-    return run_kind(log), " \u00b7 ".join(x for x in (job_id, started) if x)
+    started = format_stamp(v.log.first_wall)[:10]
+    job_id = v.log.fields.get("job_id")
+    return run_name(v), " \u00b7 ".join(x for x in (job_id, started) if x)
+
+
+# -- Sirocco workflows ----------------------------------------------------
+
+WF_LEVEL = {"completed": "ok", "failed": "fail", "running": "info", "unknown": "info"}
+
+
+def _workflows(views: list[RunView]) -> dict[Path, Workflow]:
+    return {v.chunk.workflow.root: v.chunk.workflow for v in views if v.chunk}
+
+
+def _wf_where(views: list[RunView]) -> dict[Path, str]:
+    """Each workflow root relative to the directory all roots share."""
+    roots = list(_workflows(views))
+    if not roots:
+        return {}
+    common = Path(os.path.commonpath(roots)) if len(roots) > 1 else roots[0].parent
+    return {r: str(r.relative_to(common)) for r in roots}
+
+
+def _chunk_runs(views: list[RunView], wf: Workflow) -> dict[str, list[RunView]]:
+    """The runs of a workflow by task directory, earliest first."""
+    out: dict[str, list[RunView]] = {}
+    for v in sorted(views, key=lambda v: v.log.first_wall or 0):
+        if v.chunk and v.chunk.workflow is wf:
+            out.setdefault(v.chunk.dirname, []).append(v)
+    return out
+
+
+def _wf_chunks(views: list[RunView], wf: Workflow) -> list[tuple[Chunk, list[RunView]]]:
+    """Every chunk of the workflow, also those with no run in the report, in cycle order."""
+    runs = _chunk_runs(views, wf)
+    found = {d: rs[-1].chunk for d, rs in runs.items()}
+    tasks = sorted({c.task for c in found.values()})
+    for task in tasks:
+        dates = wf.dates(task)
+        for i, date in enumerate(dates):
+            dirname = f"{task}__date_{date.replace(':', '-')}"
+            if dirname not in found:
+                found[dirname] = Chunk(
+                    wf,
+                    task,
+                    dirname,
+                    date,
+                    i,
+                    len(dates) if wf.config else None,
+                    dates[i + 1] if i + 1 < len(dates) else "",
+                    restart=i > 0,
+                )
+    return [(c, runs.get(d, [])) for d, c in sorted(found.items(), key=lambda kv: kv[1].key)]
+
+
+def _chunk_state(c: Chunk) -> tuple[str, str]:
+    """The level and text of what the workflow manager last said about a chunk."""
+    last = c.workflow.last_events().get(c.dirname)
+    if last:
+        return EVENT_LEVEL.get(last.what, "info"), last.what.lower()
+    state = c.workflow.state.get(c.dirname)
+    if state:
+        return ("ok" if state[1] == "completed" else "info"), state[1]
+    return "info", "not started"
+
+
+def _chunk_dot(c: Chunk, runs: list[RunView], current: str = "") -> str:
+    """A chunk as a dot: the last run's grade, or a hollow ring when none is in the report."""
+    level, said = _chunk_state(c)
+    tip = f"{c.label}: workflow says {said}"
+    if not runs:
+        return f'<span class="dot hollow s-{level}" title="{esc(tip)}"></span>'
+    v = runs[-1]
+    tip += f"; {v.assessment.status.title()}, {GRADE_TEXT[v.assessment.grade]}"
+    cur = ' aria-current="page"' if v.page == current else ""
+    return f'<a class="chunk-dot" href="{esc(v.page)}"{cur}>{_run_dot(v, tip)}</a>'
+
+
+def _chunk_strip(views: list[RunView], wf: Workflow, current: str = "") -> str:
+    return (
+        '<span class="dots">'
+        + "".join(_chunk_dot(c, runs, current) for c, runs in _wf_chunks(views, wf))
+        + "</span>"
+    )
+
+
+def _wf_status(wf: Workflow) -> str:
+    status = wf.status()
+    return _badge(WF_LEVEL[status], f"workflow {status}")
+
+
+def _events_table(events, mark_job: str = "") -> str:
+    if not events:
+        return ""
+    rows = "".join(
+        f'<tr{" class=cur" if e.job == mark_job else ""}><td class="n stamp">{esc(e.when)}</td>'
+        f"<td>{esc(e.dirname)}</td><td class=n>{esc(e.job)}</td>"
+        f'<td>{_badge(EVENT_LEVEL.get(e.what, "info"), e.what.title())}'
+        f' <span class="muted">{esc(e.detail)}</span></td></tr>'
+        for e in events
+    )
+    return (
+        '<div class="scroll"><table class="events"><thead><tr><th>sirocco.log</th><th>task</th>'
+        f"<th>job</th><th>event</th></tr></thead><tbody>{rows}</tbody></table></div>"
+    )
+
+
+def _task_pairs(wf: Workflow, task: str) -> list[tuple[str, str]]:
+    cfg = wf.task_config(task)
+    name, cycle = wf.cycle_of(task)
+    cycling = cycle.get("cycling") or {}
+    pairs = []
+    if name:
+        span = " \u2192 ".join(str(cycling.get(k) or "?") for k in ("start_date", "stop_date"))
+        pairs.append(("Cycle", f"{name}, every {cycling.get('period') or '?'}, {span}"))
+    pairs += [(k.replace("_", " ").capitalize(), str(cfg[k])) for k in TASK_KEYS if k in cfg]
+    return pairs
+
+
+def _wf_panel(views: list[RunView], wf: Workflow, where: str) -> str:
+    """One workflow on the index: its state, its chunks and what Sirocco logged."""
+    chunks = _wf_chunks(views, wf)
+    have = sum(1 for _, runs in chunks if runs)
+    rows = []
+    for c, runs in chunks:
+        level, said = _chunk_state(c)
+        job = c.workflow_job()
+        links = " ".join(
+            f'<a href="{esc(v.page)}">{_run_dot(v)}{esc(v.log.fields.get("job_id") or v.page)}</a>'
+            for v in runs
+        )
+        rows.append(
+            f"<tr><td>{esc(c.label)}</td><td>{_badge(level, said)}</td>"
+            f'<td class="n">{esc(job) or "&ndash;"}</td><td>{links or "&ndash;"}</td></tr>'
+        )
+    pairs = [("Root", str(wf.root))]
+    if not wf.config:
+        pairs.append(
+            (
+                "Configuration",
+                "not found beside the runs; chunks known from state.yaml and sirocco.log",
+            )
+        )
+    for task in sorted({c.task for c, _ in chunks}):
+        pairs += _task_pairs(wf, task)
+    body = (
+        _kv(pairs, copy=("Root",))
+        + '<div class="scroll"><table class="chunks"><thead><tr><th>chunk</th>'
+        "<th>workflow says</th><th>workflow job</th><th>runs in this report</th></tr></thead>"
+        f'<tbody>{"".join(rows)}</tbody></table></div>' + _events_table(wf.events)
+    )
+    return (
+        f'<details class="wf"><summary><span class="wf-hd">{_wf_status(wf)}'
+        f'<span class="nm">{esc(wf.name)}</span><span class="muted">{esc(where)}</span>'
+        f"{_chunk_strip(views, wf)}"
+        f'<span class="cnt">{have} of {len(chunks)} chunk(s) in the report</span></span>'
+        f'</summary><div class="body">{body}</div></details>'
+    )
+
+
+def _sources_block(views: list[RunView], sources: list[str]) -> str:
+    """Where the runs come from: Sirocco workflows first, the paths given folded away."""
+    wfs = _workflows(views)
+    where = _wf_where(views)
+    other = sum(1 for v in views if not v.chunk)
+    head = f"{len(views)} run(s)"
+    if wfs:
+        head += f" of {len(wfs)} Sirocco workflow(s)" + (f" and {other} other(s)" if other else "")
+    paths = "".join(path_chip(s) for s in sources)
+    if len(sources) > 3 or wfs:
+        paths = (
+            f'<details class="paths"><summary><span>{len(sources)} path(s) read</span></summary>'
+            f'<div class="body source">{paths}</div></details>'
+        )
+    else:
+        paths = f'<div class="source">{paths}</div>'
+    return f'<div class="sub">{head}, read from:</div>{paths}' + "".join(
+        _wf_panel(views, wf, where[root])
+        for root, wf in sorted(wfs.items(), key=lambda kv: (kv[1].name, where[kv[0]]))
+    )
+
+
+def _chain(view: RunView, siblings: list[RunView]) -> str:
+    """The workflow of a chunk, with links to the chunks before and after it."""
+    c = view.chunk
+    if c is None:
+        return ""
+    chunks = _wf_chunks(siblings or [view], c.workflow)
+    i = next((n for n, (k, _) in enumerate(chunks) if k.dirname == c.dirname), None)
+
+    def step(n: int, text: str) -> str:
+        if not 0 <= n < len(chunks):
+            return ""
+        k, runs = chunks[n]
+        label = f"{text} chunk {k.index + 1 if k.index is not None else '?'}"
+        if not runs:
+            return f'<span class="step muted" title="{esc(k.label)}">{esc(label)} (not in the report)</span>'
+        return (
+            f'<a class="step" href="{esc(runs[-1].page)}" title="{esc(k.label)}">{esc(label)}</a>'
+        )
+
+    notes = []
+    job, wf_job = str(view.log.fields.get("job_id") or ""), c.workflow_job()
+    if job and wf_job and job != wf_job:
+        notes.append(
+            f"The workflow ran this chunk again later as job {wf_job}; this run was superseded."
+        )
+    if c.restart and i:
+        level, said = _chunk_state(chunks[i - 1][0])
+        if level != "ok":
+            notes.append(
+                f"It restarts from the chunk before, which the workflow reports as {said}."
+            )
+    where = _wf_where(siblings or [view]).get(c.workflow.root, "")
+    prev, nxt = (step(i - 1, "\u2190"), step(i + 1, "\u2192")) if i is not None else ("", "")
+    return (
+        f'<div class="chain">{_wf_status(c.workflow)}'
+        f'<span class="nm">{esc(c.workflow.name)}</span><span class="muted">{esc(where)}</span>'
+        f"{prev}{_chunk_strip(siblings or [view], c.workflow, view.page)}{nxt}</div>"
+        + "".join(f'<p class="chain-note">{esc(n)}</p>' for n in notes)
+    )
+
+
+def _sirocco_detail(view: RunView) -> str:
+    c = view.chunk
+    if c is None:
+        return ""
+    pairs = [
+        ("Workflow", c.workflow.name),
+        ("Workflow root", str(c.workflow.root)),
+        ("Task directory", c.dirname),
+        ("Chunk", c.label),
+    ]
+    pairs += _task_pairs(c.workflow, c.task)
+    body = _kv(pairs, copy=("Workflow root",)) + _events_table(
+        c.events(), str(view.log.fields.get("job_id") or "")
+    )
+    return _details("Sirocco workflow", body, c.workflow.status())
 
 
 def _run_menu(views: list[RunView], current: str, index_href: str) -> str:
@@ -1893,14 +2171,21 @@ def _run_menu(views: list[RunView], current: str, index_href: str) -> str:
     if len(views) < 2:
         return ""
     items = []
-    # Runs of one kind stay together, the newest first within each kind.
-    views = sorted(views, key=lambda v: v.log.first_wall or 0, reverse=True)
+    # Runs of one kind or workflow stay together, chunks in cycle order and
+    # other runs newest first.
+    where = _wf_where(views)
     kind = None
-    for v in sorted(views, key=lambda v: run_kind(v.log)):
-        name, meta = _run_label(v.log)
-        if kind is not None and name != kind:
+    for v in sorted(views, key=lambda v: (group_key(v), _group_order(v))):
+        name, meta = _run_label(v)
+        if kind is not None and group_key(v) != kind:
             items.append('<hr class="grp">')
-        kind = name
+        if v.chunk and group_key(v) != kind:
+            wf = v.chunk.workflow
+            items.append(
+                f'<div class="wf-t"><span class="nm">{esc(wf.name)}</span>'
+                f'<span class="meta">{esc(where.get(wf.root, ""))}</span></div>'
+            )
+        kind = group_key(v)
         here = ' aria-current="page"' if v.page == current else ""
         meta_html = f'<span class="meta">{esc(meta)}</span>' if meta else ""
         items.append(
@@ -2299,8 +2584,8 @@ def _script_modal(view: RunView) -> str:
 def previous_runs(views: list[RunView]) -> dict[str, RunView]:
     """For every run, the run of the same kind that came before it.
 
-    Same kind means the same run script name; the order is the start of the
-    run. A log that carries no copy of its script is passed over rather than
+    Same kind means the same run script name, or the same Sirocco workflow,
+    where it is the chunk before; the order is the start of the run. A log that carries no copy of its script is passed over rather than
     hiding the run before it, so the comparison always has two scripts.
     """
     latest: dict[str, RunView] = {}
@@ -2308,7 +2593,7 @@ def previous_runs(views: list[RunView]) -> dict[str, RunView]:
     for v in sorted(views, key=lambda v: (v.log.first_wall or 0.0, v.log.name)):
         if not v.log.runscript:
             continue
-        kind = run_kind(v.log)
+        kind = group_key(v)
         if kind in latest:
             before[v.page] = latest[kind]
         latest[kind] = v
@@ -2386,8 +2671,9 @@ def render_run(
     view: RunView, index_href: str = "index.html", siblings: list[RunView] | None = None
 ) -> str:
     log, a = view.log, view.assessment
-    name = run_kind(log)
-    title = f"{name} - run health"
+    name = run_name(view)
+    title = f"{view.chunk.workflow.name} {name}" if view.chunk else name
+    title += " - run health"
     base = previous_runs(siblings or []).get(view.page)
     diff, template = _diff_template(view, base) if base else (None, "")
     toc = Toc()
@@ -2398,6 +2684,7 @@ def render_run(
         f'<div class="head" id="{toc.add("summary", "Summary")}">'
         f'<div class="crumb"><a href="{esc(index_href)}">All runs</a></div>'
         f"<h1>{esc(name)}</h1>"
+        f"{_chain(view, siblings or [])}"
         f'<div class="sub">job {esc(log.fields.get("job_id") or "?")} &middot; '
         f'{esc(format_stamp(log.first_wall) or "unknown start")} &rarr; '
         f'{esc(format_stamp(log.last_wall) or "unknown end")}</div>'
@@ -2415,7 +2702,13 @@ def render_run(
         for f in view.figures:
             toc.add(f"fig-{f.key}", f.title, level=2)
             body.append(_figure(f, view.log_href))
-    detail = _timer_tables(a) + _counter_table(log) + _node_table(log) + _provenance(log)
+    detail = (
+        _sirocco_detail(view)
+        + _timer_tables(a)
+        + _counter_table(log)
+        + _node_table(log)
+        + _provenance(log)
+    )
     if view.log_href:
         detail += _details(
             "Raw log",
@@ -2431,7 +2724,7 @@ def render_run(
     body.append(_script_modal(view))
     if template:
         body.append(template + _diff_modal())
-    _, meta = _run_label(log)
+    _, meta = _run_label(view)
     here = f"{name} ({meta})" if meta else name
     menu = _run_menu(siblings or [], view.page, index_href)
     badges = _badge(STATUS_LEVEL.get(a.status, "info"), a.status.title()) + _badge(a.grade)
@@ -2461,33 +2754,54 @@ def _run_dot(v: RunView, title: str = "") -> str:
 
 
 def _index_groups(views: list[RunView], rows: list[str]) -> str:
-    """The index rows, one collapsible body per run name as in the switcher.
+    """The index rows, one collapsible body per run name or Sirocco workflow.
 
     A report of a single kind gains nothing from a heading, so it stays flat.
     """
     groups: dict[str, list[tuple[RunView, str]]] = {}
     for v, row in zip(views, rows):
-        groups.setdefault(run_kind(v.log), []).append((v, row))
+        groups.setdefault(group_key(v), []).append((v, row))
     if len(groups) < 2:
         return f"<tbody>{''.join(rows)}</tbody>"
-    out = []
-    for kind in sorted(groups):
-        members = groups[kind]
-        dots = "".join(
-            _run_dot(
-                v,
-                f"{v.assessment.status.title()}, {GRADE_TEXT[v.assessment.grade]}: "
-                + (_run_label(v.log)[1] or v.page),
-            )
-            for v, _ in members
+    where = _wf_where(views)
+
+    def title(members):
+        c = members[0][0].chunk
+        return (
+            (c.workflow.name, where.get(c.workflow.root, ""))
+            if c
+            else (run_kind(members[0][0].log), "")
         )
+
+    out = []
+    for kind in sorted(groups, key=lambda k: title(groups[k])):
+        members = sorted(groups[kind], key=lambda m: _group_order(m[0]))
+        name, path = title(members)
+        wf = members[0][0].chunk.workflow if members[0][0].chunk else None
+        if wf:
+            dots = _chunk_strip(views, wf)
+            extra = f'<span class="muted">{esc(path)}</span>{_wf_status(wf)}'
+        else:
+            dots = (
+                '<span class="dots">'
+                + "".join(
+                    _run_dot(
+                        v,
+                        f"{v.assessment.status.title()}, {GRADE_TEXT[v.assessment.grade]}: "
+                        + (_run_label(v)[1] or v.page),
+                    )
+                    for v, _ in members
+                )
+                + "</span>"
+            )
+            extra = ""
         count = f"{len(members)} run{'s' if len(members) > 1 else ''}"
         out.append(
             f'<tbody class="grp" data-kind="{esc(kind)}"><tr class="grp-hd">'
             f'<th colspan="11" scope="rowgroup"><button type="button" class="grp-tg" '
             f'aria-expanded="true"><span class="chev" aria-hidden="true"></span>'
-            f'<span class="nm">{esc(kind)}</span><span class="cnt">{count}</span></button>'
-            f'<span class="dots">{dots}</span></th></tr>'
+            f'<span class="nm">{esc(name)}</span><span class="cnt">{count}</span></button>'
+            f"{extra}{dots}</th></tr>"
             f"{''.join(row for _, row in members)}</tbody>"
         )
     return "".join(out)
@@ -2538,8 +2852,8 @@ def render_index(
             f'<td data-v="{esc(a.status)}">'
             f'{_badge(STATUS_LEVEL.get(a.status, "info"), a.status.title())}</td>'
             f'<td data-v="{esc(a.grade)}">{_badge(a.grade)}</td>'
-            f'<td data-v="{esc(Path(log.path).name)}"><a href="{esc(v.page)}">'
-            f"{esc(Path(log.path).name or log.name)}</a>"
+            f'<td data-v="{esc(run_name(v))}"><a href="{esc(v.page)}">'
+            f"{esc(v.chunk.label if v.chunk else Path(log.path).name or log.name)}</a>"
             + _build_marker(v, base)
             + (
                 f'<br><span style="color:var(--muted);font-size:13px">{esc(outcome[:70])}</span>'
@@ -2569,8 +2883,7 @@ def render_index(
         f'<div class="head" id="{toc.add("summary", "Summary")}">'
         '<div class="crumb">runhealth</div>'
         f"<h1>{esc(title)}</h1>"
-        f'<div class="sub">{len(views)} run(s) read from:</div>'
-        f'<div class="source">{"".join(path_chip(s) for s in sources)}</div></div>',
+        f"{_sources_block(views, sources)}</div>",
         f'<div class="tiles">{"".join(tiles)}</div>',
     ]
     if overview:
@@ -2581,7 +2894,7 @@ def render_index(
         filters,
         '<div class="scroll"><table class="runs"><thead><tr>'
         '<th class="sortable">status</th><th class="sortable">health</th>'
-        '<th class="sortable">log</th>'
+        '<th class="sortable">run</th>'
         '<th class="sortable">job</th><th class="sortable">started</th>'
         '<th class="sortable">wall</th><th class="sortable">nodes</th>'
         '<th class="sortable">time steps</th><th class="sortable">rate</th>'
@@ -2608,7 +2921,7 @@ def render_markdown(views: list[RunView], sources: list[str], title: str) -> str
         s = v.assessment.stats
         out.append(
             f"| **{v.assessment.status.upper()}** | **{v.assessment.grade.upper()}** "
-            f"| {v.log.fields.get('job_name') or v.log.name} "
+            f"| {(v.chunk.workflow.name + ' ' if v.chunk else '') + run_name(v)} "
             f"| {v.log.fields.get('job_id') or '-'} | {format_stamp(v.log.first_wall) or '-'} "
             f"| {format_duration(s.get('wall_seconds')) or '-'} "
             f"| {s.get('progress_last') or '-'} "
@@ -2619,7 +2932,7 @@ def render_markdown(views: list[RunView], sources: list[str], title: str) -> str
         log, a = v.log, v.assessment
         out += [
             "",
-            f"## {log.fields.get('job_name') or log.name} "
+            f"## {(v.chunk.workflow.name + ' ' if v.chunk else '') + run_name(v)} "
             f"({log.fields.get('job_id') or '?'}) - {a.status}, grade {a.grade.upper()}",
             "",
         ]

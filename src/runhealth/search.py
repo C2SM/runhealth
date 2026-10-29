@@ -18,7 +18,7 @@ import json
 from pathlib import Path
 
 from .logfile import format_stamp
-from .report import RunView, field_anchor, provenance_pairs
+from .report import RunView, field_anchor, provenance_pairs, run_name
 
 INDEX_FILE = "search.js"
 
@@ -37,7 +37,9 @@ def entry(view: RunView) -> dict:
     job, model = provenance_pairs(log)
     return {
         "page": view.page,
-        "name": log.fields.get("job_name") or log.name,
+        "name": (f"{view.chunk.workflow.name} {run_name(view)}" if view.chunk else None)
+        or log.fields.get("job_name")
+        or log.name,
         "file": Path(log.path).name,
         "job": log.fields.get("job_id") or "",
         "started": format_stamp(log.first_wall),

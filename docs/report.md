@@ -9,10 +9,15 @@ holds runs of more than one name, the table groups them by name as the run
 switcher does, the newest run first within each group. A group's heading shows
 how many runs it holds and one dot per run with its status and grade, and a
 click on the name folds the group away. Sorting and filtering apply within each
-group, and a group with no run left after filtering is hidden. Above the table,
-every directory the report was built from is listed as `machine:/path`,
-with the machine set apart from the path and a button that copies the complete
-string.
+group, and a group with no run left after filtering is hidden. The runs of a
+[Sirocco workflow](sirocco.md#how-the-report-shows-a-workflow) form one group
+per workflow directory instead, in cycle order, named after the chunk they
+are, such as `icon · 2020-01-01 → 01-02 · chunk 1/2 · cold start`. Above the
+table, every Sirocco workflow has a folded panel with its state and its
+chunks, and the directories the report was built from are listed as
+`machine:/path`, with the machine set apart from the path and a button that
+copies the complete string. When there are more than three of them, or the
+workflows already say where the runs come from, the list is folded away.
 
 The grades are `healthy`, `worth a look`, `warning` and `problem`. The grade of
 a run is the worst grade among its checks.
@@ -37,6 +42,13 @@ entries that differ, and clicking it opens the run's Executable panel (see
 below).
 
 ## The run page header
+
+For a chunk of a Sirocco workflow, a line under the run's name names the
+workflow and its state, with links to the chunks before and after it and a dot
+per chunk. It warns when the workflow ran the chunk again as another job, and
+when the chunk it restarts from did not complete. The **Sirocco workflow**
+section under Detail lists the task's settings and what `sirocco.log` recorded
+for the chunk.
 
 Below the run's name and its job id, a row names the `machine:/path` the log
 was read from, next to the items that can be opened from it. For a
@@ -137,7 +149,7 @@ check is always found in the same place.
 
 | Check | What it means |
 | --- | --- |
-| **Outcome** | Did the job report success or failure, or did it end without a statement? SLURM's own verdict is included while `squeue` still knows the job, and the accounting record settles a log that ends without one. |
+| **Outcome** | Did the job report success or failure, or did it end without a statement? SLURM's own verdict is included while `squeue` still knows the job, and the accounting record settles a log that ends without one. Without an accounting record, what Sirocco recorded for the job settles it. |
 | **SLURM accounting** | The scheduler's record from `sacct`: final state, exit code, elapsed time, nodes. It fails a job that SLURM ended as `TIMEOUT`, `NODE_FAIL`, `OUT_OF_MEMORY` or `CANCELLED`, and warns when a job printed its success message but still ended with a nonzero exit code, for example because the submission of the next job in a chain failed. |
 | **Hang watchdog** | Whether the job script's own watchdog (see [Improving log quality](logging.md#3-leave-diagnostics-next-to-the-log)) fired, and when it sent SIGABRT and cancelled the step. |
 | **Silence** | The longest stretch with no output. Silence *inside* the main loop, or in a run that never reached its loop, is a failure. Silence during setup is judged against a longer threshold, because reading input and compiling kernels legitimately take minutes. When the job script declares a watchdog, the silence it tolerates before the main loop is the limit until the loop starts, which also keeps a job that is still compiling from being reported as STALLED. |

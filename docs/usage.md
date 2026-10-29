@@ -61,7 +61,10 @@ states exactly where on the cluster a log resides.
 
 A log with no final status is reported as **RUNNING** while it is still being
 written, and as **INCOMPLETE** once it has gone quiet. The silence check then
-says where it stopped.
+says where it stopped. SLURM accounting, when it still holds the job, decides
+between **SUCCESS** and **FAILED** instead; without it, so does the end that
+`sirocco.log` or `state.yaml` recorded for a task of a
+[Sirocco workflow](sirocco.md).
 
 When `squeue` is available, `runhealth` asks it for the actual state, so a
 queued job appears as **QUEUED** rather than as a broken run, and a job that
