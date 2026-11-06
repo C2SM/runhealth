@@ -93,20 +93,30 @@ stopped, so following a growing 100 MB log costs no more than the new lines.
 
 A log tells how the job ran; the output tells what the model computed. With
 `--output-dir`, `runhealth` also reads the model output of the run and checks
-the variables its profile names, for ICON temperature, pressure, wind speed and
-vertical wind:
+the variables its profile names. For ICON these are temperature, pressure, wind
+speed and vertical wind of the atmosphere, and potential temperature, salinity
+and current speed of the ocean of a coupled run:
 
 ```bash
 uv sync --extra output    # xarray and netCDF4, needed only for this
 runhealth LOG.exp.12345.o --output-dir /scratch/run/exp -o report/ \
     --grid /store/grids/icon_grid_0026_R03B07_G.nc
 runhealth /scratch/run/logs --output-dir auto --output-glob '*_3d_pl_*.nc' -o report/
+runhealth wf/run/icon__date_* --output-dir auto -o report/ \
+    --grid /store/grids/icon_grid_0054_R02B08_G.nc \
+    --grid /store/grids/icon_grid_0058_R02B08_O.nc
 ```
+
+The output is divided into components that are read and checked separately,
+for ICON the atmosphere (`atm`) and the ocean (`ocean`). Each component has
+file patterns of its own, so their files never mix, and the checks and figures
+name the component, such as *Ocean output values*. The ocean is optional: in a
+run without ocean output it is left out of the report.
 
 For every variable and output step, `runhealth` records the minimum, the
 maximum and the number of values that are not finite over the whole
 three-dimensional field, and the mean on the first, the middle and the last
-level. This yields two checks and one figure per variable:
+level. This yields two checks per component and one figure per variable:
 
 - **Output values** fails a run whose output holds a `NaN` or an infinite value,
   or an extreme beyond a limit of the profile, and names the first output step
@@ -116,7 +126,9 @@ level. This yields two checks and one figure per variable:
   of the simulated period.
 
 The means are weighted by the cell areas of `--grid`, an ICON grid file, when
-its number of cells matches the output; output on a regular latitude-longitude
+its number of cells matches the output. `--grid` may be given several times,
+such as for the atmosphere and the ocean grid of a coupled run, and each field
+takes the grid with as many cells; output on a regular latitude-longitude
 grid is weighted by the cosine of latitude, and anything else is averaged
 without weights. Values equal to a variable's fill value are left out, so a
 `NaN` that is counted is one the model wrote.
@@ -128,20 +140,31 @@ without weights. Values equal to a variable's fill value are left out, so a
   `output_dir_field` setting. A run whose log names no directory, or whose
   directory does not exist on this machine, is reported for information. Logs
   synced from a cluster with `host:/path` therefore need `runhealth` to run on
-  that cluster to diagnose their output.
-- `--output-glob` selects the files to read. The ICON profile reads the
-  atmosphere streams of a coupled run, `*_atm_*.nc`, which leaves out the ocean
-  output and the input files beside it, and the domains of an ICON-NWP or
-  ICON-LAM run, `*_DOM[0-9]*_*.nc`; a profile without a pattern reads `*.nc`.
-  When several output streams hold the same variable at the same times, select
-  one of them, as the second copy would otherwise count as duplicate steps.
+  that cluster to diagnose their output. For the log of a task of a
+  [Sirocco workflow](sirocco.md), which names no directory, `auto` takes the
+  task directory, so each chunk is checked against the output it wrote itself.
+- The files are looked for in the output directory and in its immediate
+  subdirectories, where Sirocco writes each output stream. `--output-glob`
+  selects the files to read: `ocean=PATTERN` for one component, a pattern
+  without a component name for the first one, and it may be repeated. The ICON
+  profile reads, for the atmosphere, the atmosphere streams of a coupled run,
+  `*_atm_*.nc`, which leaves out the ocean output and the input files beside
+  it, and the domains of an ICON-NWP or ICON-LAM run, `*_DOM[0-9]*_*.nc`; for
+  the ocean, the three-dimensional ocean streams, `*_oce*_3d*.nc`, such as
+  `exp_oce_3d_full` or `core_ocean_3d_full_lf`. A profile without a pattern
+  reads `*.nc`. When several output streams hold the same variable at the same
+  times, select one of them, as the second copy would otherwise count as
+  duplicate steps. The time steps of a component are taken from the files that
+  hold one of its variables, so a stream that holds none, such as hourly
+  surface output beside daily pressure levels, does not change them.
 - A directory shared by several runs of the report, such as the jobs of one
   experiment, is read once, and every one of these runs is checked against all
   of its output; combine `--output-dir` with [`--job-id`](cli.md) or a single
   log to look at one job only.
 - Each variable is found under the first of its names that a file holds:
   ICON's own (`temp`, `pres`, `u`, `v`) or the CMIP-style names of an output on
-  pressure levels (`ta`, `pres_sfc`, `ua`, `va`, `wa`).
+  pressure levels (`ta`, `pres_sfc`, `ua`, `va`, `wa`); in the ocean, `to`,
+  `so`, and `u` and `v` for the current speed.
 - Fields are read one level at a time, so memory stays small even for a global
   field at kilometer scale. Every value of the diagnosed variables is read,
   however, which for a global run at kilometer scale amounts to several GB per
@@ -194,7 +217,7 @@ verdict on every run for a workflow manager or a script to read, together with
 
 ```json
 {
- "schema_version": 1,
+ "schema_version": 2,
  "runhealth": "1.0.0",
  "generated": "2026-10-22T13:09:37+00:00",
  "grade": "warn",
@@ -215,10 +238,13 @@ verdict on every run for a workflow manager or a script to read, together with
              "sim_seconds": 2000.0, "progress_last": 100},
    "checks": [{"key": "outcome", "title": "Outcome", "level": "ok",
                "headline": "The run reported success"}],
-   "output": {"temp": {"time": ["2020-01-01T00:00:00", "2020-01-01T06:00:00"],
-                       "min": [188.2, 187.9], "max": [309.6, 310.1], "nonfinite": [0, 0],
-                       "means": {"height 1": [203.4, 203.6], "height 45": [248.1, 248.0],
-                                 "height 90": [289.7, 289.9]}}}
+   "output": {"atm": {"temp": {"time": ["2020-01-01T00:00:00", "2020-01-01T06:00:00"],
+                               "min": [188.2, 187.9], "max": [309.6, 310.1],
+                               "nonfinite": [0, 0],
+                               "means": {"height 1": [203.4, 203.6],
+                                         "height 45": [248.1, 248.0],
+                                         "height 90": [289.7, 289.9]}}},
+              "ocean": {}}
   }
  ]
 }
@@ -231,9 +257,12 @@ verdict on every run for a workflow manager or a script to read, together with
 - Wall-clock times are in UTC; model times are in the model's own calendar and
   carry no time zone. Any value that the log does not provide is `null`, and
   `page` is `null` for `--format md`.
-- `output` holds the [model output diagnostics](#diagnosing-the-model-output),
-  one entry per variable with one value per output step; it is empty without
-  `--output-dir`.
+- `output` holds the [model output diagnostics](#diagnosing-the-model-output)
+  per output component, one entry per variable with one value per output step;
+  it is empty without `--output-dir`. A profile whose output has no components
+  yields the single component `output`. The checks of a component are named
+  after it, such as `output_values_ocean`, except for that single component
+  (`output_values`, `output_completeness`).
 - Fields may be added in later versions. A field is only removed or changed
   together with an increase of `schema_version`.
 

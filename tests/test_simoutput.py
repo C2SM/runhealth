@@ -56,7 +56,7 @@ def grid_file(path: Path) -> Path:
 
 def collect(out_dir: Path, grid: Path | None = None, prev=None) -> dict:
     icon = profile.load_all()["icon"]
-    cfg = simoutput.config([icon], {"dir": out_dir, "grid": grid}, {})
+    cfg = simoutput.config([icon], {"dir": out_dir, "grid": grid}, {})[0]
     return simoutput.collect(cfg, prev)
 
 
@@ -144,10 +144,10 @@ def test_end_to_end_checks_figures_and_summary(tmp_path):
     rc, run, report = _run(tmp_path, out_dir)
     assert rc == 0
     checks = {c["key"]: c for c in run["checks"]}
-    assert checks["output_values"]["level"] == "ok"
-    assert run["output"]["temp"]["max"][0] == 254.0
+    assert checks["output_values_atm"]["level"] == "ok"
+    assert run["output"]["atm"]["temp"]["max"][0] == 254.0
     page = (report / "icon_success.html").read_text()
-    assert "Output: Temperature" in page
+    assert "Atmosphere output: Temperature" in page
 
 
 def test_a_blown_up_field_fails_the_run(tmp_path):
@@ -155,7 +155,7 @@ def test_a_blown_up_field_fails_the_run(tmp_path):
     t[1, 2, 5] = np.inf
     icon_output(tmp_path / ATM, [20200101.0, 20200101.25], temp=t)
     rc, run, _ = _run(tmp_path, tmp_path, "--fail-on", "fail")
-    check = next(c for c in run["checks"] if c["key"] == "output_values")
+    check = next(c for c in run["checks"] if c["key"] == "output_values_atm")
     assert rc == cli.EXIT_GRADE and check["level"] == "fail"
     assert "2020-01-01 06:00:00" in check["headline"]
 
@@ -164,7 +164,7 @@ def test_a_gap_in_the_output_warns(tmp_path):
     days = [20200101.0 + i / 96 for i in (0, 1, 2, 5, 6)]
     icon_output(tmp_path / ATM, days)
     _, run, _ = _run(tmp_path, tmp_path)
-    check = next(c for c in run["checks"] if c["key"] == "output_completeness")
+    check = next(c for c in run["checks"] if c["key"] == "output_completeness_atm")
     assert check["level"] == "warn" and "gap" in check["headline"]
 
 
@@ -189,20 +189,20 @@ def test_auto_takes_the_output_directory_from_the_log(tmp_path):
     args = [str(log), "-o", str(report), "--no-squeue", "--output-dir", "auto", "--no-submit"]
     assert cli.main(args) == 0
     run = json.loads((report / summary.SUMMARY_FILE).read_text())["runs"][0]
-    assert run["output"]["temp"]["max"] == [254.0]
+    assert run["output"]["atm"]["temp"]["max"] == [254.0]
 
 
 def test_an_unreachable_output_directory_is_information(tmp_path):
     icon = profile.load_all()["icon"]
     log = {"settings": {"output_dir_field": "output_dir"}, "fields": {}}
-    out = simoutput.collect(simoutput.config([icon], {"dir": "auto"}, log))
+    out = simoutput.collect(simoutput.config([icon], {"dir": "auto"}, log)[0])
     assert out["error"] == "the log does not name an output directory"
     log["fields"]["output_dir"] = str(tmp_path / "elsewhere")
-    out = simoutput.collect(simoutput.config([icon], {"dir": "auto"}, log))
+    out = simoutput.collect(simoutput.config([icon], {"dir": "auto"}, log)[0])
     assert out["error"].endswith("is not reachable from this machine")
 
 
-def test_the_icon_profile_leaves_out_ocean_output_and_input_files(tmp_path):
+def test_the_atmosphere_leaves_out_ocean_output_and_input_files(tmp_path):
     icon_output(tmp_path / ATM, [20200101.0])
     icon_output(tmp_path / "exp_oce_3d_full_20200101.nc", [20200101.0])
     icon_output(tmp_path / "ifs2icon.nc", [20200101.0])
@@ -236,7 +236,7 @@ def test_a_directory_shared_by_several_runs_is_read_once(tmp_path, monkeypatch):
     assert cli.main(args) == 0
     runs = json.loads((report / summary.SUMMARY_FILE).read_text())["runs"]
     assert read == [ATM]
-    assert [r["output"]["temp"]["max"] for r in runs] == [[254.0], [254.0]]
+    assert [r["output"]["atm"]["temp"]["max"] for r in runs] == [[254.0], [254.0]]
     assert cli.main(args) == 0
     assert read == [ATM]  # the second pass finds the summary in the cache
 
@@ -286,7 +286,7 @@ def test_a_file_without_a_time_step_warns(tmp_path):
     hollow.to_netcdf(tmp_path / "exp_atm_2d_20200102.nc")
     assert collect(tmp_path)["files"]["exp_atm_2d_20200102.nc"]["steps"] == []
     _, run, _ = _run(tmp_path, tmp_path)
-    check = next(c for c in run["checks"] if c["key"] == "output_completeness")
+    check = next(c for c in run["checks"] if c["key"] == "output_completeness_atm")
     assert check["level"] == "warn" and "1 file(s) hold no output step" in check["headline"]
 
 
@@ -306,7 +306,7 @@ def test_a_list_of_patterns_reads_the_files_of_each(tmp_path):
 
 
 def test_the_volume_counts_only_the_diagnosed_variables(tmp_path):
-    cfg = simoutput.config([profile.load_all()["icon"]], {"dir": tmp_path}, {})
+    cfg = simoutput.config([profile.load_all()["icon"]], {"dir": tmp_path}, {})[0]
     icon_output(tmp_path / ATM, [20200101.0])
     # temp, pres, u and v on NLEV levels and w on NLEV + 1, each value 8 bytes
     assert simoutput.volume(tmp_path / ATM, cfg) == 8 * NCELLS * (4 * NLEV + NLEV + 1)
@@ -319,3 +319,118 @@ def test_flags_for_this_machine_do_not_go_into_the_job(tmp_path, monkeypatch, fl
     monkeypatch.delenv("SLURM_JOB_ID", raising=False)
     log = str(FIXTURES / "icon_success.log")
     assert cli.main([log, "-o", str(tmp_path / "r"), "--output-dir", str(tmp_path), *flag]) == 2
+
+
+def ocean_output(path: Path, days: list[float], to=None) -> Path:
+    """A small file shaped like ICON ocean output, with a depth axis."""
+    nt = len(days)
+    shape = (nt, NLEV, NCELLS)
+    xr.Dataset(
+        {
+            "to": (("time", "depth", "ncells"), np.full(shape, 10.0) if to is None else to),
+            "so": (("time", "depth", "ncells"), np.full(shape, 35.0)),
+            "u": (("time", "depth", "ncells"), np.full(shape, 0.3)),
+            "v": (("time", "depth", "ncells"), np.full(shape, 0.4)),
+        },
+        coords={
+            "time": (
+                "time",
+                days,
+                {"units": "day as %Y%m%d.%f", "calendar": "proleptic_gregorian"},
+            ),
+            "depth": ("depth", np.arange(1.0, NLEV + 1) * 10),
+        },
+    ).to_netcdf(path)
+    return path
+
+
+def components(out_dir: Path, **options) -> dict[str, dict]:
+    cfgs = simoutput.config([profile.load_all()["icon"]], {"dir": out_dir, **options}, {})
+    return {cfg["name"]: simoutput.collect(cfg) for cfg in cfgs}
+
+
+def test_the_ocean_is_a_component_of_its_own(tmp_path):
+    icon_output(tmp_path / ATM, [20200101.0])
+    ocean_output(tmp_path / "exp_oce_3d_full_20200101.nc", [20200101.0])
+    found = components(tmp_path)
+    assert list(found["atm"]["files"]) == [ATM]
+    assert list(found["ocean"]["files"]) == ["exp_oce_3d_full_20200101.nc"]
+    ocean = simoutput.series(found["ocean"])
+    assert set(ocean) == {"to", "so", "current"}
+    assert ocean["current"][0]["max"] == pytest.approx(0.5)
+    assert set(simoutput.series(found["atm"])) == {"temp", "pres", "wind", "w"}
+
+
+def test_a_component_pattern_on_the_command_line_replaces_the_profile_one(tmp_path):
+    ocean_output(tmp_path / "exp_oce_3d_full_20200101.nc", [20200101.0])
+    ocean_output(tmp_path / "exp_oce_2d_20200101.nc", [20200101.0])
+    found = components(tmp_path, glob={"ocean": ["*_oce_2d_*.nc"]})
+    assert list(found["ocean"]["files"]) == ["exp_oce_2d_20200101.nc"]
+
+
+def test_each_field_takes_the_grid_with_as_many_cells(tmp_path):
+    out_dir = tmp_path / "out"
+    out_dir.mkdir()
+    icon_output(out_dir / ATM, [20200101.0])
+    other = tmp_path / "other.nc"
+    xr.Dataset({"cell_area": (("cell",), np.ones(NCELLS + 3))}).to_netcdf(other)
+    out = components(out_dir, grid=[str(other), str(grid_file(tmp_path / "grid.nc"))])["atm"]
+    assert out["files"][ATM]["vars"]["temp"]["weights"] == "cell area"
+    out = components(out_dir, grid=[str(other)])["atm"]
+    assert out["files"][ATM]["vars"]["temp"]["weights"] == "unweighted"
+
+
+def test_steps_come_from_the_files_with_a_diagnosed_variable(tmp_path):
+    icon_output(tmp_path / ATM, [20200101.0, 20200102.0])
+    hourly = [20200101.0 + h / 24 for h in range(48)]
+    xr.Dataset(
+        {"tas": (("time", "ncells"), np.zeros((48, NCELLS)))},
+        coords={"time": ("time", hourly, {"units": "day as %Y%m%d.%f"})},
+    ).to_netcdf(tmp_path / "exp_atm_2d_hf_20200101.nc")
+    out = components(tmp_path)["atm"]
+    assert len(out["files"]) == 2 and len(simoutput.steps(out)) == 2
+
+
+def test_an_uncoupled_run_has_no_ocean_checks(tmp_path):
+    icon_output(tmp_path / ATM, [20200101.0 + i / 96 for i in range(4)])
+    _, run, _ = _run(tmp_path, tmp_path)
+    keys = {c["key"] for c in run["checks"]}
+    assert "output_values_atm" in keys and not any(k.endswith("_ocean") for k in keys)
+    assert run["output"]["ocean"] == {}
+
+
+def test_a_coupled_run_checks_both_components(tmp_path):
+    days = [20200101.0 + i / 96 for i in range(4)]
+    icon_output(tmp_path / ATM, days)
+    to = np.full((4, NLEV, NCELLS), 10.0)
+    to[2, 1, 3] = 55.0  # an ocean far too warm
+    ocean_output(tmp_path / "exp_oce_3d_full_20200101.nc", days, to=to)
+    _, run, report = _run(tmp_path, tmp_path)
+    checks = {c["key"]: c for c in run["checks"]}
+    assert checks["output_values_atm"]["level"] == "ok"
+    assert checks["output_values_ocean"]["level"] == "fail"
+    assert checks["output_values_ocean"]["title"] == "Ocean output values"
+    assert checks["output_completeness_ocean"]["level"] == "ok"
+    assert run["output"]["ocean"]["to"]["max"][2] == 55.0
+    assert "Ocean output: Potential temperature" in (report / "icon_success.html").read_text()
+
+
+def test_auto_reads_the_task_directory_of_a_sirocco_run(tmp_path):
+    root = tmp_path / "wf"
+    task = root / "run" / "icon__date_2020-01-01T00-00-00"
+    (task / "exp_atm_3d_pl").mkdir(parents=True)
+    (task / "exp_ocean_3d_full_lf").mkdir()
+    (root / "sirocco.yaml").write_text("name: demo\n")
+    icon_output(task / "exp_atm_3d_pl" / ATM, [20200101.0])
+    ocean_output(task / "exp_ocean_3d_full_lf" / "exp_ocean_3d_full_lf_20200101.nc", [20200101.0])
+    icon_output(task / "ifs2icon.nc", [20200101.0])  # an input file beside the streams
+    log = {"path": str(task / "run_script.1.o"), "settings": {}, "fields": {}}
+    cfgs = simoutput.config([profile.load_all()["icon"]], {"dir": "auto"}, log)
+    found = {c["name"]: simoutput.collect(c) for c in cfgs}
+    assert found["atm"]["dir"] == str(task)
+    assert list(found["atm"]["files"]) == [f"exp_atm_3d_pl/{ATM}"]
+    assert list(found["ocean"]["files"]) == [
+        "exp_ocean_3d_full_lf/exp_ocean_3d_full_lf_20200101.nc"
+    ]
+    log["path"] = str(tmp_path / "LOG.exp.1.o")  # not a Sirocco task
+    assert simoutput.config([profile.load_all()["icon"]], {"dir": "auto"}, log)[0]["dir"] is None

@@ -104,6 +104,16 @@ of the workflow whose root holds `sirocco.yaml`, `sirocco.resolved.yaml` or
   run's outcome when the log ends without one and SLURM accounting no longer
   knows the job.
 
+With `--output-dir auto`, the output of each chunk is read from its task
+directory, where Sirocco writes every output stream into a subdirectory of its
+own, and checked per component, the atmosphere and the ocean of a coupled run;
+see [Diagnosing the model output](usage.md#diagnosing-the-model-output):
+
+```bash
+runhealth wf/run/icon__date_* --output-dir auto -o report/ \
+    --grid icon_grid_0054_R02B08_G.nc --grid icon_grid_0058_R02B08_O.nc
+```
+
 Workflows with the same name in different directories stay apart, each labeled
 with its path. A copy of a workflow that kept only `sirocco.log` and
 `state.yaml` beside its task directories is shown with the chunks those two

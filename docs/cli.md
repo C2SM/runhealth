@@ -6,7 +6,7 @@ runhealth [PATH ...] [-o OUTDIR] [-f html|md|pdf]
           [--glob PATTERN] [--last N] [--since 7d] [--job-id ID[,ID]] [--list]
           [--watch SECONDS] [--stall-seconds N] [--jobs N]
           [--no-plots] [--no-cache] [--no-squeue] [--no-sacct] [--embed-logs]
-          [--output-dir DIR] [--output-glob PATTERN] [--grid FILE]
+          [--output-dir DIR] [--output-glob [COMPONENT=]PATTERN] [--grid FILE]
           [--sbatch OPTIONS] [--no-submit]
           [--fail-on never|warn|fail] [--title TEXT] [--open] [--serve PORT]
           [--publish DEST] [--publish-url URL]
@@ -29,9 +29,9 @@ runhealth [PATH ...] [-o OUTDIR] [-f html|md|pdf]
 | `--no-cache`, `--no-squeue` | skip the parse cache; do not query SLURM (`squeue` or `sacct`) at all |
 | `--no-sacct` | do not read the SLURM accounting records of the jobs |
 | `--embed-logs` | embed logs smaller than 8 MB as a page the figures can link into |
-| `--output-dir DIR` | read the model output in `DIR` as well, or with `auto` in the directory each run's log names; see [Diagnosing the model output](usage.md#diagnosing-the-model-output) |
-| `--output-glob` | which files in `--output-dir` to read (default from the profile, else `*.nc`) |
-| `--grid FILE` | grid file whose `cell_area` weights the means of output on the native grid |
+| `--output-dir DIR` | read the model output in `DIR` as well, or with `auto` in the directory each run's log names, or the task directory of a Sirocco run; see [Diagnosing the model output](usage.md#diagnosing-the-model-output) |
+| `--output-glob [COMPONENT=]PATTERN` | which files in `--output-dir` to read for an output component, such as `ocean=*_oce_3d*.nc`, or for the first component without `COMPONENT=` (default from the profile, else `*.nc`); repeatable |
+| `--grid FILE` | grid file whose `cell_area` weights the means of output on the native grid; repeatable, each field taking the grid with as many cells |
 | `--sbatch OPTIONS` | extra `sbatch` options for the job that reads the output, such as `--account` or `--time` |
 | `--no-submit` | read the output on this machine rather than in a SLURM job |
 | `--fail-on` | `never` (default), `warn` or `fail`: exit with code 3 when any run is graded at or above this level; see [Exit codes](#exit-codes) |

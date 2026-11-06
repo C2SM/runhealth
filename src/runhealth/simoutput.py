@@ -1,6 +1,9 @@
 """Diagnostics of the simulation output: what the model wrote, not what it logged.
 
-For every variable a profile names under ``output``, each output time step
+A profile's ``output`` section names the files to read and the variables to
+check, either directly or per component, such as the atmosphere and the ocean
+of a coupled model; each component is read and checked on its own. For every
+variable, each output time step
 yields the minimum, the maximum and the number of non-finite values over the
 whole three-dimensional field, and the area-weighted mean on the top, middle
 and lowest level. Fields are read one level at a time, so that a global field
@@ -23,39 +26,71 @@ from typing import Any
 
 AUTO = "auto"  # --output-dir value that reads each run's directory from its log
 DEFAULT_GLOB = "*.nc"
+SINGLE = "output"  # name of the one component of an output section without components
 EPOCH = "seconds since 1970-01-01 00:00:00"
 LATLON = ("lat", "lon")
 MISSING = "the output diagnostics need the optional dependencies: pip install 'runhealth[output]'"
 
 
-def config(profiles, options: dict, log: dict) -> dict:
-    """The output section of the selected profiles, completed by the command line.
+def config(profiles, options: dict, log: dict) -> list[dict]:
+    """The reading configuration of each output component, completed by the command line.
 
     ``options["dir"]`` set to ``auto`` takes each run's directory from the field
-    of its log that the ``output_dir_field`` setting names.
+    of its log that the ``output_dir_field`` setting names, or else, for a task of
+    a Sirocco workflow, the task directory the log is in. ``options["glob"]``
+    maps a component name to its file patterns, with ``""`` for the first
+    component; ``options["grid"]`` lists grid files, of which each field takes
+    the one whose number of cells it matches.
     """
-    spec: dict[str, Any] = {"variables": {}}
+    components: dict[str, dict[str, Any]] = {}
     for p in profiles:
         section = getattr(p, "output", None) or {}
-        spec.update({k: v for k, v in section.items() if k != "variables"})
-        spec["variables"].update(section.get("variables") or {})
-    where = options["dir"]
+        parts = section.get("components") or ({SINGLE: section} if section else {})
+        for name, part in parts.items():
+            spec = components.setdefault(name, {"variables": {}})
+            spec.update({k: v for k, v in part.items() if k != "variables"})
+            spec["variables"].update(part.get("variables") or {})
+    where = _where(options["dir"], log)
+    globs = options.get("glob") or {}
+    if isinstance(globs, str):
+        globs = {"": globs}
+    grids = options.get("grid") or []
+    grids = [grids] if isinstance(grids, (str, Path)) else grids
+    out = []
+    for i, (name, spec) in enumerate(components.items() or {SINGLE: {"variables": {}}}.items()):
+        files = globs.get(name) or (globs.get("") if i == 0 else None)
+        out.append(
+            {
+                "name": name,
+                "label": spec.get("label", "" if name == SINGLE else name),
+                "optional": bool(spec.get("optional")),
+                "dir": where,
+                "glob": _patterns(files or spec.get("files") or DEFAULT_GLOB),
+                "grid": [str(Path(g).resolve()) for g in grids],
+                "variables": spec["variables"],
+            }
+        )
+    return out
+
+
+def _where(option, log: dict) -> str | None:
+    where = option
     if where == AUTO:
         field = (log.get("settings") or {}).get("output_dir_field", "")
         where = (log.get("fields") or {}).get(field)
-    return {
-        "dir": str(Path(where).resolve()) if where else None,
-        "glob": _patterns(options.get("glob") or spec.get("files") or DEFAULT_GLOB),
-        "grid": str(Path(options["grid"]).resolve()) if options.get("grid") else None,
-        "variables": spec["variables"],
-    }
+        if not where and log.get("path"):
+            from . import sirocco
+
+            task_dir = Path(log["path"]).parent
+            where = task_dir if sirocco.find_root(task_dir) else None
+    return str(Path(where).resolve()) if where else None
 
 
 def collect(cfg: dict, prev: dict | None = None) -> dict:
     """Summarize every output file, reusing the summary of a file that has not changed."""
     out, todo = plan(cfg, prev)
     for path in todo:
-        out["files"][path.name] = read(path, cfg)
+        out["files"][str(path.relative_to(cfg["dir"]))] = read(path, cfg)
     return out
 
 
@@ -74,20 +109,30 @@ def plan(cfg: dict, prev: dict | None = None) -> tuple[dict, list[Path]]:
     old = (prev or {}).get("files", {}) if (prev or {}).get("key") == key else {}
     files: dict[str, dict] = {}
     todo: list[Path] = []
-    for path in sorted({p for g in cfg["glob"] for p in Path(cfg["dir"]).glob(g)}):
+    root = Path(cfg["dir"])
+    # One level down as well, where a Sirocco task keeps each output stream.
+    found = {
+        p
+        for g in cfg["glob"]
+        for d in ("", "*/")
+        for p in root.glob(d + g)
+        if "/" not in g or not d
+    }
+    for path in sorted(found):
         if not path.is_file():
             continue
         st = path.stat()
-        rec = old.get(path.name)
+        name = str(path.relative_to(root))
+        rec = old.get(name)
         # A file that failed is tried again, as the failure may have been passing.
         if (
             rec
             and not rec.get("error")
             and (rec["size"], rec["mtime"]) == (st.st_size, st.st_mtime)
         ):
-            files[path.name] = rec
+            files[name] = rec
         elif not st.st_size:
-            files[path.name] = {"size": 0, "mtime": st.st_mtime, "error": "the file is empty"}
+            files[name] = {"size": 0, "mtime": st.st_mtime, "error": "the file is empty"}
         else:
             todo.append(path)
     return {**cfg, "key": key, "files": files}, todo
@@ -146,12 +191,10 @@ def series(output: dict) -> dict[str, list[dict]]:
 
 
 def steps(output: dict) -> list[tuple[float, str]]:
-    """Every distinct output time, in order."""
-    seen = {
-        t: time
-        for rec in (output or {}).get("files", {}).values()
-        for time, t in rec.get("steps") or []
-    }
+    """Every distinct output time, in order, from the files holding a diagnosed variable if any."""
+    recs = list((output or {}).get("files", {}).values())
+    recs = [r for r in recs if r.get("vars")] or recs
+    seen = {t: time for rec in recs for time, t in rec.get("steps") or []}
     return sorted(seen.items())
 
 
@@ -163,25 +206,29 @@ def _patterns(value) -> list[str]:
 
 
 class _Area:
-    """Cell areas from an ICON grid file, read once and only when a field needs them."""
+    """Cell areas from ICON grid files, each read once and only when a field needs them."""
 
-    def __init__(self, grid: str | None):
-        self.grid, self._values = grid, None
+    def __init__(self, grids: tuple[str, ...]):
+        self.grids, self._values = grids, None
 
-    def values(self):
-        if self.grid and self._values is None:
+    def values(self, ncells: int):
+        """The cell areas of the grid with ``ncells`` cells, if one has as many."""
+        if self._values is None:
             import xarray as xr
 
-            with xr.open_dataset(self.grid, decode_times=False) as ds:
-                self._values = ds["cell_area"].values.astype("float64")
-        return self._values
+            self._values = {}
+            for grid in self.grids:
+                with xr.open_dataset(grid, decode_times=False) as ds:
+                    self._values[ds["cell_area"].size] = ds["cell_area"].values.astype("float64")
+        return self._values.get(ncells)
 
 
-_AREAS: dict[str | None, _Area] = {}  # per process, so a worker reads each grid once
+_AREAS: dict[tuple[str, ...], _Area] = {}  # per process, so a worker reads each grid once
 
 
-def _area(grid: str | None) -> _Area:
-    return _AREAS.setdefault(grid, _Area(grid))
+def _area(grids) -> _Area:
+    key = tuple(grids or ())
+    return _AREAS.setdefault(key, _Area(key))
 
 
 def _scan(path: Path, variables: dict, area: _Area) -> dict:
@@ -313,8 +360,8 @@ def _weights(da, ds, hdims: list[str], area: _Area):
     if hdims == list(LATLON) and "lat" in ds.variables:
         lat = np.deg2rad(ds["lat"].values.astype("float64"))
         return np.repeat(np.cos(lat), da.sizes["lon"]), "cos(latitude)"
-    cells = area.values()
-    if cells is not None and cells.size == da.sizes[hdims[0]]:
+    cells = area.values(da.sizes[hdims[0]])
+    if cells is not None:
         return cells, "cell area"
     return None, "unweighted"
 
