@@ -397,8 +397,9 @@ def assess(
     a.checks.append(_check_errors(log, a))
     a.checks.extend(_check_groups(log, a))
     a.checks.append(_check_stability(log))
-    a.checks.append(_check_output_values(log))
-    a.checks.append(_check_output_completeness(log, a))
+    for out in log.output:
+        a.checks.append(_check_output_values(out))
+        a.checks.append(_check_output_completeness(log, a, out))
     a.checks.append(_check_dumps(log))
     a.checks.append(_check_kernel(log))
     a.checks.append(_check_gpu_health(log))
@@ -1660,27 +1661,34 @@ def _output_breach(records: list[dict], spec: dict, level: str) -> tuple[dict, s
     return None
 
 
-def _check_output_values(log: RunLog) -> Check | None:
-    """Extremes and non-finite values of the model output, per variable.
+def _output_check(out: dict, what: str) -> tuple[str, str]:
+    """Key and title of an output check, naming the component unless the output has only one."""
+    if out.get("name", simoutput.SINGLE) == simoutput.SINGLE:
+        return f"output_{what}", f"Output {what}"
+    return f"output_{what}_{out['name']}", f"{out.get('label') or out['name']} output {what}"
+
+
+def _check_output_values(out: dict) -> Check | None:
+    """Extremes and non-finite values of one output component, per variable.
 
     A non-finite value, or an extreme beyond a ``fail_`` limit of the profile,
     fails the run and names the first output step at which it occurred.
     """
-    out = log.output
-    if not out:
-        return None
+    key, title = _output_check(out, "values")
     if out.get("error"):
-        return Check(
-            "output_values", "Output values", "info", "The output was not read", out["error"]
-        )
+        if out.get("optional"):
+            return None  # the first component reports the directory
+        return Check(key, title, "info", "The output was not read", out["error"])
+    if out.get("optional") and not out.get("files"):
+        return None
     found = simoutput.series(out)
     variables = out.get("variables") or {}
     if not found:
         if not any(not f.get("error") for f in out.get("files", {}).values()):
             return None  # the completeness check reports missing and unreadable files
         return Check(
-            "output_values",
-            "Output values",
+            key,
+            title,
             "warn",
             "None of the expected variables is in the output",
             f"Looked for {', '.join(variables) or 'nothing'} in {simoutput.patterns(out)} under {out['dir']}.",
@@ -1722,8 +1730,8 @@ def _check_output_values(log: RunLog) -> Check | None:
             levels.append("ok")
     steps = len(simoutput.steps(out))
     return Check(
-        "output_values",
-        "Output values",
+        key,
+        title,
         _worst(levels),
         (
             "; ".join(heads)
@@ -1737,16 +1745,18 @@ def _check_output_values(log: RunLog) -> Check | None:
     )
 
 
-def _check_output_completeness(log: RunLog, a: Assessment) -> Check | None:
-    """Missing, duplicate or unreadable output steps, and output that stops early."""
-    out = log.output
-    if not out or out.get("error"):
+def _check_output_completeness(log: RunLog, a: Assessment, out: dict) -> Check | None:
+    """Missing, duplicate or unreadable output steps of a component, or output that ends early."""
+    if out.get("error"):
         return None
+    key, title = _output_check(out, "completeness")
     files = out.get("files", {})
     if not files:
+        if out.get("optional"):
+            return None
         return Check(
-            "output_completeness",
-            "Output completeness",
+            key,
+            title,
             "warn",
             "No output files found",
             f"Nothing matched {simoutput.patterns(out)} in {out['dir']}.",
@@ -1801,8 +1811,8 @@ def _check_output_completeness(log: RunLog, a: Assessment) -> Check | None:
         )
     head = "; ".join(heads) if heads else ev[0] if ev else "No output step has a time"
     return Check(
-        "output_completeness",
-        "Output completeness",
+        key,
+        title,
         level if times or broken or hollow else "info",
         head[:1].upper() + head[1:],
         f"The output steps found in {simoutput.patterns(out)} under {out['dir']}, checked for gaps, "

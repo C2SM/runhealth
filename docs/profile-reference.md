@@ -370,29 +370,54 @@ Names and column mappings used by the analysis. All entries are optional.
 
 The model output read with
 [`--output-dir`](usage.md#diagnosing-the-model-output), and the limits its
-extremes are graded against. The ICON profile defines:
+extremes are graded against. The output of a coupled model is divided into
+components, each with files and variables of its own, which are read and
+checked separately. The ICON profile defines an atmosphere and an ocean
+component:
 
 ```yaml
 output:
-  files: ["*_atm_*.nc", "*_DOM[0-9]*_*.nc"]
-  variables:
-    temp:
-      label: Temperature
-      unit: K
-      names: [temp, ta]
-      fail_below: 150
-      fail_above: 350
-    wind:
-      label: Wind speed
-      unit: m/s
-      names: [[u, v], [ua, va]]
-      warn_above: 400
-      fail_above: 1000
+  components:
+    atm:
+      label: Atmosphere
+      files: ["*_atm_*.nc", "*_DOM[0-9]*_*.nc"]
+      variables:
+        temp:
+          label: Temperature
+          unit: K
+          names: [temp, ta]
+          fail_below: 150
+          fail_above: 350
+        wind:
+          label: Wind speed
+          unit: m/s
+          names: [[u, v], [ua, va]]
+          warn_above: 400
+          fail_above: 1000
+    ocean:
+      label: Ocean
+      optional: true
+      files: ["*_oce*_3d*.nc"]
+      variables:
+        to:
+          label: Potential temperature
+          unit: degC
+          names: [to]
+          fail_below: -3
+          fail_above: 40
 ```
+
+A profile with a single component may leave out `components` and give `files`
+and `variables` directly under `output`. Components of the same name in
+several profiles are merged, the later profile adding variables and replacing
+the other settings.
 
 | Key | Meaning |
 | --- | --- |
-| `files` | pattern, or list of patterns, of the output files in `--output-dir`; a file matching any of them is read, and `--output-glob` overrides them |
+| `components` | the output components by name, each with the keys below |
+| `label` | how the report names the component, such as `Ocean output values` |
+| `optional` | `true` for a component that a run may lack, such as the ocean of an uncoupled run: without matching files it is left out of the report instead of warned about |
+| `files` | pattern, or list of patterns, of the output files in `--output-dir` and its immediate subdirectories; a file matching any of them is read, and `--output-glob` overrides them |
 | `variables` | one entry per diagnosed variable |
 | `label`, `unit` | how the report names the variable and its unit |
 | `names` | the names under which a file may hold the variable, tried in order; a list of names stands for the components of a magnitude, `sqrt(a^2 + b^2 + ...)`, such as a wind speed. Defaults to the key of the entry |

@@ -154,8 +154,8 @@ class RunLog:
     thresholds: dict[str, Any] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
     diag: dict[str, Any] = field(default_factory=dict)
-    # Summary of the model output files, from :mod:`runhealth.simoutput`.
-    output: dict[str, Any] = field(default_factory=dict)
+    # Summary of the model output files per component, from :mod:`runhealth.simoutput`.
+    output: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def wall_seconds(self) -> float | None:
