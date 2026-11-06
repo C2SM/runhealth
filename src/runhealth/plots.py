@@ -722,24 +722,28 @@ def _stability_figure(
 
 def output_series(log: RunLog, a: Assessment, uid: str) -> list[Figure]:
     """One figure per output variable: its range and its mean on a few levels over model time."""
-    out = log.output or {}
-    variables = out.get("variables") or {}
     figures = []
-    for i, (name, records) in enumerate(simoutput.series(out).items()):
-        weights = out["files"][records[0]["file"]]["vars"][name].get("weights", "")
-        figure = _output_figure(name, variables.get(name, {}), records, weights, f"{uid}-{i}")
-        if figure:
-            figures.append(figure)
+    for j, out in enumerate(log.output):
+        variables = out.get("variables") or {}
+        single = out.get("name", simoutput.SINGLE) == simoutput.SINGLE
+        part = "" if single else f"{out['name']}_"
+        title = "Output" if single else f"{out.get('label') or out['name']} output"
+        for i, (name, records) in enumerate(simoutput.series(out).items()):
+            weights = out["files"][records[0]["file"]]["vars"][name].get("weights", "")
+            spec = variables.get(name, {})
+            figure = _output_figure(part + name, title, spec, records, weights, f"{uid}-{j}-{i}")
+            if figure:
+                figures.append(figure)
     return figures
 
 
 def _output_figure(
-    name: str, spec: dict, records: list[dict], weights: str, uid: str
+    key: str, title: str, spec: dict, records: list[dict], weights: str, uid: str
 ) -> Figure | None:
     valid = [r for r in records if r["min"] is not None]
     if not valid:
         return None
-    label = spec.get("label", name)
+    label = spec.get("label", key)
     unit = spec.get("unit", "")
     t0 = records[0]["t"]
     span = (records[-1]["t"] - t0) or 1.0
@@ -811,8 +815,8 @@ def _output_figure(
         "cos(latitude)": "weighted by the cosine of latitude",
     }
     return Figure(
-        key=f"output_{name}",
-        title=f"Output: {label}",
+        key=f"output_{key}",
+        title=f"{title}: {label}",
         note=f"{len(records):,} output steps",
         caption=(
             f"The range of {label.lower()} over the whole three-dimensional field at each output "

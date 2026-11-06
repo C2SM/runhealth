@@ -226,36 +226,65 @@ thresholds:
 # The limits on wind repeat those of the peaks ICON prints, and the limits on
 # temperature lie far outside anything physical.
 output:
-  # The atmosphere streams of a coupled experiment, whose directory also holds
-  # the ocean output, which carries u and v as well, and the input files; and
-  # the domains of an ICON-NWP or ICON-LAM run.
-  files: ["*_atm_*.nc", "*_DOM[0-9]*_*.nc"]
-  variables:
-    temp:
-      label: Temperature
-      unit: K
-      names: [temp, ta]
-      fail_below: 150
-      fail_above: 350
-    pres:
-      label: Pressure
-      unit: Pa
-      names: [pres, pres_sfc]
-      fail_below: 0
-    wind:
-      label: Wind speed
-      unit: m/s
-      names: [[u, v], [ua, va]]
-      warn_above: 400
-      fail_above: 1000
-    w:
-      label: Vertical wind
-      unit: m/s
-      names: [w, wa]
-      warn_below: -100
-      warn_above: 100
-      fail_below: -1000
-      fail_above: 1000
+  components:
+    # The atmosphere streams of a coupled experiment, whose directory also holds
+    # the ocean output and the input files; and the domains of an ICON-NWP or
+    # ICON-LAM run.
+    atm:
+      label: Atmosphere
+      files: ["*_atm_*.nc", "*_DOM[0-9]*_*.nc"]
+      variables:
+        temp:
+          label: Temperature
+          unit: K
+          names: [temp, ta]
+          fail_below: 150
+          fail_above: 350
+        pres:
+          label: Pressure
+          unit: Pa
+          names: [pres, pres_sfc]
+          fail_below: 0
+        wind:
+          label: Wind speed
+          unit: m/s
+          names: [[u, v], [ua, va]]
+          warn_above: 400
+          fail_above: 1000
+        w:
+          label: Vertical wind
+          unit: m/s
+          names: [w, wa]
+          warn_below: -100
+          warn_above: 100
+          fail_below: -1000
+          fail_above: 1000
+    # The three-dimensional ocean streams of a coupled experiment, such as
+    # exp_oce_3d_full or core_ocean_3d_full_lf; left out of an uncoupled run.
+    ocean:
+      label: Ocean
+      optional: true
+      files: ["*_oce*_3d*.nc"]
+      variables:
+        to:
+          label: Potential temperature
+          unit: degC
+          names: [to]
+          fail_below: -3
+          fail_above: 40
+        so:
+          label: Salinity
+          unit: psu
+          names: [so]
+          fail_below: 0
+          warn_above: 45
+          fail_above: 60
+        current:
+          label: Current speed
+          unit: m/s
+          names: [[u, v]]
+          warn_above: 5
+          fail_above: 20
 
 groups:
   icon_warning:

@@ -17,7 +17,7 @@ from .health import LEVEL_RANK
 from .report import RunView
 
 SUMMARY_FILE = "summary.json"
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 # Statistics of a run that are part of the summary, by their key in the assessment.
 STATS = ["wall_seconds", "nodes", "sypd", "sypd_steady", "sim_seconds", "progress_last"]
 
@@ -75,14 +75,18 @@ def _sirocco(view: RunView) -> dict | None:
 
 
 def _output(log) -> dict:
-    """Each output variable's statistics per output step, as parallel lists."""
-    out = {}
-    for name, records in simoutput.series(log.output).items():
-        out[name] = {
-            "time": [r["time"] for r in records],
-            **{k: [r[k] for r in records] for k in ("min", "max", "nonfinite")},
-            "means": {level: [r["means"][level] for r in records] for level in records[0]["means"]},
-        }
+    """Per output component, each variable's statistics per output step, as parallel lists."""
+    out: dict[str, dict] = {}
+    for comp in log.output:
+        found = out.setdefault(comp.get("name", simoutput.SINGLE), {})
+        for name, records in simoutput.series(comp).items():
+            found[name] = {
+                "time": [r["time"] for r in records],
+                **{k: [r[k] for r in records] for k in ("min", "max", "nonfinite")},
+                "means": {
+                    level: [r["means"][level] for r in records] for level in records[0]["means"]
+                },
+            }
     return out
 
 

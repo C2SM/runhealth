@@ -311,7 +311,7 @@ def read_outputs(logs: list[RunLog], cache_dir: Path | None, jobs: int) -> None:
     cached after every file, so an interrupted pass loses at most the files
     being read at that moment.
     """
-    configs = {_output_key(rl.output): rl.output for rl in logs if rl.output}
+    configs = {_output_key(cfg): cfg for rl in logs for cfg in rl.output or []}
     found: dict[str, dict] = {}
     owner: dict[Path, str] = {}
     for key, cfg in configs.items():
@@ -329,12 +329,12 @@ def read_outputs(logs: list[RunLog], cache_dir: Path | None, jobs: int) -> None:
         ) as bar:
             for i, ((path, _), rec) in enumerate(_each(simoutput.read, tasks, jobs), 1):
                 key = owner[path]
-                found[key]["files"][path.name] = rec
+                found[key]["files"][str(path.relative_to(configs[key]["dir"]))] = rec
                 _store_output(cache_dir, key, found[key])
                 bar.advance(f"{i}/{len(tasks)} {path.parent.name}/{path.name}", n=cost[path])
     for rl in logs:
         if rl.output:
-            rl.output = found[_output_key(rl.output)]
+            rl.output = [found[_output_key(cfg)] for cfg in rl.output]
 
 
 def _each(fn: Callable, tasks: list[tuple], jobs: int):
@@ -346,6 +346,15 @@ def _each(fn: Callable, tasks: list[tuple], jobs: int):
         pending = {pool.submit(fn, *t): t for t in tasks}
         for future in as_completed(pending):
             yield pending[future], future.result()
+
+
+def _globs(values: list[str]) -> dict[str, list[str]]:
+    """``--output-glob`` values by component, ``""`` for the first component."""
+    out: dict[str, list[str]] = {}
+    for v in values:
+        name, sep, pattern = v.partition("=")
+        out.setdefault(name if sep else "", []).append(pattern if sep else v)
+    return out
 
 
 def _output_key(cfg: dict) -> str:
@@ -490,7 +499,11 @@ def build(
         # only set up when there is a bar to show for it.
         follow = (lambda n: bar.advance(n=n)) if bar.enabled else None
         named = (lambda f: bar.advance(f.name, n=0)) if bar.enabled else None
-        output = {"dir": args.output_dir, "glob": args.output_glob, "grid": args.grid}
+        output = {
+            "dir": args.output_dir,
+            "glob": _globs(args.output_glob or []),
+            "grid": args.grid or [],
+        }
         logs = parse_all(
             files,
             names,
@@ -709,10 +722,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--output-glob",
-        metavar="PATTERN",
-        help="which files in --output-dir to read (default: from the profile, else *.nc)",
+        metavar="[COMPONENT=]PATTERN",
+        action="append",
+        help="which files in --output-dir to read for an output component, such as "
+        "ocean=*_oce_3d*.nc, or for the first one without COMPONENT= "
+        "(default: from the profile, else *.nc; repeatable)",
     )
-    p.add_argument("--grid", metavar="FILE", help="grid file with the cell areas of the output")
+    p.add_argument(
+        "--grid",
+        metavar="FILE",
+        action="append",
+        help="grid file with the cell areas of the output; each field takes the one "
+        "with as many cells (repeatable)",
+    )
     p.add_argument(
         "--sbatch",
         metavar="OPTIONS",
