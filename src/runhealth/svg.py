@@ -411,13 +411,17 @@ class Chart:
         """``right`` draws a secondary axis along the right edge of the plot."""
         p = box or self.plot
         tick_x, anchor = (p.right + 9, "start") if right else (p.x - 9, "end")
+        parts = []
         for t in ticks:
             y = scale(t)
             if y < p.y - 0.5 or y > p.bottom + 0.5:
                 continue
             if grid:
-                self.frame.append(self.line(p.x, y, p.right, y, cls="grid"))
-            self.frame.append(self.text(tick_x, y + 3.7, fmt(t), cls="tick", text_anchor=anchor))
+                parts.append(self.line(p.x, y, p.right, y, cls="grid"))
+            parts.append(self.text(tick_x, y + 3.7, fmt(t), cls="tick", text_anchor=anchor))
+        # Grouped like the x ticks, so a chart whose y scale can be switched
+        # in the browser has one element to redraw.
+        self.frame.append(tag("g", "".join(parts), cls="rh-yticks"))
         if label:
             label_x = self.width - 13 if right else 13
             self.frame.append(

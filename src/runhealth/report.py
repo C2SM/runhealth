@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import __version__, style
+from . import __version__, dashboard, style
 from .sirocco import EVENT_LEVEL, TASK_KEYS, Chunk, Workflow
 from .diff import Diff, compare, run_kind
 from .extract import RunLog
@@ -112,6 +112,12 @@ ICONS = {
     "check": _ICON.format('<path d="M20 6 9 17l-5-5"/>'),
     "diff": _ICON.format('<path d="M12 3v14M5 10h14M5 21h14"/>'),
     "search": _ICON.format('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>'),
+    "sliders": _ICON.format(
+        '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>'
+    ),
+    "sidebar": _ICON.format('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>'),
+    "maximize": _ICON.format('<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>'),
+    "minimize": _ICON.format('<path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/>'),
     "docs": _ICON.format(
         '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2zM22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>'
     ),
@@ -239,6 +245,18 @@ def theme_switch() -> str:
         for mode in ("system", "light", "dark")
     )
     return f'<div class="theme" role="group" aria-label="Color theme">{buttons}</div>'
+
+
+def view_controls() -> str:
+    """The sidebar toggle and the customize panel, both inert without the script."""
+    label = "Customize the view"
+    return (
+        '<button type="button" class="tool side-btn" aria-pressed="true" '
+        f'title="Show or hide the sidebar" aria-label="Show or hide the sidebar">{ICONS["sidebar"]}</button>'
+        f'<div class="prefs-wrap"><button type="button" class="tool prefs-btn" title="{label}" '
+        f'aria-label="{label}" aria-expanded="false" aria-controls="prefs">{ICONS["sliders"]}</button>'
+        f'<div class="prefs" id="prefs" role="dialog" aria-label="{label}" hidden></div></div>'
+    )
 
 
 def search_box() -> str:
@@ -902,24 +920,26 @@ def stylesheet() -> str:
         ("/*PRINT*/", style.print_overrides()),
     ):
         out = out.replace(marker, text)
-    return out
+    return out + dashboard.CSS
 
 
 # The theme has to be settled before the first paint, or a dark-mode reader
 # gets a white flash on every page. This is the only script in the head.
-HEAD_JS = """
+HEAD_JS = (
+    """
 try {
   var m = localStorage.getItem('runhealth-theme');
   if (m === 'light' || m === 'dark') document.documentElement.setAttribute('data-theme', m);
 } catch (e) {}
 """
+    + dashboard.HEAD_JS
+)
 
 JS = r"""
 (function () {
   'use strict';
   var root = document.documentElement;
   var SVGNS = 'http://www.w3.org/2000/svg';
-  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // -- theme: system, light or dark ------------------------------------
   var stored = 'system';
@@ -1008,6 +1028,10 @@ JS = r"""
       box.open = true;
       box = box.parentElement && box.parentElement.closest('details');
     }
+    // A reader may have hidden the section, or folded the check.
+    var sec = el.closest('.panel-sec[hidden], figure.fig[hidden]');
+    if (sec) sec.hidden = false;
+    el.classList.remove('shut');
     // A grade filter may have put the block away since the search ran.
     if (el.hidden) {
       document.querySelectorAll('.filters button[data-grade="all"]').forEach(function (b) {
@@ -1399,16 +1423,14 @@ JS = r"""
         if (i === best) l.setAttribute('aria-current', 'true');
         else l.removeAttribute('aria-current');
       });
+      // Only the row of chips on a narrow screen follows the reader, just far
+      // enough to show the entry; the sidebar list moves only when scrolled.
       var active = links[best];
-      if (active && active.parentNode.scrollWidth > active.parentNode.clientWidth) {
-        var box = active.parentNode;
-        var want = active.offsetLeft - box.clientWidth / 2 + active.offsetWidth / 2;
-        box.scrollTo({ left: want, behavior: reduce ? 'auto' : 'smooth' });
-      } else if (active && active.parentNode.scrollHeight > active.parentNode.clientHeight) {
-        var col = active.parentNode;
-        var top = active.offsetTop - col.offsetTop - col.clientHeight / 2 + active.offsetHeight / 2;
-        col.scrollTo({ top: top, behavior: reduce ? 'auto' : 'smooth' });
-      }
+      var box = active && active.parentNode;
+      if (!box || box.scrollWidth <= box.clientWidth) return;
+      var a = active.getBoundingClientRect(), b = box.getBoundingClientRect(), pad = 24;
+      if (a.left < b.left + pad) box.scrollLeft -= b.left + pad - a.left;
+      else if (a.right > b.right - pad) box.scrollLeft += a.right - b.right + pad;
     }
     var queued = false;
     function onScroll() {
@@ -1448,13 +1470,16 @@ JS = r"""
   folds.forEach(function (b) {
     if (folded.indexOf(anchorOf(b)) >= 0) fold(b, false);
     b.addEventListener('click', function () {
+      var before = b.getBoundingClientRect().top;
       fold(b, b.getAttribute('aria-expanded') !== 'true');
+      b.parentNode.scrollTop += b.getBoundingClientRect().top - before;
       settle(true);
     });
   });
   if (foldAll) foldAll.addEventListener('click', function () {
     var open = allShut();
     folds.forEach(function (b) { fold(b, open); });
+    if (folds.length) folds[0].parentNode.scrollTop = 0;
     settle(true);
   });
   if (folds.length) settle(false);
@@ -1596,6 +1621,7 @@ JS = r"""
     var plot = (svg.dataset.plot || '').split(',').map(Number);
     var timeBox = (svg.dataset.xbox || svg.dataset.plot || '').split(',').map(Number);
     var samples = svg.dataset.samples ? JSON.parse(svg.dataset.samples) : null;
+    svg._rhSamples = samples;
     var dragging = false;
     var domain = svg.dataset.xdomain ? svg.dataset.xdomain.split(',').map(Number) : null;
     var overlay = document.createElementNS(SVGNS, 'g');
@@ -1905,7 +1931,14 @@ def _page(title: str, nav: str, toc: str, body: str) -> str:
         '<a class="skip" href="#main">Skip to content</a>\n'
         f"{nav}\n"
         f'<div class="shell">\n{toc}\n<main id="main">\n{body}\n</main>\n</div>\n'
-        f"<script>{JS}</script>\n</body>\n</html>\n"
+        # What the chart tools need: the figure stylesheet for an exported
+        # SVG, and the icons the script puts on its buttons.
+        f'<script type="text/css" id="rh-svg-css">{style.svg_stylesheet()}</script>\n'
+        + "".join(
+            f'<template id="rh-icon-{name}">{ICONS[name]}</template>'
+            for name in ("maximize", "minimize")
+        )
+        + f"\n<script>{JS}</script>\n<script>{dashboard.JS}</script>\n</body>\n</html>\n"
     )
 
 
@@ -2221,7 +2254,7 @@ def _nav(
         f'<span class="ver">v{esc(__version__)}</span>'
         f"{trail}{badge}"
         '<div class="spacer"></div>'
-        f"{search_box()}{project_links()}{theme_switch()}"
+        f"{search_box()}{project_links()}{theme_switch()}{view_controls()}"
         "</div></header>"
     )
 
@@ -2237,23 +2270,76 @@ def _badge(level: str, text: str = "") -> str:
     )
 
 
-def _tile(value: str, label: str, anchor: str = "", hint: str = "") -> str:
+def _tile(
+    value: str, label: str, anchor: str = "", hint: str = "", sub: str = "", tone: str = ""
+) -> str:
+    """A stat card; ``tone`` is a grade that colors its top edge."""
     at = (f' id="{esc(anchor)}"' if anchor else "") + (f' title="{esc(hint)}"' if hint else "")
+    cls = f"tile tone-{tone}" if tone else "tile"
     return (
-        f'<div class="tile"{at}><div class="v">{value}</div>'
-        f'<div class="l">{esc(label)}</div></div>'
+        f'<div class="{cls}"{at}><div class="v">{value}</div>'
+        f'<div class="l">{esc(label)}</div>'
+        + (f'<div class="s">{esc(sub)}</div>' if sub else "")
+        + "</div>"
+    )
+
+
+def _segments(counts: list[tuple[str, int, str]], what: str) -> str:
+    """A proportional bar with a written key, so no count depends on color."""
+    total = sum(n for _, n, _ in counts) or 1
+    said = ", ".join(f"{n} {label}" for _, n, label in counts if n)
+    bar = "".join(
+        f'<span class="g-{level}" style="flex:{n / total:.4f}"></span>'
+        for level, n, _ in counts
+        if n
+    )
+    key = "".join(
+        f'<li><i class="g-{level}" aria-hidden="true"></i><b>{n}</b> {esc(label)}</li>'
+        for level, n, label in counts
+        if n
+    )
+    return (
+        f'<div class="segbar" role="img" aria-label="{esc(what)}: {esc(said)}">{bar}</div>'
+        f'<ul class="seg-key">{key}</ul>'
+    )
+
+
+def _glance(title: str, meta: str, bars: list[str], issues: list[tuple[str, str, str, str]],
+            calm: str) -> str:
+    """The summary card: bars of counts, then the items that need a look.
+
+    Each issue is ``(href, grade, title, headline)``.
+    """
+    items = "".join(
+        f'<li><a href="{esc(href)}"><span class="tdot g-{grade}" aria-hidden="true"></span>'
+        f'<span class="it">{esc(name)}</span><span class="ih">{esc(line)}</span></a></li>'
+        for href, grade, name, line in issues
+    )
+    return (
+        f'<section class="card glance" aria-label="{esc(title)}"><div class="gh">'
+        f'<h2>{esc(title)}</h2><span class="muted">{esc(meta)}</span></div>'
+        + "".join(bars)
+        + (
+            f'<p class="sub-h">Needs a look</p><ol class="issues">{items}</ol>'
+            if items
+            else f'<p class="all-ok">{esc(calm)}</p>'
+        )
+        + "</section>"
     )
 
 
 def _check_card(c: Check, n: int) -> str:
     """One check, carrying the id a search result on it links to."""
     ev = "".join(f"<li>{esc(e)}</li>" for e in c.evidence)
+    body = (f'<div class="d">{esc(c.detail)}</div>' if c.detail else "") + (
+        f"<ul>{ev}</ul>" if ev else ""
+    )
     return (
         f'<div class="check l-{c.level}" id="check-{n}" data-grade="{c.level}">'
         '<div class="hd">'
-        f'<span class="t">{esc(c.title)}</span><span class="h">{esc(c.headline)}</span></div>'
-        + (f'<div class="d">{esc(c.detail)}</div>' if c.detail else "")
-        + (f"<ul>{ev}</ul>" if ev else "")
+        f'<span class="t">{esc(c.title)}</span><span class="h">{esc(c.headline)}</span>'
+        f"{_badge(c.level)}</div>"
+        + (f'<div class="ck-body">{body}</div>' if body else "")
         + "</div>"
     )
 
@@ -2647,24 +2733,62 @@ def _diff_modal() -> str:
 
 def run_tiles(log: RunLog, a: Assessment) -> str:
     s = a.stats
+    level = STATUS_LEVEL.get(a.status, "info")
     out = [
-        _tile(_badge(STATUS_LEVEL.get(a.status, "info"), a.status.title()), "status", "status"),
+        _tile(_badge(level, a.status.title()), "status", "status", tone=level),
+        _tile(_badge(a.grade), "health", tone=a.grade),
         _tile(format_duration(s.get("wall_seconds")) or "&ndash;", "wall clock"),
     ]
     if s.get("sypd"):
         unit = log.setting("throughput_label", "rate")
-        out.append(_tile(f"{s['sypd']:.2f}", f"{unit} ({s['sypd'] * DAYS_PER_YEAR:,.1f} SDPD)"))
+        out.append(_tile(f"{s['sypd']:.2f}", unit, sub=f"{s['sypd'] * DAYS_PER_YEAR:,.1f} SDPD"))
     if s.get("progress_last") is not None:
         out.append(_tile(f"{s['progress_last']:,}", log.setting("progress_label", "progress")))
     if s.get("sim_seconds"):
         span = f"model time {s['sim_start']:%Y-%m-%d %H:%M} to {s['sim_end']:%Y-%m-%d %H:%M}"
-        out.append(_tile(format_sim_span(s["sim_seconds"]), "simulated", hint=span))
+        out.append(
+            _tile(
+                format_sim_span(s["sim_seconds"]),
+                "simulated",
+                hint=span,
+                sub=f"from {s['sim_start']:%Y-%m-%d}",
+            )
+        )
     if s.get("nodes"):
         out.append(_tile(f"{s['nodes']:,}", "nodes"))
     if s.get("max_gap"):
         out.append(_tile(format_duration(s["max_gap"]), "longest silence"))
-    out.append(_tile(_badge(a.grade), "health"))
     return f'<div class="tiles">{"".join(out)}</div>'
+
+
+def _check_glance(a: Assessment, counts: dict[str, int]) -> str:
+    """The run's checks as one bar, and the ones that did not pass."""
+    bars = [
+        _segments(
+            [(g, counts.get(g, 0), GRADE_TEXT[g]) for g in ("fail", "warn", "info", "ok")],
+            "Checks by grade",
+        )
+    ]
+    issues = [
+        (f"#check-{i}", c.level, c.title, c.headline)
+        for i, c in sorted(
+            enumerate(a.checks), key=lambda ic: GRADE_ORDER.index(ic[1].level)
+        )
+        if c.level in ("fail", "warn")
+    ]
+    n = len(a.checks)
+    return _glance(
+        "Health summary",
+        f"{n} check{'s' if n != 1 else ''}",
+        bars,
+        issues,
+        "Nothing failed and nothing warned.",
+    )
+
+
+def _section(key: str, body: str) -> str:
+    """A top-level block of a run page, which a reader may hide or move."""
+    return f'<section class="panel-sec" id="sec-{key}" aria-labelledby="{key}">{body}</section>'
 
 
 def render_run(
@@ -2689,19 +2813,25 @@ def render_run(
         f'{esc(format_stamp(log.first_wall) or "unknown start")} &rarr; '
         f'{esc(format_stamp(log.last_wall) or "unknown end")}</div>'
         f"{_source_bar(view, diff)}</div>",
+        f'<div class="overview">{run_tiles(log, a)}{_check_glance(a, counts)}</div>',
         build_panel(log, base.log if base else None),
-        run_tiles(log, a),
-        f'<h2 class="sec" id="{toc.add("checks", "Checks")}">Checks</h2>',
-        _grade_filters(counts, ".check", "Filter checks by grade"),
-        "".join(_check_card(c, i) for i, c in enumerate(a.checks)),
+        _section(
+            "checks",
+            f'<h2 class="sec" id="{toc.add("checks", "Checks")}">Checks</h2>'
+            + _grade_filters(counts, ".check", "Filter checks by grade")
+            + '<div class="checks">'
+            + "".join(_check_card(c, i) for i, c in enumerate(a.checks))
+            + "</div>",
+        ),
     ]
     for i, c in enumerate(a.checks):
         toc.add(f"check-{i}", c.title, level=2, grade=c.level)
     if view.figures:
-        body.append(f'<h2 class="sec" id="{toc.add("figures", "Figures")}">Figures</h2>')
+        head = f'<h2 class="sec" id="{toc.add("figures", "Figures")}">Figures</h2>'
         for f in view.figures:
             toc.add(f"fig-{f.key}", f.title, level=2)
-            body.append(_figure(f, view.log_href))
+        figs = "".join(_figure(f, view.log_href) for f in view.figures)
+        body.append(_section("figures", f'{head}<div class="figs">{figs}</div>'))
     detail = (
         _sirocco_detail(view)
         + _timer_tables(a)
@@ -2717,7 +2847,11 @@ def render_run(
             "it at the line the run went quiet.</p>",
         )
     if detail:
-        body += [f'<h2 class="sec" id="{toc.add("detail", "Detail")}">Detail</h2>', detail]
+        body.append(
+            _section(
+                "detail", f'<h2 class="sec" id="{toc.add("detail", "Detail")}">Detail</h2>{detail}'
+            )
+        )
     if log.notes:
         body.append("<footer>" + "<br>".join(esc(n) for n in log.notes) + "</footer>")
     body.append(_footer())
@@ -2807,6 +2941,74 @@ def _index_groups(views: list[RunView], rows: list[str]) -> str:
     return "".join(out)
 
 
+def index_tiles(views: list[RunView]) -> list[str]:
+    """Stat cards over all runs: how many, how many ended cleanly, how fast."""
+    n = len(views)
+    clean = sum(STATUS_LEVEL.get(v.assessment.status) == "ok" for v in views)
+    share = clean / n if n else 0
+    tone = "ok" if share == 1 else ("warn" if share >= 0.5 else "fail")
+    out = [
+        _tile(f"{n:,}", "runs"),
+        _tile(f"{share:.0%}", "ended cleanly", sub=f"{clean} of {n}", tone=tone),
+    ]
+    walls = [v.assessment.stats.get("wall_seconds") or 0 for v in views]
+    if any(walls):
+        out.append(_tile(format_duration(sum(walls)), "total wall clock"))
+    rated = [v for v in views if v.assessment.stats.get("sypd")]
+    if rated:
+        rates = sorted(v.assessment.stats["sypd"] for v in rated)
+        mid = len(rates) // 2
+        median = rates[mid] if len(rates) % 2 else (rates[mid - 1] + rates[mid]) / 2
+        unit = rated[0].log.setting("throughput_label", "rate")
+        out.append(
+            _tile(f"{median:.2f}", f"median {unit}", sub=f"{rates[0]:.2f} to {rates[-1]:.2f}")
+        )
+    quiet = max(views, key=lambda v: v.assessment.stats.get("max_gap") or 0, default=None)
+    if quiet and quiet.assessment.stats.get("max_gap"):
+        out.append(
+            _tile(
+                format_duration(quiet.assessment.stats["max_gap"]),
+                "longest silence",
+                sub=run_name(quiet),
+            )
+        )
+    return out
+
+
+def _runs_glance(
+    views: list[RunView], counts: dict[str, int], status_counts: dict[str, int]
+) -> str:
+    """Health and outcome of every run as two bars, and the runs that need a look."""
+    statuses = sorted(
+        status_counts.items(),
+        key=lambda kv: (GRADE_ORDER.index(STATUS_LEVEL.get(kv[0], "info")), kv[0]),
+    )
+    bars = [
+        '<p class="sub-h">Health</p>',
+        _segments([(g, counts.get(g, 0), GRADE_TEXT[g]) for g in GRADE_ORDER], "Runs by health"),
+        '<p class="sub-h">Outcome</p>',
+        _segments(
+            [(STATUS_LEVEL.get(st, "info"), k, st.lower()) for st, k in statuses],
+            "Runs by outcome",
+        ),
+    ]
+    issues = []
+    for v in _newest_first(views):
+        a = v.assessment
+        if a.grade not in ("fail", "warn"):
+            continue
+        worst = next((c for c in a.checks if c.level == a.grade), None)
+        line = v.log.outcome.text if v.log.outcome and a.grade == "fail" else ""
+        issues.append((v.page, a.grade, run_name(v), line or (worst.headline if worst else "")))
+    return _glance(
+        "Runs at a glance",
+        f"{len(views)} run{'s' if len(views) != 1 else ''}",
+        bars,
+        issues[:12],
+        "Every run is healthy.",
+    )
+
+
 def render_index(
     views: list[RunView], sources: list[str], overview: Figure | None, title: str
 ) -> str:
@@ -2815,18 +3017,7 @@ def render_index(
     for v in views:
         counts[v.assessment.grade] = counts.get(v.assessment.grade, 0) + 1
         status_counts[v.assessment.status] = status_counts.get(v.assessment.status, 0) + 1
-    # Status says how a run ended, health how it went, so the summary carries both.
-    tiles = (
-        [_tile(str(len(views)), "runs")]
-        + [
-            _tile(_badge(STATUS_LEVEL.get(st, "info"), str(n)), st.lower())
-            for st, n in sorted(
-                status_counts.items(),
-                key=lambda kv: (GRADE_ORDER.index(STATUS_LEVEL.get(kv[0], "info")), kv[0]),
-            )
-        ]
-        + [_tile(_badge(g, str(counts[g])), GRADE_TEXT[g]) for g in GRADE_ORDER if counts.get(g)]
-    )
+    tiles = index_tiles(views)
     before = previous_runs(views)
     templates = []
     rows = []
@@ -2877,14 +3068,22 @@ def render_index(
             f'{format_duration(s.get("max_gap")) or "&ndash;"}</td>'
             f"{cell}</tr>"
         )
-    filters = _grade_filters(counts, "tbody tr[data-grade]", "Filter runs by grade")
+    filters = (
+        '<div class="tbar">'
+        + _grade_filters(counts, "tbody tr[data-grade]", "Filter runs by grade")
+        + f'<label class="qf">{ICONS["search"]}'
+        '<input type="search" placeholder="Filter runs" aria-label="Filter the runs table" '
+        'autocomplete="off" spellcheck="false"><span class="qf-n" aria-live="polite"></span>'
+        "</label></div>"
+    )
     toc = Toc()
     body = [
         f'<div class="head" id="{toc.add("summary", "Summary")}">'
         '<div class="crumb">runhealth</div>'
         f"<h1>{esc(title)}</h1>"
         f"{_sources_block(views, sources)}</div>",
-        f'<div class="tiles">{"".join(tiles)}</div>',
+        f'<div class="overview"><div class="tiles">{"".join(tiles)}</div>'
+        f"{_runs_glance(views, counts, status_counts)}</div>",
     ]
     if overview:
         body.append(f'<h2 class="sec" id="{toc.add("overview", "All runs")}">Comparison</h2>')
