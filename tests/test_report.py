@@ -394,7 +394,7 @@ def test_checks_can_be_filtered_by_grade(parsed, assessed):
 def test_a_hit_outside_the_script_has_something_to_land_on(parsed, assessed):
     html = report.render_run(views(parsed, assessed, ["icon_success"])[0])
     assert 'id="check-0"' in html
-    assert '<div class="tile" id="status">' in html
+    assert re.search(r'<div class="tile[^"]*" id="status">', html)
     assert f'<dt id="{report.field_anchor("Node list")}">Node list</dt>' in html
 
 
@@ -474,8 +474,9 @@ def test_index_groups_runs_of_one_kind(parsed, assessed):
     html = report.render_index(vs, ["/tmp"], None, "Test")
     assert html.count('<tbody class="grp"') == 2
     # Groups by name as in the switcher, the newest run first within each.
+    table = html[html.index('<table class="runs">') :]
     at = [
-        html.index(x)
+        table.index(x)
         for x in (
             'data-kind="jcp_r2b10"',
             f'href="{vs[2].page}"',

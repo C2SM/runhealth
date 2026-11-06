@@ -22,9 +22,16 @@ workflows already say where the runs come from, the list is folded away.
 The grades are `healthy`, `worth a look`, `warning` and `problem`. The grade of
 a run is the worst grade among its checks.
 
-The tiles above the table count the runs twice: once by scheduler status
-(`success`, `failed`, `stalled` and the other outcomes) and once by health
-grade, so an ended-cleanly run that still shows warnings is visible in both.
+The stat cards above the table give the number of runs, the share that ended
+cleanly, the total wall clock, the median throughput and the longest silence.
+Beside them, **Runs at a glance** draws the runs twice as a bar: once by health
+grade and once by scheduler status (`success`, `failed`, `stalled` and the
+other outcomes), each with its counts written out, so an ended-cleanly run that
+still shows warnings is visible in both. Below the bars it lists the runs
+graded `warning` or `problem`, newest first, with the reason, and links to each.
+
+Beside the grade filters, a field narrows the table to the runs whose row
+contains every word typed into it, such as a job id, a node or part of a name.
 
 Between the tiles and the table, the **All runs** comparison figure draws the
 wall clock and the throughput of every run as one bar each. A bar is split into
@@ -74,7 +81,10 @@ still use different code.
 the log. It opens the script that was submitted, shell-highlighted and
 numbered, with `#SBATCH` directives picked out, and **download** saves it as a
 `.sh` file.
-The tiles below the header summarize the run. When the progress reports carry
+The tiles below the header summarize the run. Beside them, the **Health
+summary** shows the checks as a bar by grade, with the counts written out, and
+lists the warnings and problems; each entry opens the check it names. When the
+progress reports carry
 the model date, the **simulated** tile gives the model time this job covered,
 in its two largest units (`4d 12h`, `2y 45d`, with a year of 365.25 days as in
 SYPD); hovering over it shows the model dates it ran from and to. For a
@@ -142,6 +152,11 @@ the supporting evidence, so that every conclusion can be verified. The row of
 buttons above the list filters by grade, in the same way as the index filters
 runs, so that a run with a single warning does not require reading through the
 remaining checks.
+
+Each check is one row with its finding and its grade, and the evidence under
+it folds away. Warnings and problems are open when the page loads and the other
+checks are folded; a click on a row, or `Enter` on it, opens or folds it. In
+print, every check is open.
 
 The checks come in three blocks, in this order: whether the run finished, what
 went wrong, and how well it performed. The order is fixed, so that the same
@@ -247,6 +262,11 @@ interactive without anything being downloaded:
   the charts drawn against the wall clock. A phase of the timeline states how
   much simulated time it covered.
 - **Click a legend entry** to hide that message family.
+- **Use the buttons above a figure**: **SVG** and **PNG** save it as a file,
+  and the arrows expand it to fill the window until `Escape` is pressed. On the
+  progress rate and the numerical stability figures, **Log** switches the y
+  axis between linear and logarithmic, and **Smooth** draws the lines as a
+  moving average.
 - **Click a silence** to open the log at the line where the run went quiet,
   provided the report was built with `--embed-logs`.
 
@@ -255,13 +275,41 @@ overrides it for the individual reader. None of this is required in order to
 read a figure: the markup is complete before any script runs, which is why the
 same figure prints correctly and survives conversion to PDF.
 
+## Customizing the view
+
+The sliders button in the header opens the settings of the page. They are
+kept in the browser, apply to every page of every report read in it, and
+change nothing in the report itself:
+
+- **Density**: comfortable or compact spacing.
+- **Chart labels**: the size of the axis lettering on the figures, from S to
+  XL.
+- **Sidebar**: show or hide the table of contents; the button beside the
+  sliders does the same.
+- **Chart columns**: one figure per row, or, on a wide screen, two side by
+  side. Every figure is shown at the same width, so the lettering of all of
+  them has the same size.
+- **Captions** and **Simulated time under the axis**: show or hide them on
+  every figure.
+- **Open on load**: which checks are open when a run page loads: the warnings
+  and problems, all of them, or none.
+- **Sections** and **Figures**: hide any of them, or move them up and down;
+  the table of contents follows.
+- **Table columns**, on the index: hide the columns that are not needed.
+
+The **Log** and **Smooth** setting of a figure is remembered as well, when it
+differs from how the figure was drawn. **Reset to defaults** clears every
+setting. A link to a hidden section or figure, or to a folded check, such as a
+search result, still shows it.
+
 ## Navigating a page
 
 The header remains in place while scrolling, and on a run page it carries that
 run's name and grade beside a link back to the index. The table of contents
-marks the section being read and follows the scroll position; its first entry
-returns to the top of the page. On a narrow screen it becomes a row of chips
-below the header and scrolls to keep the current section in view.
+sits in a sidebar along the left edge, marks the section being read and
+follows the scroll position; its first entry returns to the top of the page.
+On a narrow screen it becomes a row of chips below the header and scrolls to
+keep the current section in view.
 
 The header also carries the field that
 [searches the whole report](#searching-the-report), and links to this

@@ -112,6 +112,12 @@ def _aria(text: str) -> str:
     return text.replace("\n", ". ")
 
 
+def _y_spec(y, fmt: str) -> str:
+    """The y scale as ``kind,d0,d1,format``, for the browser's log/linear switch."""
+    kind = "log" if isinstance(y, svg.LogScale) else "lin"
+    return f"{kind},{y.d0:.6g},{y.d1:.6g},{fmt}"
+
+
 def _mark(cls: str, tip: str, **kw) -> dict:
     """Attributes shared by every hoverable shape.
 
@@ -382,6 +388,7 @@ def progress_rate(log: RunLog, a: Assessment, uid: str) -> Figure | None:
             samples=svg.pack(samples),
             time="1",
             sim=f"{svg.num(clock.per_step)},{clock.first_step}" if clock else None,
+            y=_y_spec(y, "duration"),
         ),
     )
 
@@ -687,7 +694,7 @@ def _stability_figure(
             extra = ", ".join(f"{k} {v}" for k, v in r.items() if k != "wall" and v is not None)
             text = _tip(label, extra, f"at {format_stamp(r['wall'])}", _sim_at(clock, r["wall"]))
             cy = p.bottom - 5 - 8 * j
-            dots += ch.circle(x(r["wall"] - t0), cy, 2.6, **_mark(f"{cls} fill", text))
+            dots += ch.circle(x(r["wall"] - t0), cy, 2.6, **_mark(f"{cls} fill evt", text))
         ch.points.append(svg.tag("g", dots, cls="series", data_series=str(i)))
         legend_entries.append((cls, f"{label} ({len(log.series[name])})"))
 
@@ -716,6 +723,7 @@ def _stability_figure(
             xfmt="duration",
             samples=svg.pack(samples),
             time="1",
+            y=_y_spec(y, "si"),
         ),
     )
 
