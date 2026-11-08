@@ -398,7 +398,7 @@ def assess(
     a.checks.extend(_check_groups(log, a))
     a.checks.append(_check_stability(log))
     for out in log.output:
-        a.checks.append(_check_output_values(out))
+        a.checks.append(_check_output_values(out, a.stats.get("sim_start")))
         a.checks.append(_check_output_completeness(log, a, out))
     a.checks.append(_check_dumps(log))
     a.checks.append(_check_kernel(log))
@@ -1668,11 +1668,13 @@ def _output_check(out: dict, what: str) -> tuple[str, str]:
     return f"output_{what}_{out['name']}", f"{out.get('label') or out['name']} output {what}"
 
 
-def _check_output_values(out: dict) -> Check | None:
+def _check_output_values(out: dict, start: datetime | None = None) -> Check | None:
     """Extremes and non-finite values of one output component, per variable.
 
     A non-finite value, or an extreme beyond a ``fail_`` limit of the profile,
-    fails the run and names the first output step at which it occurred.
+    fails the run and names the first output step at which it occurred. An
+    extreme in the initial state, written at the model ``start`` before the first
+    time step, comes from the input rather than the run and is only information.
     """
     key, title = _output_check(out, "values")
     if out.get("error"):
@@ -1693,6 +1695,7 @@ def _check_output_values(out: dict) -> Check | None:
             "None of the expected variables is in the output",
             f"Looked for {', '.join(variables) or 'nothing'} in {simoutput.patterns(out)} under {out['dir']}.",
         )
+    start_t = (start - datetime(1970, 1, 1)).total_seconds() if start else None
     levels: list[str] = []
     heads: list[str] = []
     ev: list[str] = []
@@ -1719,15 +1722,25 @@ def _check_output_values(out: dict) -> Check | None:
             )
             ev.append(f"{label}: first non-finite values in {bad['file']}")
             continue
+        initial = [r for r in records if start_t is not None and r["t"] <= start_t]
         for level in ("fail", "warn"):
-            breach = _output_breach(records, spec, level)
+            breach = _output_breach(records[len(initial) :], spec, level)
             if breach:
                 r, what = breach
                 levels.append(level)
                 heads.append(f"{label} {what}{unit} at model time {_model_time(r['time'])}")
                 break
         else:
-            levels.append("ok")
+            breach = _output_breach(initial, spec, "fail") or _output_breach(initial, spec, "warn")
+            if breach:
+                r, what = breach
+                levels.append("info")
+                heads.append(
+                    f"{label} {what}{unit} in the initial state at model time "
+                    f"{_model_time(r['time'])}, before the first time step"
+                )
+            else:
+                levels.append("ok")
     steps = len(simoutput.steps(out))
     return Check(
         key,
@@ -1740,7 +1753,8 @@ def _check_output_values(out: dict) -> Check | None:
         ),
         "Minimum, maximum and non-finite values over each three-dimensional field at every "
         "output step, graded against the limits of the profile. Values marked as missing "
-        "by the file's fill value are left out.",
+        "by the file's fill value are left out. Extremes in the initial state, written "
+        "before the first time step, come from the input and are only reported.",
         ev,
     )
 

@@ -415,6 +415,18 @@ def test_a_coupled_run_checks_both_components(tmp_path):
     assert "Ocean output: Potential temperature" in (report / "icon_success.html").read_text()
 
 
+def test_a_limit_passed_only_in_the_initial_state_is_information(tmp_path):
+    days = [20200101.0 + i / 96 for i in range(4)]
+    icon_output(tmp_path / ATM, days)
+    to = np.full((4, NLEV, NCELLS), 10.0)
+    to[0, 0, 3] = 55.0  # in the initial state at the model start, before the first time step
+    ocean_output(tmp_path / "exp_oce_3d_full_20200101.nc", days, to=to)
+    _, run, _ = _run(tmp_path, tmp_path)
+    check = next(c for c in run["checks"] if c["key"] == "output_values_ocean")
+    assert check["level"] == "info"
+    assert "initial state at model time 2020-01-01 00:00:00" in check["headline"]
+
+
 def test_auto_reads_the_task_directory_of_a_sirocco_run(tmp_path):
     root = tmp_path / "wf"
     task = root / "run" / "icon__date_2020-01-01T00-00-00"
